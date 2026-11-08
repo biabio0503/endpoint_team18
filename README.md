@@ -57,7 +57,7 @@ PYTHONPATH=apps/api/app apps/api/.venv/bin/python -c 'from repositories.p1 impor
 | `ROADMAP_MAX_DOCUMENT_BYTES` / `ROADMAP_MAX_DOCUMENTS` | `10485760` / `10` | 파일당 바이트와 계획당 문서 개수 제한 |
 | `ROADMAP_PROXY_MAX_BODY_BYTES` | `11534336` | Next.js 프록시 본문 상한. 파일 크기 제한과 multipart 여유를 합친 값 이상으로 설정 |
 
-세션 토큰은 서버가 안전한 난수로 만들고 DB에는 해시만 저장하므로 별도 서명 비밀키는 사용하지 않습니다. 향후 필요한 비밀은 환경의 비밀 저장소에서 주입하고 저장소에 커밋하지 않습니다. 운영 HTTPS에서는 `ROADMAP_INSECURE_LOCAL_COOKIE`를 설정하지 않습니다. 현재 서버는 로컬 개발용입니다. PostgreSQL 모드에서는 P1/P2만 연결되며 P3/P4, 클라우드 파일 저장소와 배포 구성은 후속 작업입니다. [PostgreSQL 연결 안내](docs/supabase-backend-connection.md)를 참고하세요. DB 접근은 `apps/api/app/repositories/p1.py`, 환경 설정은 `apps/api/app/config.py`, 웹 API 주소는 `apps/web/next.config.mjs`에 분리되어 있습니다.
+세션 토큰은 서버가 안전한 난수로 만들고 DB에는 해시만 저장하므로 별도 서명 비밀키는 사용하지 않습니다. 비밀값은 서버 환경에서 주입하고 저장소에 커밋하지 않습니다. 운영 HTTPS에서는 `ROADMAP_INSECURE_LOCAL_COOKIE`를 설정하지 않습니다. PostgreSQL 문서 기능은 비공개 Supabase Storage와 연결되며, 최초 배포에서는 `ROADMAP_POSTGRES_DOCUMENTS_ENABLED=0`을 유지합니다. 마이그레이션·버킷 준비 및 승인 후에만 활성화합니다. [PostgreSQL 연결 안내](docs/supabase-backend-connection.md)와 [Phase 3 운영 사전 검사](docs/phase3-production-preflight.md)를 참고하세요. DB 접근은 `apps/api/app/repositories/p1.py`, 환경 설정은 `apps/api/app/config.py`, 웹 API 주소는 `apps/web/next.config.mjs`에 분리되어 있습니다.
 
 `apps/web`에서 `npm run build`, `npm start`로 프로덕션 빌드를 확인할 수 있습니다. 백엔드 통합 테스트는 저장소 루트에서 `apps/api/.venv/bin/python -m unittest discover -s apps/api/tests/integration -p 'test_*.py' -v`로 실행합니다. SQLite 개발 seed의 학교·학과·과목은 가상 데이터입니다. 문서 업로드와 일반 텍스트 추출을 사용할 수 있습니다. 수강 후보 외 AI 분석은 준비 중입니다. [진행 문서](docs/non-ai-mvp-progress.md)를 참고하세요.
 

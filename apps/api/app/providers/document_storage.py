@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 import re
 import json
+import base64
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit
 from urllib.request import Request, build_opener, HTTPRedirectHandler
@@ -41,6 +42,23 @@ class SupabaseDocumentStorage:
         self.url = url.rstrip('/') + '/storage/v1'
         self.secret = secret
         self.bucket = bucket
+        self._auth_headers()  # Reject public keys and malformed credentials early.
+
+    def _auth_headers(self):
+        if self.secret.startswith('sb_secret_') and len(self.secret) > len('sb_secret_'):
+            # New opaque keys are API keys, not bearer JWTs.
+            return {'apikey': self.secret}
+        try:
+            parts = self.secret.split('.')
+            if len(parts) != 3 or not all(parts):
+                raise ValueError
+            payload = json.loads(base64.urlsafe_b64decode(parts[1] + '=' * (-len(parts[1]) % 4)))
+            if payload.get('role') != 'service_role':
+                raise ValueError
+        except (ValueError, TypeError, AttributeError):
+            raise ValueError('a server-only Supabase key is required') from None
+        # This checks configuration shape only; Supabase verifies the signature.
+        return {'apikey': self.secret, 'Authorization': 'Bearer ' + self.secret}
 
     @staticmethod
     def _key(key):
@@ -55,7 +73,7 @@ class SupabaseDocumentStorage:
 
     def _request(self, method, path, data=None, headers=None, missing_ok=False):
         request = Request(self.url + path, data=data, method=method, headers={
-            'apikey': self.secret, 'Authorization': 'Bearer ' + self.secret, **(headers or {})})
+            **self._auth_headers(), **(headers or {})})
         try:
             # Never forward credentials to a redirect target.
             class NoRedirect(HTTPRedirectHandler):
@@ -120,6 +138,8 @@ def get_storage():
     if DB_BACKEND == 'postgres':
         from repositories.postgres import StorageUnavailable
         try:
+            if os.environ.get('SUPABASE_SECRET_KEY') and os.environ.get('SUPABASE_SERVICE_ROLE_KEY'):
+                raise ValueError('configure only one server key')
             return SupabaseDocumentStorage(os.environ.get('SUPABASE_URL', ''),
                 os.environ.get('SUPABASE_SECRET_KEY') or os.environ.get('SUPABASE_SERVICE_ROLE_KEY', ''),
                 os.environ.get('SUPABASE_STORAGE_BUCKET', 'roadmap-documents'))

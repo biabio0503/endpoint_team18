@@ -6,29 +6,36 @@ from pathlib import Path
 import secrets
 import sys
 import uuid
-from urllib.parse import urlsplit
+from postgres_test_safety import validate_reset_target
 
 import psycopg
 
-url = os.environ['ROADMAP_TEST_POSTGRES_URL']
-parsed = urlsplit(url)
-assert parsed.hostname in ('127.0.0.1', 'localhost') and parsed.path == '/team18_document_test'
+url = validate_reset_target(os.environ.get('ROADMAP_TEST_POSTGRES_URL', ''), os.environ)
 app_root = Path(__file__).resolve().parents[2]
 root = app_root.parents[1]
-with psycopg.connect(url, autocommit=True) as db:
+with psycopg.connect(url, hostaddr='127.0.0.1', autocommit=True) as db:
+    if db.info.dbname != 'team18_document_test' or db.execute("SELECT to_regnamespace('supabase_migrations')").fetchone()[0] is not None:
+        raise SystemExit('Refusing to reset a non-test or Supabase database.')
     db.execute('DROP SCHEMA public CASCADE; CREATE SCHEMA public')
     db.execute("""DO $$ BEGIN
       IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='anon') THEN CREATE ROLE anon; END IF;
       IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='authenticated') THEN CREATE ROLE authenticated; END IF;
     END $$""")
-    db.execute('''CREATE TABLE session_owners (owner_id text primary key, token_digest text unique not null,
-      expires_at timestamptz not null, created_at timestamptz not null);
-      CREATE TABLE roadmap_inputs (request_id text primary key, owner_id text not null references session_owners,
-      input_revision integer not null default 0, created_at timestamptz not null, updated_at timestamptz not null)''')
-    for sql in sorted((root / 'supabase/migrations').glob('*documents.sql')):
-        db.execute(sql.read_text())
-    for sql in sorted((root / 'supabase/migrations').glob('*document_upload_reservations.sql')):
-        db.execute(sql.read_text())
+    migrations = sorted((root / 'supabase/migrations').glob('*.sql'))
+    for sql in migrations[:2]:
+        with db.transaction(): db.execute(sql.read_text())
+    # Synthetic reference data, never copied from production.
+    db.execute("INSERT INTO universities VALUES ('test-university','Test University',true)")
+    db.execute("INSERT INTO departments VALUES ('test-department','test-university','Test Department',true)")
+    db.execute("""INSERT INTO course_catalogs(catalog_id,department_id,version_label,scope_description,
+      completeness_status,source_name,retrieved_at,is_selectable)
+      VALUES ('test-catalog','test-department','test','test','complete','test',now(),true)""")
+    db.execute("INSERT INTO courses(course_id,university_id,canonical_name) SELECT 'test-'||n,'test-university','Test '||n FROM generate_series(1,68) n")
+    db.execute("INSERT INTO catalog_courses(catalog_id,course_id,course_name) SELECT 'test-catalog',course_id,canonical_name FROM courses")
+    for sql in migrations[2:]:
+        with db.transaction(): db.execute(sql.read_text())
+    if db.execute('SELECT count(*) FROM courses').fetchone()[0] != 68 or db.execute('SELECT count(*) FROM catalog_courses').fetchone()[0] != 68:
+        raise RuntimeError('Migration changed existing reference data')
     assert db.execute("SELECT relrowsecurity FROM pg_class WHERE oid='public.project_documents'::regclass").fetchone()[0]
     assert not db.execute("SELECT has_table_privilege('anon','public.project_documents','select')").fetchone()[0]
 
@@ -59,8 +66,8 @@ routes.request_work = lambda: None
 token = secrets.token_urlsafe(32)
 owner = str(uuid.uuid4()); rid = str(uuid.uuid4())
 with psycopg.connect(url, autocommit=True) as db:
-    db.execute("INSERT INTO session_owners VALUES (%s,%s,now()+interval '1 day',now())", (owner, hashlib.sha256(token.encode()).hexdigest()))
-    db.execute('INSERT INTO roadmap_inputs VALUES (%s,%s,0,now(),now())', (rid, owner))
+    db.execute("INSERT INTO session_owners(owner_id,token_digest,expires_at,created_at) VALUES (%s,%s,now()+interval '1 day',now())", (owner, hashlib.sha256(token.encode()).hexdigest()))
+    db.execute('INSERT INTO roadmap_inputs(request_id,owner_id,input_revision,created_at,updated_at) VALUES (%s,%s,0,now(),now())', (rid, owner))
 
 origin = {'Origin': 'http://localhost:3000'}
 path = '/api/roadmap-inputs/' + rid + '/documents'
@@ -161,7 +168,7 @@ with TestClient(app) as stranger:
     assert stranger.get(path).status_code == 401
     other_token = secrets.token_urlsafe(32)
     with psycopg.connect(url, autocommit=True) as db:
-        db.execute("INSERT INTO session_owners VALUES (%s,%s,now()+interval '1 day',now())", (str(uuid.uuid4()), hashlib.sha256(other_token.encode()).hexdigest()))
+        db.execute("INSERT INTO session_owners(owner_id,token_digest,expires_at,created_at) VALUES (%s,%s,now()+interval '1 day',now())", (str(uuid.uuid4()), hashlib.sha256(other_token.encode()).hexdigest()))
     stranger.cookies.set('roadmap_session', other_token)
     assert stranger.get(path).status_code == 404
     assert stranger.get(f'{path}/{did}/extractions/1').status_code == 404

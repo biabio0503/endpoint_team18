@@ -1,6 +1,6 @@
 # Render 배포 준비 상태
 
-**미완성: PostgreSQL의 문서 API는 503을 반환하며 Supabase Storage 연결과 문서 작업 마이그레이션이 없다.** 전체 기능 배포 완료로 취급하지 않는다. 운영 DB에 마이그레이션을 실행하거나 기존 과목 데이터를 변경하지 않았다.
+**Phase 3 코드는 구현됐으며 최초 배포에서는 문서 플래그를 OFF로 유지한다.** 운영 문서 테이블·Storage 버킷 적용과 실서비스 쓰기 검증은 아직 승인 전이다. [운영 사전 검사](phase3-production-preflight.md)와 [문서 이관 절차](phase3-document-migration.md)를 따른다.
 
 기존 Render Web Service의 설정을 대시보드에서 직접 확인한다. 이 저장소 변경만으로 기존 서비스 설정이 바뀌지는 않는다.
 
@@ -24,6 +24,6 @@ Next.js 서버 빌드 환경에 `ROADMAP_API_ORIGIN=https://<render-service>.onr
 
 자동 배포가 켜진 경우 GitHub 연결 브랜치에 push하면 Render가 새 빌드와 배포를 시작한다. 배포 로그에서 의존성 설치, 설정 오류 및 포트 바인딩을 확인한다. `/api/health`는 프로세스 생존만, `/api/health/db`는 DB 연결도 확인한다. DB 오류 메시지는 내부 연결 정보를 노출하지 않는다. 학교·학과·과목 목록과 계획 생성, 수정 및 복원을 확인한다. 실제 운영 DB에서 파괴적 SQL을 실행하지 않는다.
 
-Free 서비스는 유휴 시 중지될 수 있고 로컬 파일은 영구 보관되지 않는다. 현재 문서 워커는 SQLite에서만 실행되고 파일도 로컬에 저장한다. 외부 자료 수집은 기존 fixture 도구만 확인되며 정기 수집 서비스로 배포되지 않는다.
+Free 서비스는 유휴 시 중지될 수 있고 로컬 파일은 영구 보관되지 않는다. PostgreSQL 문서 원본은 비공개 Supabase Storage에 저장되며 작업은 DB lease와 후속 문서 요청으로 재개한다. 상시 작업 실행은 보장되지 않는다. 최초 Environment에는 `ROADMAP_POSTGRES_DOCUMENTS_ENABLED=0`, `SUPABASE_URL`, `SUPABASE_STORAGE_BUCKET=roadmap-documents`, 서버 키 변수 하나만 설정한다. DB·버킷 점검 후 승인된 활성화 단계에서만 플래그를 `1`로 바꾼다.
 
 로컬 SQLite 개발: `cd apps/api`, 가상환경에서 `pip install -r requirements.txt`, `ROADMAP_DB_BACKEND=sqlite ROADMAP_INSECURE_LOCAL_COOKIE=1 uvicorn app.main:app --host 127.0.0.1 --port 8000`. 프론트엔드는 `apps/web`에서 `npm install` 후 `npm run dev`; 기본 프록시는 `http://127.0.0.1:8000`이다.
