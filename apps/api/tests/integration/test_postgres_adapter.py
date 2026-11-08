@@ -16,18 +16,33 @@ from repositories import p1
 
 
 class PostgresBoundaryTest(unittest.TestCase):
-    def test_env_ca_overrides_embedded_dsn_path(self):
-        with patch.dict(os.environ, {'PGSSLROOTCERT': '/render/secret.crt'}), patch('repositories.postgres._validate_ca_file') as validate, patch('psycopg.connect') as connect:
-            connect_postgres('postgresql://user:secret@example.test/db?sslrootcert=%2FUsers%2Fold%2Fca.crt')
-            validate.assert_called_once_with('/render/secret.crt')
-            self.assertEqual(connect.call_args.kwargs['sslrootcert'], '/render/secret.crt')
-            self.assertEqual(connect.call_args.kwargs['sslmode'], 'verify-full')
+    def test_stale_dsn_and_environment_ca_are_ignored(self):
+        with patch.dict(os.environ, {'PGSSLROOTCERT': '/render/invalid.crt'}), patch('psycopg.connect') as connect:
+            connect_postgres('postgresql://user:secret@example.test/db?sslrootcert=%2FUsers%2Fold%2Fca.crt&sslmode=disable')
+            self.assertEqual(connect.call_args.kwargs['sslrootcert'], '/dev/null/roadmap-no-ca')
+            self.assertEqual(connect.call_args.kwargs['sslmode'], 'require')
+            self.assertEqual(connect.call_args.kwargs['gssencmode'], 'disable')
 
-    def test_dsn_ca_used_when_env_absent(self):
-        with patch.dict(os.environ, {}, clear=True), patch('repositories.postgres._validate_ca_file') as validate, patch('psycopg.connect') as connect:
-            connect_postgres('postgresql://user:secret@example.test/db?sslrootcert=%2Fcert.crt')
-            validate.assert_called_once_with('/cert.crt')
-            self.assertNotIn('sslrootcert', connect.call_args.kwargs)
+    def test_environment_absent_still_forces_tls_without_a_ca(self):
+        with patch.dict(os.environ, {}, clear=True), patch('psycopg.connect') as connect:
+            connect_postgres('postgresql://user:secret@example.test/db?sslrootcert=%2Fcert.crt&sslmode=prefer')
+            self.assertEqual(connect.call_args.kwargs['sslrootcert'], '/dev/null/roadmap-no-ca')
+            self.assertEqual(connect.call_args.kwargs['sslmode'], 'require')
+
+    def test_unencrypted_connection_is_closed_and_rejected(self):
+        with patch('psycopg.connect') as connect:
+            connect.return_value.pgconn.ssl_in_use = False
+            with self.assertRaises(StorageUnavailable) as caught:
+                connect_postgres('postgresql://user:secret@example.test/db')
+            self.assertIn('tls_required', str(caught.exception))
+            connect.return_value.close.assert_called_once()
+
+    def test_unix_socket_is_rejected_before_connecting(self):
+        with patch.dict(os.environ, {}, clear=True), patch('psycopg.connect') as connect:
+            with self.assertRaises(StorageUnavailable) as caught:
+                connect_postgres('host=/tmp dbname=roadmap')
+            self.assertIn('tls_required', str(caught.exception))
+            connect.assert_not_called()
 
     def test_close_rolls_back_unfinished_transactions(self):
         from psycopg.pq import TransactionStatus

@@ -14,11 +14,11 @@
 
 Render의 Environment에 `ROADMAP_DB_BACKEND=postgres`, `ROADMAP_DATABASE_URL`, `ROADMAP_AUTO_SEED_DEV=0`, `ROADMAP_APP_ORIGIN`을 설정한다. `ROADMAP_APP_ORIGIN`은 브라우저에서 사용하는 프론트엔드의 정확한 HTTPS 출처다. 추천 기능에는 `GEMINI_API_KEY`, 필요시 `GEMINI_MODEL`도 서버에 설정한다. Render가 `PORT`를 제공하며 앱은 `0.0.0.0`에 바인딩한다. 비밀값을 Git이나 프론트엔드에 넣지 않는다.
 
-Supabase Dashboard의 Connect에서 **Session pooler** 연결 문자열과 포트 5432를 확인한다. 요청마다 독립 연결을 열고 닫으며 `sslmode=verify-full`을 강제한다. 2026-11-08 로컬 검증에서는 이 프로젝트의 pooler가 로컬 CA 파일로 연결되었지만 로컬 시스템 신뢰 저장소만으로는 `tls_verification_failed`가 발생했다. Render의 신뢰 저장소와 서비스 설정은 별도로 확인해야 한다.
+Supabase Dashboard의 Connect에서 **Session pooler** 연결 문자열과 포트 5432를 확인한다. 요청마다 독립 연결을 열고 닫으며 `sslmode=require`를 강제한다. DSN의 `sslrootcert`와 `PGSSLROOTCERT`는 사용하지 않으므로 CA Secret File은 필요하지 않다. 기존 Render 서비스의 `PGSSLROOTCERT`와 CA Secret File을 제거해도 된다. 연결 문자열과 비밀번호는 Git에 커밋하지 않는다.
 
-인증서가 필요한 경우 Supabase Dashboard에서 CA를 받아 Render 서비스의 **Secret Files**에 `supabase-ca.crt`로 등록하고 `PGSSLROOTCERT=/etc/secrets/supabase-ca.crt`를 설정한다. 실제 파일 경로는 Render 대시보드에서 확인한다. 이 애플리케이션은 비어 있지 않은 `PGSSLROOTCERT`를 DSN의 `sslrootcert`보다 우선 적용하므로 이전 Mac 경로가 DSN에 남아 있어도 지정한 Secret File을 사용한다. 가능하면 DSN에서 이전 경로도 제거한다. 지정하지 않으면 DSN의 경로 또는 libpq 기본 설정을 사용한다. `PGSSLROOTCERT=system`은 해당 libpq가 지원할 때 시스템 CA를 사용하지만 이 프로젝트에서 신뢰 체인이 검증되는지 실제 환경에서 확인해야 한다. CA 파일, 연결 문자열과 비밀값을 Git에 커밋하지 않는다.
+**임시 보안 수준:** `require`는 TLS 암호화를 요구하지만 서버 인증서와 호스트 이름을 검증하지 않는다. 따라서 서버를 사칭하는 중간자 공격을 방어하지 못한다. 해커톤 MVP 이후에는 신뢰할 CA를 설정하고 `verify-full`로 복원해야 한다. libpq의 기본 CA 파일 자동 사용을 방지하기 위해 연결별로 `/dev/null` 아래의 존재할 수 없는 경로를 내부 지정한다. 이 경로에 인증서를 만들 필요는 없다.
 
-시작 로그의 `tls_ca_missing`, `tls_ca_unreadable`, `tls_ca_invalid_pem`은 각각 파일 부재, 읽기 실패, PEM 검증 실패를 뜻한다. `tls_verification_failed`는 신뢰 체인, `tls_hostname_mismatch`는 인증서 호스트 이름을 확인한다. 일반 연결 오류 분류만으로 Render 장애 원인을 단정하지 않는다. 배포 후 `/api/health/db`와 학교·학과·카탈로그 조회를 확인하고, 쓰기 테스트는 격리된 DB에서 수행한다.
+배포 후 `/api/health/db`와 학교·학과·카탈로그 조회를 확인한다. `tls_required`는 TLS가 아닌 연결을 거부한 경우다. 쓰기 테스트는 격리된 DB에서 수행한다.
 
 Next.js 서버 빌드 환경에 `ROADMAP_API_ORIGIN=https://<render-service>.onrender.com`을 설정하고 다시 빌드한다. 브라우저는 `/api/*`를 사용한다. 프록시를 거쳐 `Set-Cookie`, 후속 `Cookie`, 원래 브라우저 `Origin`이 전달되는지 실제 HTTPS 환경에서 확인한다. 허용 출처는 하나이며 프리뷰 출처는 별도 설정이 필요하다.
 

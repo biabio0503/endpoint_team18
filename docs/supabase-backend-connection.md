@@ -1,17 +1,17 @@
 # 로컬 Python 백엔드의 PostgreSQL 연결
 
-연결 실패 로그에는 비밀값 대신 `authentication_failed`, `dns_error`, `connection_timeout`, `network_unreachable`, `tls_ca_missing`, `tls_ca_unreadable`, `tls_ca_invalid_pem`, `tls_ca_error`, `tls_verification_failed`, `tls_hostname_mismatch`, `invalid_dsn` 또는 `connection_failed`가 표시된다. 분류는 드라이버 메시지에 의존하므로 일반 코드로 남는 경우도 있다. DNS 또는 네트워크 오류는 Session pooler 사용 여부와 IPv4/IPv6 경로를 점검한다. CA 파일은 PEM 형식이어야 하며 Render Secret Files를 사용한다면 예를 들어 `PGSSLROOTCERT=/etc/secrets/supabase-ca.crt`를 설정한다. 이 애플리케이션은 비어 있지 않은 `PGSSLROOTCERT`를 DSN의 `sslrootcert`보다 우선해 psycopg에 명시적으로 전달한다. 이전 로컬 경로는 DSN에서도 제거하는 편이 좋다. `sslrootcert=system`은 이를 지원하는 libpq에서 시스템 신뢰 저장소를 사용한다. 호스트 이름과 CA 검증은 드라이버가 연결 시 수행하며 `verify-full`을 유지한다. 분류만으로 실제 장애 원인을 확정할 수는 없다.
+현재 임시 배포는 `sslmode=require`로 TLS를 요구한다. **서버 인증서와 호스트 이름은 검증하지 않으므로 중간자 공격에 취약하다.** MVP 이후 CA와 `verify-full`을 다시 적용해야 한다. DSN의 `sslrootcert`와 `PGSSLROOTCERT`는 무시하며 CA 파일은 필요하지 않다. 서버 로그에는 비밀값 대신 안전한 연결 오류 코드만 기록한다.
 
 ## 현재 상태
 
-P1/P2의 실제 PostgreSQL 연결 및 API 검증을 완료했다. 백엔드 연결 방식은 **Session pooler**이며 `verify-full`로 서버 인증서를 검증했다. `SELECT 1`과 지정 교육과정 조회, 테스트 세션·계획의 쓰기 및 동시성 검증에 성공했다. 기존 기준 과목 데이터는 수정하지 않았다.
+과거 P1/P2의 PostgreSQL 검증은 **Session pooler**와 `verify-full`을 사용했다. 현재 코드는 임시로 `require`를 사용하므로 이 과거 검증은 현재의 인증서 검증을 의미하지 않는다. `SELECT 1`과 지정 교육과정 조회, 테스트 세션·계획의 쓰기 및 동시성 검증에 성공했다. 기존 기준 과목 데이터는 수정하지 않았다.
 
 ## 설정과 실행
 
 1. 저장소 루트에서 `python3 -m venv apps/api/.venv` 및 `apps/api/.venv/bin/pip install -r apps/api/requirements.txt`를 실행한다. 드라이버는 `psycopg[binary]==3.2.13`, 환경 파일 로더는 `python-dotenv==1.1.1`로 고정되어 있다.
 2. 기본 SQLite는 `cd apps/api` 후 `ROADMAP_INSECURE_LOCAL_COOKIE=1 .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000`으로 실행한다. `ROADMAP_DB_PATH`로 파일 경로를 변경할 수 있다. SQLite의 기존 마이그레이션과 개발용 자동 seed는 유지된다.
 3. PostgreSQL을 사용하려면 `apps/api/.env.example`을 `apps/api/.env`로 복사하고 `ROADMAP_DB_BACKEND=postgres`, `ROADMAP_DATABASE_URL`에 Dashboard > Connect에서 복사한 실제 연결 문자열, `ROADMAP_AUTO_SEED_DEV=0`을 설정한다. 기존 환경변수가 `.env`보다 우선한다. `.env`는 Git 제외 대상이며 백엔드에만 둔다. URL이나 자격 증명을 저장소와 프론트엔드에 넣지 않는다.
-4. IPv4 전용 개발 환경에서는 Dashboard의 **Session pooler** 연결을 권장한다. IPv6 direct 연결이 가능한 경우 direct를 사용할 수 있다. Dashboard의 값을 그대로 사용하고 호스트·사용자·포트를 추측하지 않는다. 서버 인증서 검증을 위해 드라이버는 `sslmode=verify-full`을 적용한다. 신뢰할 수 있는 CA가 시스템에 없다면 Dashboard에서 받은 CA 파일을 안전하게 보관하고 연결 문자열의 `sslrootcert`로 지정한다. 자세한 연결 방식은 [Supabase 연결 문서](https://supabase.com/docs/guides/database/connecting-to-postgres)를 참고한다.
+4. IPv4 전용 개발 환경에서는 Dashboard의 **Session pooler** 연결을 권장한다. IPv6 direct 연결이 가능한 경우 direct를 사용할 수 있다. Dashboard의 값을 그대로 사용하고 호스트·사용자·포트를 추측하지 않는다. 임시 배포에서는 드라이버가 `sslmode=require`를 강제하며 서버 인증서를 검증하지 않는다. CA 설정은 무시된다. 자세한 연결 방식은 [Supabase 연결 문서](https://supabase.com/docs/guides/database/connecting-to-postgres)를 참고한다.
 5. 같은 API 실행 명령을 사용한다. PostgreSQL 시작 시 연결 및 `SELECT 1`을 확인한다. 누락 또는 연결 오류는 비밀값 없는 메시지로 종료된다. PostgreSQL에서는 SQLite SQL 001~005를 자동 적용하지 않으며 `ROADMAP_AUTO_SEED_DEV` 값과 관계없이 가상 seed는 실행하지 않는다. `seed_dev.py`도 PostgreSQL에서는 거부한다.
 
 ## 변경 파일
@@ -42,7 +42,7 @@ PostgreSQL에는 P3 문서 및 P4 외부 수집 테이블이 없다. PostgreSQL 
 
 | 항목 | 결과 | 확인 범위 |
 | --- | --- | --- |
-| PostgreSQL 연결 | 성공 | `ROADMAP_DB_BACKEND=postgres`, Session pooler의 psycopg `SELECT 1`, 연결의 TLS 활성 상태, 코드의 `sslmode=verify-full` 확인 |
+| PostgreSQL 연결 | 성공 | `ROADMAP_DB_BACKEND=postgres`, Session pooler의 psycopg `SELECT 1`, 연결의 TLS 활성 상태, 당시 코드의 `sslmode=verify-full` 확인 (현재는 임시 `require`) |
 | 기준 목록 | 성공 | 대상 학교 1, 학과 1, 2026학년도 목록 1, 강좌 68; 1학기 35, 2학기 33 |
 | 강좌 세부 정보 | 성공 | 68개 HTTP 응답의 과목명·학년·학기·이수구분·학점·이론·실습 값을 같은 시점에 조회한 DB 행과 각각 대조; 모든 값이 일치하고 해당 필드의 NULL은 없었다. DB 값이 공식 원본 교육과정과 일치하는지에 대한 독립 검증은 수행하지 않았다. |
 | HTTP API | 성공 | 새 계획 2건 생성, 기본 정보 저장·조회·이어쓰기, 학교·학과·목록 조회, 이수 ON/OFF 및 DB 재조회, 0개 확인 및 선택 변경에 따른 확인 해제 |
