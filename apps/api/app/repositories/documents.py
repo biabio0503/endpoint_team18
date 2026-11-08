@@ -10,6 +10,34 @@ class DocumentRepository:
     def count_active(self,rid):
         row = self.db.execute('SELECT count(*) AS n FROM project_documents WHERE request_id=? AND removed_at IS NULL',(rid,)).fetchone()
         return row['n']
+    def count_uploading(self, rid, at):
+        return self.db.execute('SELECT count(*) AS n FROM document_upload_reservations WHERE request_id=? AND committed_at IS NULL AND expires_at>?', (rid, at)).fetchone()['n']
+    def reserve_upload(self, key, rid, at, expires):
+        cursor = self.db.execute('''INSERT INTO document_upload_reservations(storage_key,request_id,created_at,expires_at)
+          SELECT ?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM project_documents WHERE storage_key=?)''', (key, rid, at, expires, key))
+        if cursor.rowcount != 1:
+            raise ValueError('storage key already reserved')
+    def lock_reservation(self, key, rid):
+        return self.db.execute('SELECT * FROM document_upload_reservations WHERE storage_key=? AND request_id=? FOR UPDATE', (key, rid)).fetchone()
+    def finish_reservation(self, key, at):
+        self.db.execute('UPDATE document_upload_reservations SET committed_at=? WHERE storage_key=?', (at, key))
+    def next_reservation_cleanup(self, at):
+        return self.db.execute('''SELECT * FROM document_upload_reservations
+          WHERE committed_at IS NULL AND expires_at<? AND (cleanup_lease_until IS NULL OR cleanup_lease_until<?)
+          ORDER BY expires_at LIMIT 1 FOR UPDATE SKIP LOCKED''', (at, at)).fetchone()
+    def lease_reservation_cleanup(self, key, token, until):
+        self.db.execute('''UPDATE document_upload_reservations SET cleanup_lease_token=?,
+          cleanup_lease_until=?, cleanup_attempts=cleanup_attempts+1 WHERE storage_key=?''', (token, until, key))
+    def finish_reservation_cleanup(self, key, token, next_check):
+        # Keep a tombstone: an upload whose network response timed out could
+        # finish after the first delete. Periodic rechecks catch late objects.
+        self.db.execute('''UPDATE document_upload_reservations SET cleanup_lease_token=NULL,
+          cleanup_lease_until=?, cleanup_error_code=NULL WHERE storage_key=? AND cleanup_lease_token=?''',
+          (next_check, key, token))
+    def fail_reservation_cleanup(self, key, token, until):
+        self.db.execute('''UPDATE document_upload_reservations SET cleanup_lease_token=NULL,
+          cleanup_lease_until=?, cleanup_error_code='storage_cleanup_failed'
+          WHERE storage_key=? AND cleanup_lease_token=?''', (until, key, token))
     def create(self,key,rid,filename,mime,size,at):
         self.db.execute("INSERT INTO project_documents(document_id,request_id,original_filename,mime_type,file_size_bytes,storage_key,extraction_status,extraction_revision,created_at) VALUES(?,?,?,?,?,?,'pending',1,?)",(key,rid,filename,mime,size,key,at))
         self.create_extraction(key,1,at)

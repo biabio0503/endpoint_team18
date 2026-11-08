@@ -12,6 +12,7 @@ from providers.document_parser import extract
 
 log=logging.getLogger(__name__)
 LEASE_SECONDS=120
+_request_worker_lock = threading.Lock()
 
 def timestamp(): return datetime.now(timezone.utc).isoformat(timespec='microseconds')
 def later(seconds): return (datetime.now(timezone.utc)+timedelta(seconds=seconds)).isoformat(timespec='microseconds')
@@ -37,7 +38,7 @@ def run_once(storage=None):
                 DocumentRepository(db).finish_cleanup(did,token)
                 db.commit()
         except Exception:
-            log.exception('document cleanup failed')
+            log.warning('document cleanup failed')
             with closing(connect()) as db:
                 DocumentRepository(db).fail_cleanup(did,token,later(10))
         return True
@@ -45,7 +46,7 @@ def run_once(storage=None):
         extension={'application/pdf':'pdf','application/vnd.openxmlformats-officedocument.wordprocessingml.document':'docx','text/plain; charset=utf-8':'txt'}[row['mime_type']]
         result=extract(extension,storage.read(row['storage_key']))
     except Exception:
-        log.exception('document extraction failed')
+        log.warning('document extraction failed')
         result={'text':'','segments':[],'limitations':['파일을 읽는 중 오류가 발생했습니다.'],'status':'failed','error_code':'extraction_failed'}
     with closing(connect()) as db:
         db.execute('BEGIN' if getattr(db, 'backend', 'sqlite') == 'postgres' else 'BEGIN IMMEDIATE')
@@ -62,6 +63,39 @@ def cleanup_orphans(storage=None):
             with closing(connect()) as db:
                 if not DocumentRepository(db).has_storage_key(key): storage.delete(key)
         except OSError: log.exception('orphan cleanup failed')
+
+def cleanup_reservation(storage=None):
+    """Only inspect expired keys that were reserved before an upload."""
+    with closing(connect()) as db:
+        db.execute('BEGIN')
+        repo = DocumentRepository(db)
+        row = repo.next_reservation_cleanup(timestamp())
+        if not row:
+            db.commit(); return False
+        token = str(uuid.uuid4())
+        repo.lease_reservation_cleanup(row['storage_key'], token, later(LEASE_SECONDS))
+        db.commit()
+    try:
+        (storage or get_storage()).delete(row['storage_key'])
+        with closing(connect()) as db:
+            DocumentRepository(db).finish_reservation_cleanup(row['storage_key'], token, later(86400))
+    except Exception:
+        log.warning('document upload cleanup failed')
+        with closing(connect()) as db:
+            DocumentRepository(db).fail_reservation_cleanup(row['storage_key'], token, later(60))
+    return True
+
+def request_work():
+    """Best-effort bounded work; later authenticated requests resume it."""
+    if not _request_worker_lock.acquire(blocking=False):
+        return
+    try:
+        cleanup_reservation()
+        run_once()
+    except Exception:
+        log.warning('document request worker failed')
+    finally:
+        _request_worker_lock.release()
 
 def loop(stop):
     next_orphan_scan=0
