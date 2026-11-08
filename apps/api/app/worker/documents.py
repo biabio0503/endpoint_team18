@@ -74,4 +74,7 @@ def loop(stop):
         stop.wait(1)
 
 def start_worker():
-    stop=threading.Event(); threading.Thread(target=loop,args=(stop,),daemon=True,name='document-worker').start();return stop
+    stop = threading.Event()
+    thread = threading.Thread(target=loop, args=(stop,), daemon=True, name='document-worker')
+    thread.start()
+    return stop, thread

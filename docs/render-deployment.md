@@ -8,7 +8,7 @@
 | --- | --- |
 | Root Directory | `apps/api` |
 | Build Command | `pip install -r requirements.txt` |
-| Start Command | `python app/main.py` |
+| Start Command | `uvicorn app.main:app --host 0.0.0.0 --port $PORT` |
 | Python | Environment에 `PYTHON_VERSION=3.14.7` |
 | Health Check Path | `/api/health` |
 
@@ -22,4 +22,4 @@ Next.js 서버 빌드 환경에 `ROADMAP_API_ORIGIN=https://<render-service>.onr
 
 Free 서비스는 유휴 시 중지될 수 있고 로컬 파일은 영구 보관되지 않는다. 현재 문서 워커는 SQLite에서만 실행되고 파일도 로컬에 저장한다. 외부 자료 수집은 기존 fixture 도구만 확인되며 정기 수집 서비스로 배포되지 않는다.
 
-로컬 SQLite 개발: `cd apps/api`, 가상환경에서 `pip install -r requirements.txt`, `ROADMAP_DB_BACKEND=sqlite ROADMAP_INSECURE_LOCAL_COOKIE=1 python app/main.py`. 프론트엔드는 `apps/web`에서 `npm install` 후 `npm run dev`; 기본 프록시는 `http://127.0.0.1:8000`이다.
+로컬 SQLite 개발: `cd apps/api`, 가상환경에서 `pip install -r requirements.txt`, `ROADMAP_DB_BACKEND=sqlite ROADMAP_INSECURE_LOCAL_COOKIE=1 uvicorn app.main:app --host 127.0.0.1 --port 8000`. 프론트엔드는 `apps/web`에서 `npm install` 후 `npm run dev`; 기본 프록시는 `http://127.0.0.1:8000`이다.

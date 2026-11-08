@@ -22,12 +22,12 @@ class RecommendationAPI(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         api.migrate(); seed_dev.seed()
-        cls.server=api.ThreadingHTTPServer(('127.0.0.1',0), api.Handler)
-        cls.thread=threading.Thread(target=cls.server.serve_forever,daemon=True); cls.thread.start()
+        from uvicorn_test_server import TestServer
+        cls.server = TestServer(api.app)
 
     @classmethod
     def tearDownClass(cls):
-        cls.server.shutdown(); cls.server.server_close(); cls.thread.join(); TEMP.cleanup()
+        cls.server.stop(); TEMP.cleanup()
 
     def setUp(self):
         seed_dev.seed()
@@ -55,14 +55,14 @@ class RecommendationAPI(unittest.TestCase):
         self.assertEqual(self.request('PATCH','/roadmap-inputs/'+rid+'/course-selections',selection,cookie)[0],200)
         def fake(profile,courses,status):
             return recommend(profile,courses,status,lambda p,c:[first,'not-in-db',second,second])
-        with patch.object(api,'recommend',side_effect=fake):
+        with patch('api.routes.core.recommend',side_effect=fake):
             code,result,_=self.request('POST',path,{},cookie)
         self.assertEqual(code,200); self.assertEqual([c['course_id'] for c in result['courses']],[second]); self.assertEqual(result['courses'][0]['completion_state'],'unconfirmed')
         def stale(profile,courses,status):
             current=self.request('GET','/roadmap-inputs/'+rid,cookie=cookie)[1]
             self.request('PATCH','/roadmap-inputs/'+rid,{'expected_input_revision':current['input_revision'],'changes':{'career_goal':'머신러닝'}},cookie)
             return []
-        with patch.object(api,'recommend',side_effect=stale):
+        with patch('api.routes.core.recommend',side_effect=stale):
             self.assertEqual(self.request('POST',path,{},cookie)[1]['error'],'revision_conflict')
 
     def test_empty_catalog_and_missing_key(self):
