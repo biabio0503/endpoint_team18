@@ -1,8 +1,10 @@
-"""Document routes; PostgreSQL remains unavailable until its document migration."""
+"""Document routes for SQLite and the opt-in PostgreSQL deployment."""
 import json
+import os
 import re
 import uuid
-from fastapi import APIRouter, Depends, Request
+from datetime import datetime, timezone
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from starlette.datastructures import UploadFile
 from api.dependencies import get_context, parse_body, require_origin, require_owner, respond
 from api.domain import Problem
@@ -11,21 +13,21 @@ from config import DB_BACKEND, MAX_DOCUMENT_BYTES, MAX_DOCUMENTS
 from providers.document_storage import get_storage
 from providers.document_parser import validate_file, InvalidDocument
 from repositories.documents import DocumentRepository
-from worker.documents import timestamp
+from worker.documents import timestamp, later, request_work
 
 router = APIRouter(prefix='/api/roadmap-inputs/{rid:roadmap_id}/documents', tags=['documents'])
 
 
 def document_context(rid: str, ctx=Depends(get_context)):
-    if DB_BACKEND == 'postgres':
+    if DB_BACKEND == 'postgres' and os.environ.get('ROADMAP_POSTGRES_DOCUMENTS_ENABLED') != '1':
         raise Problem(503, 'feature_unavailable', 'PostgreSQL 문서 기능은 아직 연결되지 않았습니다.')
     require_owner(ctx[2])
     plan(ctx[1], ctx[2], rid)
     return ctx
 
 
-def plan(repo, owner, rid):
-    row = repo.plan(rid, owner['owner_id'])
+def plan(repo, owner, rid, lock=False):
+    row = repo.plan(rid, owner['owner_id'], lock=lock)
     if not row:
         raise Problem(404, 'not_found', '계획을 찾을 수 없습니다.')
     return row
@@ -88,22 +90,44 @@ async def upload_data(request: Request):
 
 
 @router.get('')
-def list_documents(rid: str, ctx=Depends(document_context)):
+def list_documents(rid: str, background: BackgroundTasks, ctx=Depends(document_context)):
     db, repo, owner = ctx
     plan(repo, owner, rid)
-    db.execute('BEGIN'); row = plan(repo, owner, rid)
+    db.execute('BEGIN ISOLATION LEVEL REPEATABLE READ' if DB_BACKEND == 'postgres' else 'BEGIN'); row = plan(repo, owner, rid)
     docs = [summary(d) for d in DocumentRepository(db).list_active(rid)]
     db.commit()
+    if DB_BACKEND == 'postgres': background.add_task(request_work)
     return respond(200, {'documents': docs, 'input_revision': row['input_revision'], 'analysis_eligible': any(d['analysis_eligible'] for d in docs), 'upload_policy': {'max_files': MAX_DOCUMENTS, 'max_file_bytes': MAX_DOCUMENT_BYTES, 'extensions': ['pdf','docx','txt']}})
 
 
 @router.post('', dependencies=[Depends(require_origin)], status_code=201, openapi_extra={'requestBody': {'required': True, 'content': {'multipart/form-data': {'schema': {'type': 'object', 'required': ['file', 'expected_input_revision'], 'properties': {'file': {'type': 'string', 'format': 'binary'}, 'expected_input_revision': {'type': 'integer', 'minimum': 0}}}}}}})
-def upload(rid: str, ctx=Depends(document_context), file=Depends(upload_data)):
+def upload(rid: str, background: BackgroundTasks, ctx=Depends(document_context), file=Depends(upload_data)):
     db, repo, owner = ctx
     plan(repo, owner, rid)
     filename, data, mime, expected = file
     documents = DocumentRepository(db)
     key = str(uuid.uuid4()); store = get_storage(); saved = False
+    if DB_BACKEND == 'postgres':
+        # The reservation survives an interrupted request or an ambiguous
+        # Storage/DB response. A later worker removes only this exact key.
+        repo.begin(); row = plan(repo, owner, rid, lock=True)
+        if expected != row['input_revision']: raise Problem(409, 'revision_conflict', '입력이 변경되었습니다. 최신 문서 상태를 불러와 주세요.')
+        t = timestamp()
+        if documents.count_active(rid) + documents.count_uploading(rid, t) >= MAX_DOCUMENTS:
+            raise Problem(422, 'file_limit', '등록 가능한 문서 개수를 초과했습니다.')
+        documents.reserve_upload(key, rid, t, later(900)); db.commit()
+        store.save(key, data, mime)
+        repo.begin(); row = plan(repo, owner, rid, lock=True)
+        reservation = documents.lock_reservation(key, rid)
+        if not reservation or reservation['expires_at'] <= datetime.now(timezone.utc):
+            raise Problem(409, 'upload_expired', '업로드 시간이 만료되었습니다. 다시 시도해 주세요.')
+        if expected != row['input_revision']:
+            raise Problem(409, 'revision_conflict', '입력이 변경되었습니다. 최신 문서 상태를 불러와 주세요.')
+        t = timestamp(); documents.create(key, rid, filename, mime, len(data), t)
+        documents.bump_input(rid, t); documents.finish_reservation(key, t)
+        result = summary(documents.get(rid, key)); db.commit()
+        background.add_task(request_work)
+        return respond(201, {'document': result, 'input_revision': row['input_revision'] + 1})
     try:
         db.execute('BEGIN IMMEDIATE'); row = plan(repo, owner, rid)
         if expected != row['input_revision']: raise Problem(409, 'revision_conflict', '입력이 변경되었습니다. 최신 문서 상태를 불러와 주세요.')
@@ -124,13 +148,14 @@ def extraction(rid: str, did: str, revision: int, ctx=Depends(document_context))
     plan(repo, owner, rid); documents = DocumentRepository(db); doc = document(documents, rid, did)
     item = documents.extraction(did, revision)
     if not item: raise Problem(404, 'not_found', '추출 버전을 찾을 수 없습니다.')
-    return respond(200, {'document_id': did, 'extraction_revision': item['extraction_revision'], 'extracted_text': item['extracted_text'], 'segments': json.loads(item['segments']), 'limitations': json.loads(item['limitations']), 'extraction_status': item['extraction_status'], 'is_current_revision': doc['extraction_revision'] == item['extraction_revision'], 'partial_confirmed': bool(doc['partial_confirmed_at']) and doc['extraction_revision'] == item['extraction_revision']})
+    decode = lambda value: json.loads(value) if isinstance(value, str) else value
+    return respond(200, {'document_id': did, 'extraction_revision': item['extraction_revision'], 'extracted_text': item['extracted_text'], 'segments': decode(item['segments']), 'limitations': decode(item['limitations']), 'extraction_status': item['extraction_status'], 'is_current_revision': doc['extraction_revision'] == item['extraction_revision'], 'partial_confirmed': bool(doc['partial_confirmed_at']) and doc['extraction_revision'] == item['extraction_revision']})
 
 
 def mutate(rid, did, action, revision, body, ctx):
     db, repo, owner = ctx
     plan(repo, owner, rid); documents = DocumentRepository(db); document(documents, rid, did)
-    db.execute('BEGIN IMMEDIATE'); row = plan(repo, owner, rid); doc = document(documents, rid, did)
+    repo.begin(); row = plan(repo, owner, rid, lock=True); doc = document(documents, rid, did)
     check_revision(body, row); t = timestamp()
     if action == 'delete':
         documents.remove(did, t); documents.bump_input(rid, t); db.commit()
@@ -154,13 +179,17 @@ def mutate(rid, did, action, revision, body, ctx):
 
 
 @router.delete('/{did:roadmap_id}', dependencies=[Depends(require_origin)], openapi_extra=openapi_body(RevisionRequest))
-def delete_document(rid: str, did: str, ctx=Depends(document_context), body=Depends(parse_body)):
-    return mutate(rid, did, 'delete', None, body, ctx)
+def delete_document(rid: str, did: str, background: BackgroundTasks, ctx=Depends(document_context), body=Depends(parse_body)):
+    result = mutate(rid, did, 'delete', None, body, ctx)
+    if DB_BACKEND == 'postgres': background.add_task(request_work)
+    return result
 
 
 @router.post('/{did:roadmap_id}/retry-extraction', dependencies=[Depends(require_origin)], status_code=202, openapi_extra=openapi_body(RevisionRequest))
-def retry(rid: str, did: str, ctx=Depends(document_context), body=Depends(parse_body)):
-    return mutate(rid, did, 'retry', None, body, ctx)
+def retry(rid: str, did: str, background: BackgroundTasks, ctx=Depends(document_context), body=Depends(parse_body)):
+    result = mutate(rid, did, 'retry', None, body, ctx)
+    if DB_BACKEND == 'postgres': background.add_task(request_work)
+    return result
 
 
 @router.post('/{did:roadmap_id}/extractions/{revision:int}/confirmation', dependencies=[Depends(require_origin)], openapi_extra=openapi_body(RevisionRequest))

@@ -66,6 +66,13 @@ class SupabaseDocumentStorage:
         except HTTPError as error:
             if missing_ok and error.code == 404:
                 return None
+            if missing_ok and error.code == 400:
+                try:
+                    body = json.loads(error.read())
+                    if str(body.get('statusCode')) == '404':
+                        return None
+                except (ValueError, TypeError, AttributeError):
+                    pass
             raise OSError('Supabase Storage request failed') from None
         except (URLError, TimeoutError, OSError):
             raise OSError('Supabase Storage request failed') from None
@@ -88,13 +95,15 @@ class SupabaseDocumentStorage:
     def read(self, key):
         key = self._key(key)
         self._private_bucket()
-        result = self._request('GET', '/object/authenticated/' + quote(self.bucket, safe='') + '/' + key)
+        result = self._request('GET', '/object/' + quote(self.bucket, safe='') + '/' + key)
         return result
 
     def exists(self, key):
         key = self._key(key)
         self._private_bucket()
-        return self._request('HEAD', '/object/authenticated/' + quote(self.bucket, safe='') + '/' + key, missing_ok=True) is not None
+        # The metadata endpoint has a JSON error body; HEAD can report a
+        # bodyless 400 for both missing files and other failures.
+        return self._request('GET', '/object/info/' + quote(self.bucket, safe='') + '/' + key, missing_ok=True) is not None
 
     def delete(self, key):
         key = self._key(key)
@@ -102,7 +111,18 @@ class SupabaseDocumentStorage:
         body = json.dumps({'prefixes': [key]}).encode()
         self._request('DELETE', '/object/' + quote(self.bucket, safe=''), body,
                       {'Content-Type': 'application/json'})
+        if self.exists(key):
+            raise OSError('Supabase Storage object was not deleted')
 
 
 def get_storage():
+    from config import DB_BACKEND
+    if DB_BACKEND == 'postgres':
+        from repositories.postgres import StorageUnavailable
+        try:
+            return SupabaseDocumentStorage(os.environ.get('SUPABASE_URL', ''),
+                os.environ.get('SUPABASE_SECRET_KEY') or os.environ.get('SUPABASE_SERVICE_ROLE_KEY', ''),
+                os.environ.get('SUPABASE_STORAGE_BUCKET', 'roadmap-documents'))
+        except ValueError:
+            raise StorageUnavailable('Supabase Storage 설정을 확인해 주세요.') from None
     return LocalDocumentStorage()

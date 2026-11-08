@@ -30,10 +30,10 @@ def test_upload_requires_private_bucket_and_disallows_overwrite():
 
 def test_read_and_delete_use_only_the_exact_validated_key():
     client = storage()
-    with patch.object(client, '_request', side_effect=[b'{"public": false}', b'content', b'{"public": false}', b'[]']) as request:
+    with patch.object(client, '_request', side_effect=[b'{"public": false}', b'content', b'{"public": false}', b'[]', b'{"public": false}', None]) as request:
         assert client.read(KEY) == b'content'
         client.delete(KEY)
-    assert request.call_args_list[1].args[1] == '/object/authenticated/private-bucket/' + KEY
+    assert request.call_args_list[1].args[1] == '/object/private-bucket/' + KEY
     assert request.call_args_list[3].args[2] == ('{"prefixes": ["' + KEY + '"]}').encode()
     for invalid in ('../' + KEY, KEY.upper(), KEY + '/other', 'not-a-uuid'):
         with pytest.raises(ValueError):
