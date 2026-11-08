@@ -1,6 +1,6 @@
 # 로컬 Python 백엔드의 PostgreSQL 연결
 
-연결 실패 로그에는 비밀값 대신 `authentication_failed`, `dns_error`, `connection_timeout`, `network_unreachable`, `tls_ca_error`, `tls_verification_failed`, `tls_hostname_mismatch`, `invalid_dsn` 또는 `connection_failed`가 표시된다. 분류는 드라이버 메시지에 의존하므로 일반 코드로 남는 경우도 있다. DNS 또는 네트워크 오류는 Session pooler 사용 여부와 IPv4/IPv6 경로를 점검한다. CA 파일은 PEM 형식이어야 하며 Render Secret Files를 사용한다면 예를 들어 `PGSSLROOTCERT=/etc/secrets/supabase-ca.crt`를 설정한다. 연결 문자열의 `sslrootcert`가 환경변수보다 우선하므로 이전 로컬 경로를 제거해야 한다. `sslrootcert=system`은 이를 지원하는 libpq에서 시스템 신뢰 저장소를 사용한다. 호스트 이름과 CA 검증은 드라이버가 연결 시 수행하며 `verify-full`을 유지한다. 분류만으로 실제 장애 원인을 확정할 수는 없다.
+연결 실패 로그에는 비밀값 대신 `authentication_failed`, `dns_error`, `connection_timeout`, `network_unreachable`, `tls_ca_missing`, `tls_ca_unreadable`, `tls_ca_invalid_pem`, `tls_ca_error`, `tls_verification_failed`, `tls_hostname_mismatch`, `invalid_dsn` 또는 `connection_failed`가 표시된다. 분류는 드라이버 메시지에 의존하므로 일반 코드로 남는 경우도 있다. DNS 또는 네트워크 오류는 Session pooler 사용 여부와 IPv4/IPv6 경로를 점검한다. CA 파일은 PEM 형식이어야 하며 Render Secret Files를 사용한다면 예를 들어 `PGSSLROOTCERT=/etc/secrets/supabase-ca.crt`를 설정한다. 이 애플리케이션은 비어 있지 않은 `PGSSLROOTCERT`를 DSN의 `sslrootcert`보다 우선해 psycopg에 명시적으로 전달한다. 이전 로컬 경로는 DSN에서도 제거하는 편이 좋다. `sslrootcert=system`은 이를 지원하는 libpq에서 시스템 신뢰 저장소를 사용한다. 호스트 이름과 CA 검증은 드라이버가 연결 시 수행하며 `verify-full`을 유지한다. 분류만으로 실제 장애 원인을 확정할 수는 없다.
 
 ## 현재 상태
 
@@ -9,7 +9,7 @@ P1/P2의 실제 PostgreSQL 연결 및 API 검증을 완료했다. 백엔드 연�
 ## 설정과 실행
 
 1. 저장소 루트에서 `python3 -m venv apps/api/.venv` 및 `apps/api/.venv/bin/pip install -r apps/api/requirements.txt`를 실행한다. 드라이버는 `psycopg[binary]==3.2.13`, 환경 파일 로더는 `python-dotenv==1.1.1`로 고정되어 있다.
-2. 기본 SQLite는 별도 설정 없이 `ROADMAP_INSECURE_LOCAL_COOKIE=1 apps/api/.venv/bin/python apps/api/app/main.py`로 실행한다. `ROADMAP_DB_PATH`로 파일 경로를 변경할 수 있다. SQLite의 기존 마이그레이션과 개발용 자동 seed는 유지된다.
+2. 기본 SQLite는 `cd apps/api` 후 `ROADMAP_INSECURE_LOCAL_COOKIE=1 .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000`으로 실행한다. `ROADMAP_DB_PATH`로 파일 경로를 변경할 수 있다. SQLite의 기존 마이그레이션과 개발용 자동 seed는 유지된다.
 3. PostgreSQL을 사용하려면 `apps/api/.env.example`을 `apps/api/.env`로 복사하고 `ROADMAP_DB_BACKEND=postgres`, `ROADMAP_DATABASE_URL`에 Dashboard > Connect에서 복사한 실제 연결 문자열, `ROADMAP_AUTO_SEED_DEV=0`을 설정한다. 기존 환경변수가 `.env`보다 우선한다. `.env`는 Git 제외 대상이며 백엔드에만 둔다. URL이나 자격 증명을 저장소와 프론트엔드에 넣지 않는다.
 4. IPv4 전용 개발 환경에서는 Dashboard의 **Session pooler** 연결을 권장한다. IPv6 direct 연결이 가능한 경우 direct를 사용할 수 있다. Dashboard의 값을 그대로 사용하고 호스트·사용자·포트를 추측하지 않는다. 서버 인증서 검증을 위해 드라이버는 `sslmode=verify-full`을 적용한다. 신뢰할 수 있는 CA가 시스템에 없다면 Dashboard에서 받은 CA 파일을 안전하게 보관하고 연결 문자열의 `sslrootcert`로 지정한다. 자세한 연결 방식은 [Supabase 연결 문서](https://supabase.com/docs/guides/database/connecting-to-postgres)를 참고한다.
 5. 같은 API 실행 명령을 사용한다. PostgreSQL 시작 시 연결 및 `SELECT 1`을 확인한다. 누락 또는 연결 오류는 비밀값 없는 메시지로 종료된다. PostgreSQL에서는 SQLite SQL 001~005를 자동 적용하지 않으며 `ROADMAP_AUTO_SEED_DEV` 값과 관계없이 가상 seed는 실행하지 않는다. `seed_dev.py`도 PostgreSQL에서는 거부한다.

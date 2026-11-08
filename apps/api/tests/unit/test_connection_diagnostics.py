@@ -1,6 +1,7 @@
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'app'))
@@ -31,6 +32,14 @@ class ConnectionDiagnosticsTest(unittest.TestCase):
                 with self.assertRaises(StorageUnavailable) as caught:
                     _validate_ca_file(str(path))
                 self.assertNotIn(str(path), str(caught.exception))
+                self.assertIn('tls_ca_invalid_pem' if create else 'tls_ca_missing', str(caught.exception))
+
+    def test_unreadable_ca_is_reported_without_path(self):
+        with patch('builtins.open', side_effect=PermissionError('secret-path')):
+            with self.assertRaises(StorageUnavailable) as caught:
+                _validate_ca_file('/secret-path')
+        self.assertIn('tls_ca_unreadable', str(caught.exception))
+        self.assertNotIn('secret-path', str(caught.exception))
 
     def test_system_trust_is_not_treated_as_a_path(self):
         _validate_ca_file('system')
