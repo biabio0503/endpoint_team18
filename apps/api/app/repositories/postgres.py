@@ -2,7 +2,6 @@
 
 import logging
 import os
-import ssl
 
 logger = logging.getLogger(__name__)
 
@@ -33,27 +32,6 @@ def _connection_error_code(error):
     return 'connection_failed'
 
 
-def _validate_ca_file(path):
-    # libpq's special "system" value selects the system trust store.
-    if not path or path == 'system':
-        return
-    try:
-        with open(path, 'rb') as certificate:
-            certificate.read(1)
-    except FileNotFoundError:
-        code = 'tls_ca_missing'
-    except OSError:
-        code = 'tls_ca_unreadable'
-    else:
-        try:
-            ssl.create_default_context(cafile=path)
-            return
-        except (OSError, ValueError, ssl.SSLError):
-            code = 'tls_ca_invalid_pem'
-    logger.error('PostgreSQL connection failed: %s', code)
-    raise StorageUnavailable(f'PostgreSQL CA 인증서 파일을 읽거나 검증할 수 없습니다. ({code})') from None
-
-
 def connect_postgres(url):
     if not url:
         raise StorageUnavailable('PostgreSQL을 사용하려면 ROADMAP_DATABASE_URL을 설정해 주세요.')
@@ -64,13 +42,24 @@ def connect_postgres(url):
     except ImportError:
         raise StorageUnavailable('PostgreSQL 드라이버를 설치해 주세요.') from None
     try:
-        # A deployment-level PGSSLROOTCERT deliberately overrides an embedded
-        # DSN path, which may have been copied from a developer's machine.
         options = conninfo_to_dict(url)
-        env_ca = os.environ.get('PGSSLROOTCERT')
-        _validate_ca_file(env_ca or options.get('sslrootcert'))
-        overrides = {'sslrootcert': env_ca} if env_ca else {}
-        connection = psycopg.connect(url, autocommit=True, row_factory=dict_row, connect_timeout=10, sslmode='verify-full', **overrides)
+        host = options.get('hostaddr') or options.get('host') or os.environ.get('PGHOSTADDR') or os.environ.get('PGHOST', '')
+        if not host or any(not part or part.startswith(('/', '@')) for part in host.split(',')):
+            raise StorageUnavailable('PostgreSQL 연결에는 TCP 호스트가 필요합니다. (tls_required)')
+        options.pop('sslrootcert', None)
+        options.pop('sslmode', None)
+        options.pop('gssencmode', None)
+        options.pop('connect_timeout', None)
+        # libpq may load ~/.postgresql/root.crt even with sslmode=require.
+        # A child of the /dev/null device cannot exist, so this explicit
+        # per-connection sentinel also overrides PGSSLROOTCERT and that default.
+        connection = psycopg.connect(**options, autocommit=True, row_factory=dict_row,
+                                     connect_timeout=10, sslmode='require',
+                                     sslrootcert='/dev/null/roadmap-no-ca', gssencmode='disable')
+        if not connection.pgconn.ssl_in_use:
+            connection.close()
+            logger.error('PostgreSQL connection failed: tls_required')
+            raise StorageUnavailable('PostgreSQL 연결에 TLS가 필요합니다. (tls_required)')
         return PostgresConnection(connection, psycopg.Error)
     except (psycopg.Error, ValueError, UnicodeError) as error:
         code = _connection_error_code(error)
