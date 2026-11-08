@@ -1,0 +1,485 @@
+**학과 과목 목록에서 이미 이수함 토글을 선택하는 방식에 맞춘 입력 데이터와 저장 구조**
+
+개정 기준은 2026년 11월 6일이다. 입력은 진로 정보, 프로젝트 문서와 현재 학업 현황의 세 가지 범주로 구성한다. 사용자가 직접 작성하던 이수 과목명·코드·학점은 서비스의 과목 기준 데이터로 옮기고, 사용자는 과목별 이수 선택만 저장한다.
+
+이 문서는 구현을 위한 제안 명세다. 자료형은 관계형 DB를 기준으로 표시했으며 UUID, TIMESTAMPTZ, JSONB 표기는 PostgreSQL 계열로 구현할 때의 예시다. 필수는 해당 기능을 실행할 때 필요한 값이며, 입력 초안에서는 비어 있을 수 있다. 별도 표시가 없는 식별자와 처리 상태는 서버가 기록한다.
+
+# 1 데이터 구분과 핵심 변경
+
+| 구분 | 내용 | 생성 주체 |
+| - | - | - |
+| 사용자가 입력하는 값 | 진로 설명, 학년, 선택 학점·GPA, 확인 답변 | 사용자 |
+| 사용자가 선택하는 값 | 학교·학과·과목 목록, 과목별 이미 이수함 여부 | 사용자 |
+| 사용자가 업로드하는 값 | 프로젝트 문서의 실제 파일 | 사용자 |
+| 서비스가 준비하는 값 | 학교·학과 목록, 과목명·코드·학점, 교육과정 기준과 출처 | 서비스 |
+| 시스템이 기록하는 값 | 요청 ID, 파일 참조, 저장 버전, 확인 범위, 분석 상태와 결과 기준 | 서버 |
+
+핵심 변경은 다음과 같다.
+
+- 학교·학과는 기준 목록의 식별자로 선택한다. 명칭은 표시용으로 사용한다.
+
+- 이수 과목 입력은 과목명 텍스트 목록에서 과목 ID와 Boolean 토글 상태로 바뀐다.
+
+- 과목명, 과목코드와 과목 학점은 사용자에게 다시 입력받지 않는다.
+
+- 최초 OFF와 이수 선택 확인 완료 후의 미선택을 구분한다.
+
+- 과목 목록과 사용자의 선택 이력을 별도 테이블로 저장한다.
+
+- 이전 로드맵은 생성 당시의 입력 스냅샷과 연결한다.
+
+# 2 사용자가 입력하거나 선택하는 필드
+
+## 진로 정보
+
+| 필드명 | DB 타입 | 입력 방식과 필수 여부 | 예시 |
+| - | - | - | - |
+| `career_goal` | TEXT | 목표·관심 분야를 텍스트로 입력, 필수 | 데이터 분석 분야를 준비하고 싶다 |
+| `target_role` | VARCHAR(100), NULL 허용 | 직무 선택 또는 텍스트, 선택 | 데이터 분석가 |
+
+`career_goal`은 공백만 있는 문자열을 허용하지 않는다. 구체적인 직무를 정하지 않은 사용자도 관심 분야를 입력할 수 있다. `target_role`은 선택 정보로 유지한다.
+
+## 현재 학업 현황
+
+| 필드명 | DB 타입 | 입력 방식과 필수 여부 | 예시 또는 의미 |
+| - | - | - | - |
+| `university_id` | UUID, FK | 학교 검색·선택, 수강 제안용 필수 | 학교 기준 ID |
+| `department_id` | UUID, FK | 선택한 학교의 학과 선택, 수강 제안용 필수 | 학과 기준 ID |
+| `catalog_id` | UUID, FK, NULL 허용 | 해당 학과의 과목 목록 선택·확인, 수강 제안용 필수 | 교육과정·자료 버전 ID |
+| `year_level` | SMALLINT, NULL 허용 | 학년 선택, 수강 제안용 필수 | 2 |
+| `earned_credits` | DECIMAL(5,1), NULL 허용 | 총 취득학점을 숫자로 입력, 선택 | 72.0 |
+| `gpa` | DECIMAL(3,2), NULL 허용 | 성적 평점을 숫자로 입력, 선택 | 3.80 |
+| `gpa_scale` | DECIMAL(3,2), NULL 허용 | 만점 기준 선택, GPA 입력 시 필수 | 4.50 |
+
+학교·학과 명칭을 임의로 입력해 다른 목록에 연결하지 않는다. 미지원 학교·학과이거나 목록을 확보하지 못하면 지원 상태를 표시하고 해당 범위의 수강 제안을 보류한다. 진로·문서 기반 분석을 제공할 수 있는 경우에는 학업 정보의 제한을 결과에 표시한다.
+
+학년은 현재 학업 단계이며 교육과정 연도를 뜻하지 않는다. 적용 교육과정은 확보한 자료와 사용자의 확인으로 정한다. `earned_credits`와 `gpa`는 서로 다른 값이며, 선택하지 않은 숫자는 0 대신 NULL로 저장한다.
+
+## 과목별 이수 선택
+
+| 필드명 | 전송 타입 | 입력 방식 | DB에서의 의미 |
+| - | - | - | - |
+| `course_id` | UUID 문자열 | 화면의 과목 선택에 따라 전달 | 어떤 과목인지 식별 |
+| `is_completed` | Boolean | 이미 이수함 토글 ON 또는 OFF | true는 이수 선택, false는 선택 해제 |
+| `catalog_id` | UUID 문자열 | 현재 확인 중인 목록에서 전달 | 선택을 수행한 목록 범위 검증 |
+| `expected_selection_revision` | 정수 | 화면이 마지막으로 받은 선택 버전 자동 전달 | 오래된 토글·확인 요청 검출 |
+| `expected_input_revision` | 정수 | 목록 확인·일반 입력 수정 시 전체 입력 버전 자동 전달 | 확인 답변 등의 동시 수정 검출 |
+| `reported_missing_courses` | Boolean | 목록 확인 시 누락된 이수 과목이 있는지 선택 | 확인 범위가 불완전하다는 사용자 신고 |
+
+핵심 사용자 동작은 토글 선택이다. 과목 ID와 저장 버전은 사용자가 직접 입력하는 값이 아니다. `course_name`, `course_code`, `credits`를 토글 저장 요청의 신뢰할 수 있는 사용자 값으로 받지 않는다. 서버가 과목 자료에서 조회한다.
+
+토글 ON은 사용자가 해당 과목을 이미 이수했다고 신고한 상태다. false는 선택 해제를 뜻한다. 초기 기본 OFF나 저장된 false를 사용자가 전체 목록을 검토했다는 증거로 사용하지 않는다. 이수 학기, 성적 등급과 수강 중 상태는 첫 토글 입력에 포함하지 않는다.
+
+# 3 테이블 구성과 관계
+
+| 테이블 | 저장 목적 | 주요 관계 |
+| - | - | - |
+| `universities` | 학교 기준 목록 | 학교 하나에 학과 여러 개 |
+| `departments` | 학과 기준 목록 | 학교에 소속되며 목록 여러 버전 보유 |
+| `course_catalogs` | 특정 학과·교육과정 기준의 과목 목록 | 학과 하나에 목록 여러 개 |
+| `courses` | 학기·분반과 구분되는 과목의 안정적인 식별 정보 | 과목 하나가 여러 목록에 포함될 수 있음 |
+| `catalog_courses` | 목록에 포함된 과목과 당시 표시 정보 | 목록과 과목의 다대다 연결 |
+| `roadmap_inputs` | 세 범주의 입력과 선택·확인 버전 | 한 요청에 문서·과목 선택·결과 여러 개 |
+| `input_course_states` | 요청별 과목 토글 상태 | 요청과 과목별 최대 한 행 |
+| `project_documents` | 업로드 파일과 추출 상태 | 요청 하나에 문서 여러 개 |
+| `analysis_confirmations` | 추출 경험·질문에 대한 사용자 확인 | 요청과 서버 분석 항목에 연결 |
+| `roadmap_runs` | 결과 생성 당시 입력과 결과 | 요청 하나에 생성 이력 여러 개 |
+
+학교·학과·과목 기준 데이터는 모든 사용자가 참조하고, 이수 선택은 요청별로 따로 저장한다. 같은 학교의 같은 과목을 두 사용자가 선택해도 기준 과목 행은 공유하며 선택 상태는 공유하지 않는다.
+
+초기에는 하나의 계획을 작성·수정하는 작업 단위를 `request_id`로 관리한다. 계정 전체의 학적 관리 시스템까지 확장하지 않는다. 새 요청에 이전 선택을 가져오는 기능을 추가하면 사용자가 확인할 수 있는 복사로 처리한다.
+
+# 4 학교와 학과 기준 데이터
+
+## universities
+
+| 필드명 | 타입과 제약 | 의미 |
+| - | - | - |
+| `university_id` | UUID, PK | 학교 식별자 |
+| `university_name` | VARCHAR(100), NOT NULL | 표시용 학교명 |
+| `is_supported` | BOOLEAN, NOT NULL | 서비스 지원 여부 |
+
+## departments
+
+| 필드명 | 타입과 제약 | 의미 |
+| - | - | - |
+| `department_id` | UUID, PK | 학과 식별자 |
+| `university_id` | UUID, FK, NOT NULL | 소속 학교 |
+| `department_name` | VARCHAR(100), NOT NULL | 표시용 학과명 |
+| `is_supported` | BOOLEAN, NOT NULL | 해당 학과 분석·과목 자료 지원 여부 |
+
+학교를 선택한 뒤에는 그 학교의 학과만 선택할 수 있다. 같은 학과 이름이 여러 학교에 있어도 별개의 ID를 사용한다. 지원 여부와 실제 목록 조회 성공 여부는 각각 확인한다.
+
+# 5 과목 목록과 과목 기준 데이터
+
+## course_catalogs
+
+| 필드명 | 타입과 제약 | 의미 |
+| - | - | - |
+| `catalog_id` | UUID, PK | 과목 목록 버전의 식별자 |
+| `department_id` | UUID, FK, NOT NULL | 목록이 속한 학과 |
+| `curriculum_year` | SMALLINT, NULL 허용 | 알려진 경우 적용 교육과정 연도 |
+| `version_label` | VARCHAR(100), NOT NULL | 화면에 표시할 자료 버전 |
+| `scope_description` | TEXT, NOT NULL | 포함한 전공·과거 과목 등 실제 범위 |
+| `completeness_status` | VARCHAR(20), NOT NULL | complete, partial, unknown |
+| `source_name` | TEXT, NOT NULL | 자료의 출처 또는 제공 문서 이름 |
+| `source_url` | TEXT, NULL 허용 | 원천 웹 자료가 있는 경우 URL |
+| `retrieved_at` | TIMESTAMPTZ, NOT NULL | 원천 자료를 확인·수집한 시각 |
+| `published_at` | TIMESTAMPTZ, NULL 허용 | 서비스에서 선택 가능하게 게시한 시각 |
+| `is_selectable` | BOOLEAN, NOT NULL | 현재 선택 가능한 목록 여부 |
+
+`complete`는 `scope_description`에 선언한 범위를 확보했다는 뜻이며, 모든 학생의 전체 학업 이력을 포함한다는 뜻이 아니다. 원천 누락 가능성을 검토하지 못했다면 `unknown`, 일부만 확보했다면 `partial`로 둔다.
+
+게시한 목록의 구성과 표시 정보는 보존한다. 변경된 자료는 새 `catalog_id`로 게시하고 이전 목록은 기존 선택과 결과를 재현할 수 있도록 유지한다. 학생의 현재 학년만으로 `curriculum_year`를 계산해 확정하지 않는다.
+
+## courses
+
+| 필드명 | 타입과 제약 | 의미 |
+| - | - | - |
+| `course_id` | UUID, PK | 과목 자체의 식별자 |
+| `university_id` | UUID, FK, NOT NULL | 과목이 속한 학교 |
+| `canonical_name` | VARCHAR(150), NOT NULL | 기준 과목명 |
+| `source_course_code` | VARCHAR(50), NULL 허용 | 원천의 과목 식별 코드 |
+| `retired_at` | TIMESTAMPTZ, NULL 허용 | 폐지 등 현재 사용 종료가 확인된 시각 |
+
+과목 이름만으로 동일성을 판단하지 않는다. 같은 이름의 서로 다른 과목은 다른 ID로 관리한다. 원천 과목코드의 고유 범위가 확인되면 해당 범위에 유일성 제약을 추가할 수 있지만, 코드가 학교 전체와 모든 기간에 걸쳐 고유하다고 임의로 가정하지 않는다.
+
+이름·코드가 변경된 과목과 대체과목을 동일 과목으로 연결하려면 별도 검증 자료가 필요하다. 폐지된 과목의 행을 삭제해 과거 이수 선택을 잃지 않도록 한다.
+
+## catalog_courses
+
+| 필드명 | 타입과 제약 | 의미 |
+| - | - | - |
+| `catalog_id` | UUID, FK, 복합 PK | 과목 목록 |
+| `course_id` | UUID, FK, 복합 PK | 목록에 포함된 과목 |
+| `course_name` | VARCHAR(150), NOT NULL | 해당 목록 기준 표시 과목명 |
+| `course_code` | VARCHAR(50), NULL 허용 | 해당 목록 기준 표시 과목코드 |
+| `credits` | DECIMAL(4,1), NULL 허용 | 해당 목록에서 확인한 학점 |
+| `category` | VARCHAR(50), NULL 허용 | 전공필수·전공선택 등 원천 분류 |
+| `recommended_year` | SMALLINT, NULL 허용 | 교육과정의 권장 학년 |
+| `recommended_term` | VARCHAR(30), NULL 허용 | 교육과정의 권장 학기 표기 |
+| `description_text` | TEXT, NULL 허용 | 확보한 강의 개요 또는 학습 내용 |
+| `description_source_url` | TEXT, NULL 허용 | 과목 설명의 웹 출처가 있는 경우 URL |
+
+`(catalog_id, course_id)`를 유일하게 둔다. 과목명이 바뀌어도 과거 목록을 다시 보여줄 수 있도록 목록 기준의 표시 이름·코드·학점을 보관한다. 과목의 기준 정보와 특정 목록에서의 표현은 역할이 다르다.
+
+권장 학기와 실제 개설 학기를 구분한다. 학과 목록과 연결된 과목은 동일 학교의 과목이어야 한다. 다른 학교의 학점 인정은 별도 인정 관계를 확보하기 전까지 자동으로 적용하지 않는다.
+
+# 6 로드맵 입력과 확인 상태
+
+## roadmap_inputs의 기본 필드
+
+2절의 진로·학업 현황 필드를 이 테이블에 저장한다. 다음 시스템 필드를 추가한다.
+
+| 필드명 | 타입과 제약 | 의미 |
+| - | - | - |
+| `request_id` | UUID, PK | 계획 작성·수정 요청의 식별자 |
+| `owner_id` | UUID, NOT NULL | 기존 사용자 또는 보호된 세션 소유자 ID |
+| `input_revision` | INTEGER, NOT NULL, 기본 0 | 분석에 쓰는 입력 전체의 변경 버전 |
+| `course_selection_revision` | INTEGER, NOT NULL, 기본 0 | 과목 선택과 현재 목록 범위의 변경 버전 |
+| `reviewed_catalog_id` | UUID, FK, NULL 허용 | 사용자가 확인한 목록 |
+| `reviewed_selection_revision` | INTEGER, NULL 허용 | 사용자가 확인한 선택 버전 |
+| `reported_missing_courses` | BOOLEAN, NOT NULL, 기본 false | 확인 시 목록에 없는 이수 과목을 신고했는지 |
+| `reviewed_at` | TIMESTAMPTZ, NULL 허용 | 이수 선택 확인 시각 |
+| `created_at` | TIMESTAMPTZ, NOT NULL | 요청 생성 시각 |
+| `updated_at` | TIMESTAMPTZ, NOT NULL | 마지막 입력 수정 시각 |
+
+`owner_id`는 분석용 학생 이름·학번이 아니며 서버가 현재 사용자나 세션에서 정한다. 클라이언트가 임의 소유자 ID를 전달해 다른 사용자의 입력을 수정하지 못하도록 한다. 인증 방식의 상세 구현은 별도 범위다.
+
+진로, 학업 정보, 문서나 확인 답변 등 분석 입력이 바뀌면 `input_revision`을 증가시킨다. 과목 선택이 실제로 바뀌거나 학교·학과·현재 목록 범위가 바뀌면 `course_selection_revision`도 증가시키고 기존 이수 선택 확인을 해제한다. 목표 설명만 바꾸는 경우 과목 확인까지 다시 요구하지 않는다.
+
+확인 해제 시 `reviewed_catalog_id`, `reviewed_selection_revision`, `reviewed_at`을 NULL로 만든다. 누락 신고 값은 다음 확인 시 다시 받으며 유효한 확인 버전과 함께만 해석한다.
+
+## 응답에 제공하는 review_status
+
+이 값은 DB 필드를 중복 갱신하기보다 현재 데이터에서 계산해 반환한다.
+
+| 응답 값 | 조건과 의미 |
+| - | - |
+| `unavailable` | 현재 과목 목록을 사용할 수 없음 |
+| `unconfirmed` | 초기 또는 선택 중 상태로, 현재 목록·선택 버전에 대한 유효한 확인이 없음 |
+| `confirmed` | 현재 catalog_id와 선택 revision을 확인했고 누락을 신고하지 않음 |
+| `partial` | 현재 목록·선택 버전을 확인했으나 목록에 없는 이수 과목이 있다고 신고함 |
+
+`confirmed` 또는 `partial`이 되려면 현재 `catalog_id = reviewed_catalog_id`, 현재 `course_selection_revision = reviewed_selection_revision`, `reviewed_at` 존재가 모두 성립해야 한다. 사용 가능한 목록은 있지만 유효한 확인이 없으면 모두 `unconfirmed`로 표시한다. revision 숫자로 사용자가 화면을 검토하기 시작했는지 추정하지 않는다.
+
+원천 목록의 `completeness_status`와 사용자 확인의 `review_status`는 서로 다른 상태다. 원천 목록이 일부여도 사용자는 제공된 범위를 확인할 수 있다. 결과에는 두 상태를 함께 표시해 전체 학업 이력이 확보된 것으로 오해하지 않게 한다.
+
+# 7 요청별 이수 토글 저장
+
+## input_course_states
+
+| 필드명 | 타입과 제약 | 의미 |
+| - | - | - |
+| `request_id` | UUID, FK, 복합 PK | 어떤 계획 요청의 선택인지 |
+| `course_id` | UUID, FK, 복합 PK | 어떤 과목에 대한 선택인지 |
+| `source_catalog_id` | UUID, FK, NOT NULL | 선택의 근거가 된 과목 목록 |
+| `is_completed` | BOOLEAN, NOT NULL | true는 이미 이수함 선택, false는 선택 해제 |
+| `updated_at` | TIMESTAMPTZ, NOT NULL | 해당 선택이 변경된 시각 |
+
+`(request_id, course_id)`를 기본키 또는 유일 제약으로 둬 같은 과목 선택이 중복 저장되지 않게 한다. `(source_catalog_id, course_id)`는 `catalog_courses`의 실제 연결을 참조한다.
+
+현재 목록 안의 선택을 저장할 때 source_catalog_id는 서버가 현재 catalog_id로 기록한다. 현재 목록 밖에 보관된 선택을 해제할 때는 기존 source_catalog_id를 유지한다. 클라이언트가 과목의 출처를 임의로 바꾸게 하지 않는다.
+
+첫 화면에서는 행이 없는 과목도 토글 OFF로 표시한다. API는 표시용 `is_completed: false`와 별도의 확인 상태를 제공한다. DB에 행이 없다는 사실과 false 행이 있다는 사실을 모두 공식 미이수 기록으로 해석하지 않는다.
+
+| 저장과 확인 상태 | 사용자에게 보여줄 의미 | 분석 처리 |
+| - | - | - |
+| `is_completed = true` | 사용자가 이미 이수함으로 선택 | 사용자 신고 이수 경험으로 반영 |
+| OFF 또는 행 없음, 목록 미확인 | 아직 이수 선택을 확인하지 않음 | 미확인으로 유지 |
+| OFF 또는 행 없음, 해당 목록 확인 완료 | 확인한 목록에서 이수 선택되지 않음 | 신규 수강 후보 검토에 사용하되 학교 기록으로 검증됐다고 표현하지 않음 |
+| 목록 밖 과목 | 현재 확인 범위 밖의 과목 | 미선택만으로 미이수 추정 금지 |
+| 누락 신고가 있는 목록 | 전체 이수 선택을 확인하기 어려움 | 과목 추천에 확인 필요 상태를 함께 표시 |
+
+토글 해제는 해당 사용자의 선택 상태만 바꾼다. 과목 기준 데이터나 프로젝트 문서를 삭제하지 않는다. 학교·학과를 변경해도 기존 선택을 남기고, 현재 목록 밖의 선택을 별도로 조회해 표시한다. 같은 과목 ID가 새 목록에도 있으면 기존 선택을 이어서 사용할 수 있다.
+
+학교가 다른 기존 이수 선택은 그 학교의 과목으로 유지한다. 새 학교의 선수과목 충족이나 학점 인정으로 자동 변환하지 않는다.
+
+# 8 토글 저장과 목록 확인 동작
+
+## 토글 저장
+
+사용자가 토글을 누르면 프론트엔드는 바꿀 과목과 목표 상태인 true 또는 false를 보낸다. 현재 값을 무조건 뒤집는 명령을 보내지 않는다.
+
+서버는 요청 소유자, 현재 목록 ID, 선택 버전과 과목 연결을 검증한다. 토글 저장, 목록 확인과 일반 입력 수정은 같은 roadmap_inputs 행에 대한 잠금 또는 조건부 갱신을 사용해 버전 검증과 쓰기를 원자적으로 수행한다. 검증이 통과하면 요청한 과목 상태, 버전 증가와 기존 확인 해제를 하나의 트랜잭션으로 저장한다. 전송하지 않은 다른 과목은 그대로 둔다.
+
+실제로 상태가 달라질 때만 버전을 증가시킨다. 같은 버전에서 이미 같은 목표 상태를 다시 저장하면 상태가 반전되지 않는다. 오래된 버전으로 재전송되면 충돌 응답을 받은 뒤 최신 상태를 조회한다. 동일 요청이 무조건 같은 성공 응답을 반환한다고 전제하지 않는다.
+
+초기 구현에서는 저장 요청을 순서대로 처리하고 대기 중인 변경을 관리하는 방식을 제안한다. 저장 완료 전에는 확인 완료 버튼을 활성화하지 않는다. 저장 실패 시 마지막 확정 상태를 복원하거나 저장되지 않은 변경을 명확히 표시하고 재시도할 수 있게 한다.
+
+## 이수 선택 확인 완료
+
+사용자는 현재 전체 목록의 선택 상태를 확인한 뒤 완료 버튼을 누른다. 검색·필터가 적용된 화면에서 누르더라도 확인 대상은 검색 결과 일부가 아니라 표시된 기준 목록 전체다. 버튼 주변에 이 범위를 설명하고 선택한 과목 목록을 다시 볼 수 있게 한다.
+
+서버는 현재 목록 ID, expected_selection_revision과 expected_input_revision이 모두 일치하는지 확인한 뒤 확인 필드를 기록한다. 다른 화면에서 누락 신고나 입력을 먼저 바꾸었다면 오래된 확인 요청은 충돌로 처리한다. 누락된 과목이 있다고 선택하면 `partial`로 표시한다. 새로 유효한 확인 상태가 만들어지거나 누락 신고가 바뀌면 전체 입력 버전도 증가시킨다.
+
+학교·학과·목록 변경은 일반 입력 수정 요청에서 현재 input_revision을 함께 검증하고, 선택 버전 증가와 확인 해제를 한 번에 반영한다. 토글 저장 요청의 catalog_id는 현재 범위를 검증하는 값이며 소속을 변경하는 명령이 아니다.
+
+토글을 다시 변경하거나 현재 학과·목록을 바꾸면 확인을 해제한다. 목록 갱신은 새 버전으로 제공하며 사용자를 알리지 않고 다른 범위로 바꿔 확인 상태를 유지하지 않는다.
+
+# 9 API 요청과 응답 예시
+
+다음 경로와 JSON은 제안 인터페이스다. 꺾쇠 괄호 안의 값은 설명용 자리표시자이며 실제 요청에서는 유효한 UUID 등으로 교체한다.
+
+## 목록과 선택 상태 조회
+
+`GET /roadmap-inputs/{request_id}/courses?catalog_id={catalog_id}`
+
+```json
+{
+  "catalog_id": "<과목 목록 UUID>",
+  "catalog_version": "컴퓨터공학과 과목 목록 1차",
+  "scope_description": "서비스가 확보한 해당 학과 교육과정 과목",
+  "completeness_status": "partial",
+  "selection_revision": 7,
+  "input_revision": 12,
+  "review_status": "unconfirmed",
+  "courses": [
+    {
+      "course_id": "<과목 UUID>",
+      "course_name": "자료구조",
+      "course_code": null,
+      "credits": 3.0,
+      "is_completed": false,
+      "completion_state": "unconfirmed"
+    }
+  ],
+  "out_of_scope_completed_courses": []
+}
+```
+
+과목명과 학점은 형식 설명용 가상 예시다. 목록 응답의 `selection_revision`은 DB의 `course_selection_revision`이다. `completion_state`는 `self_reported_completed`, `unconfirmed`, `not_selected_in_reviewed_catalog` 중 현재 상태를 반환한다.
+
+현재 입력 화면의 목록 조회는 요청에 저장된 catalog_id와 조회한 catalog_id가 일치할 때만 허용한다. 다른 목록으로 전환하려면 먼저 일반 입력 수정에서 현재 목록을 바꾼다. 과거 목록을 별도 조회할 때는 그 목록의 확인 범위를 따로 계산하고 현재 확인 상태를 재사용하지 않는다.
+
+목록을 페이지로 나눠 제공하더라도 선택 데이터는 전체 요청을 기준으로 유지한다. 현재 화면에 없는 선택을 삭제하지 않는다. 과목 조회 실패는 오류로 반환하고 정상 빈 목록으로 대체하지 않는다.
+
+## 토글 저장
+
+`PATCH /roadmap-inputs/{request_id}/course-selections`
+
+```json
+{
+  "catalog_id": "<현재 과목 목록 UUID>",
+  "expected_selection_revision": 7,
+  "changes": [
+    {
+      "course_id": "<과목 UUID>",
+      "is_completed": true
+    }
+  ]
+}
+```
+
+성공 응답 예시다.
+
+```json
+{
+  "selection_revision": 8,
+  "input_revision": 13,
+  "review_status": "unconfirmed",
+  "saved_changes": [
+    {
+      "course_id": "<과목 UUID>",
+      "is_completed": true
+    }
+  ]
+}
+```
+
+`changes`에 없는 과목은 수정하지 않는다. 여러 과목이 들어오면 전체를 검증하고 한 번에 반영한다. 현재 목록에 없는 과목의 새로운 ON은 거절한다. 이미 보관된 목록 밖 선택의 OFF는 해당 요청의 기존 행을 확인하고 허용할 수 있다. 기존 선택과 같은 상태를 재전송할 때도 목록·권한·버전 검증은 수행한다.
+
+버전 충돌은 409 응답과 현재 버전으로 안내하고, 존재하지 않거나 범위를 벗어난 과목은 검증 오류로 반환한다. 자동으로 이름이 비슷한 과목을 대신 선택하지 않는다.
+
+## 이수 선택 확인 완료
+
+`POST /roadmap-inputs/{request_id}/course-selection-review`
+
+```json
+{
+  "catalog_id": "<현재 과목 목록 UUID>",
+  "expected_selection_revision": 8,
+  "expected_input_revision": 13,
+  "reported_missing_courses": false
+}
+```
+
+서버는 해당 목록과 선택 버전을 확인 필드에 기록하고 변경된 전체 입력 버전을 응답한다. 모든 토글이 OFF여도 유효한 목록을 사용자가 확인했다면 선택된 과목이 0개인 확인 상태를 만들 수 있다. 목록을 불러오지 못했거나 자료가 없어 사용할 수 없는 경우에는 이 동작을 성공 처리하지 않는다.
+
+# 10 프로젝트 문서 입력과 처리
+
+## 사용자에게 받는 파일
+
+프로젝트 문서를 분석하는 초기 경로에서는 파일을 한 개 이상 받는다. 업로드는 파일 이름 문자열만 전달하는 방식이 아니라 실제 파일 바이트를 전달하는 방식이다. 진로 분석용 `request_id`와 파일을 연결하고 파일별 ID를 발급한다.
+
+기본 지원 제안은 텍스트를 추출할 수 있는 PDF, DOCX 본문과 UTF-8 TXT다. 스캔 PDF, PNG·JPG와 문서 안에 삽입된 이미지 글자는 별도 OCR 처리 범위로 둔다. 확장자만 보고 내용을 모두 읽을 수 있다고 판단하지 않는다.
+
+| 파일 내용 | 처리 방식 | 상태 처리 |
+| - | - | - |
+| 텍스트가 있는 PDF | 텍스트 추출 후 내용 확인 | 읽을 수 있으면 ready |
+| DOCX 텍스트 본문, UTF-8 TXT | 본문 텍스트 읽기 | 읽을 수 있으면 ready |
+| 스캔 PDF나 이미지 글자 | OCR 필요 여부 확인 | OCR 미지원이면 needs_ocr |
+| 텍스트와 이미지가 섞인 문서 | 읽힌 구간과 누락 가능 구간 확인 | 일부만 읽혔으면 partial |
+| 손상·암호화 등으로 처리할 수 없는 파일 | 실패 원인 기록 | failed |
+
+PDF의 텍스트 추출과 OCR 구분은 [pypdf 공식 문서](https://pypdf.readthedocs.io/en/stable/user/extract-text.html)를 참고한다. OCR을 구현하지 않은 상태에서 이미지의 내용을 읽었다고 처리하지 않는다.
+
+## project_documents
+
+| 필드명 | 타입과 제약 | 의미 |
+| - | - | - |
+| `document_id` | UUID, PK | 문서 식별자 |
+| `request_id` | UUID, FK, NOT NULL | 연결된 입력 요청 |
+| `original_filename` | VARCHAR(255), NOT NULL | 원본 파일 이름 |
+| `mime_type` | VARCHAR(100), NOT NULL | 서버에서 확인한 파일 형식 |
+| `file_size_bytes` | BIGINT, NOT NULL | 실제 파일 크기 |
+| `storage_key` | TEXT, NOT NULL | 파일 저장소의 원본 참조값 |
+| `extracted_text` | TEXT, NULL 허용 | 추출한 본문 |
+| `extraction_status` | VARCHAR(20), NOT NULL | pending, ready, needs_ocr, partial, failed |
+| `extraction_revision` | INTEGER, NOT NULL | 추출 내용이 갱신된 버전 |
+| `extraction_error_code` | VARCHAR(50), NULL 허용 | 읽기 실패 또는 제한 사유 |
+| `partial_confirmed_at` | TIMESTAMPTZ, NULL 허용 | 사용자가 부분 추출의 범위를 확인한 시각 |
+| `created_at` | TIMESTAMPTZ, NOT NULL | 업로드 시각 |
+
+원본 파일은 파일 저장소에, 파일 참조와 추출 결과는 DB에 보관한다. 원본을 교체하면 새 문서 ID를 발급하거나 명시적인 새 파일 버전을 기록한다. 여기서는 새 문서 ID로 등록하는 방식을 기준안으로 한다.
+
+`partial` 문서는 누락 가능성을 보여주고 사용자 확인 후 읽힌 범위만 분석한다. 추출 내용이 바뀌면 부분 추출 확인도 해제하고 입력 버전을 갱신한다. 파일 크기·개수 상한은 업로드 구현 전에 확정하고 화면과 서버에서 동일하게 적용한다.
+
+경험 분석은 읽을 수 있는 텍스트가 있는 ready 문서 또는 사용자가 범위를 확인한 partial 문서가 하나 이상 있을 때 시작한다. pending, needs_ocr, failed 문서는 분석 입력에서 제외하고 어떤 파일이 포함되지 않았는지 표시한다. 분석 가능한 문서가 하나도 없으면 파일 보완을 안내하고 경험 분석을 실행하지 않는다.
+
+문서에서 추출하려는 정보는 프로젝트명·목적, 본인 역할, 수행 내용, 활용 지식·기술·방법, 결과와 근거 위치다. 추출되지 않은 정보는 사실을 만들어 채우지 않는다.
+
+# 11 분석 내용에 대한 사용자 확인
+
+프로젝트 문서의 내용을 사용자에게 다시 모두 입력하게 하지 않는다. 서비스가 추출한 경험이나 추가 확인 질문을 보여주고 사용자가 필요한 부분만 확인·수정한다.
+
+## analysis_confirmations
+
+| 필드명 | 타입과 제약 | 의미 |
+| - | - | - |
+| `confirmation_id` | UUID, PK | 사용자 확인 기록 |
+| `request_id` | UUID, FK, NOT NULL | 입력 요청 |
+| `analysis_item_id` | UUID, NOT NULL | 서버가 생성한 경험·질문 항목 ID |
+| `answer_status` | VARCHAR(20), NOT NULL | confirmed, corrected, no_experience, unknown |
+| `answer_text` | TEXT, NULL 허용 | 수정한 내용이나 추가 설명 |
+| `updated_at` | TIMESTAMPTZ, NOT NULL | 마지막 답변 시각 |
+
+`(request_id, analysis_item_id)`는 유일해야 한다. 분석 항목 저장소에서 해당 항목이 요청에 속하는지 확인한다. 분석 항목 자체의 원문 근거와 생성 결과 구조는 분석 결과 명세에서 정의하되, 항목 ID는 재분석 때 다른 내용에 재사용하지 않는다. 분석 항목은 근거 문서 ID와 추출 버전을 연결한다.
+
+문서 교체·제거 또는 추출 내용 변경으로 근거가 달라진 항목의 기존 확인은 자동으로 재사용하지 않는다. 현재 유효한 분석 항목의 답변만 새 입력 스냅샷에 포함한다. 과거 결과와의 연결은 보관 정책에 따라 유지하며, 사용자의 실제 삭제 요청은 별도로 정한 삭제 정책에 따라 처리한다.
+
+`corrected`라면 수정한 답변을 필수로 받는다. `no_experience`는 해당 경험이 없다는 사용자 답변이고, `unknown`은 모르거나 답변을 보류한 상태다. 두 상태를 같은 부족 역량으로 처리하지 않는다. 사용자 수정 내용을 원문 문서에 있던 문장으로 표시하지 않는다.
+
+# 12 로드맵 결과와 입력 스냅샷
+
+## roadmap_runs
+
+| 필드명 | 타입과 제약 | 의미 |
+| - | - | - |
+| `run_id` | UUID, PK | 한 번의 결과 생성 식별자 |
+| `request_id` | UUID, FK, NOT NULL | 입력 요청 |
+| `source_input_revision` | INTEGER, NOT NULL | 생성에 사용한 입력 버전 |
+| `input_snapshot` | JSONB, NOT NULL | 생성 당시 확정한 입력 사본 |
+| `status` | VARCHAR(20), NOT NULL | queued, running, succeeded, failed |
+| `result_payload` | JSONB, NULL 허용 | 생성 결과 또는 결과 저장소 참조를 담는 제안 필드 |
+| `created_at` | TIMESTAMPTZ, NOT NULL | 생성 요청 시각 |
+| `finished_at` | TIMESTAMPTZ, NULL 허용 | 완료·실패 시각 |
+
+스냅샷에는 진로·학업 현황, 사용한 과목 목록 ID와 버전, 실제 선택된 과목, 선택 확인 범위, 문서 ID와 추출 버전, 사용한 추출 텍스트·근거의 사본, 사용자 확인 답변을 담는다. 큰 추출 결과를 참조로 보관할 때는 버전별로 변경되지 않는 저장 위치를 사용하며, 최신 텍스트만 덮어써 이전 근거를 잃지 않게 한다. 진로 기준과 과목 설명을 분석에 사용했다면 해당 자료 버전도 연결한다.
+
+같은 데이터베이스 시점에서 입력과 버전을 읽어 생성 기준을 고정한다. 처리 중 사용자가 토글을 바꿔도 이미 실행 중인 결과의 입력을 조용히 바꾸지 않는다.
+
+결과의 `source_input_revision`과 현재 `input_revision`이 다르면 입력이 변경된 결과로 표시한다. 재분석 시 새 `run_id`를 만들고 새 스냅샷을 연결한다. 상세 AI 분석 결과와 추천 항목 전체의 정규화는 별도 출력 명세에서 다룬다.
+
+# 13 실제 개설 강의와 시간표의 확장 데이터
+
+과목 이수 토글은 `course_id` 단위로 저장한다. 실제 학기·분반을 다루는 기능을 추가할 때는 다음 자료를 별도로 둔다.
+
+| 테이블 | 최소 필드 제안 | 용도 |
+| - | - | - |
+| `course_offerings` | offering_id, course_id, academic_year, term_code, section_code, source_url, retrieved_at | 특정 학기의 개설 강좌·분반 |
+| `offering_meetings` | meeting_id, offering_id, day_of_week, start_time, end_time, meeting_type | 한 강좌의 여러 요일·시간 |
+| 선수·동일·대체 관계 | 적용 범위, 관련 course_id, 관계 종류, 근거와 유효 기간 | 검증된 조건과 과목 인정 연결 |
+
+이 항목은 첫 이수 토글 구현의 필수 테이블이 아니다. 한 분반이 여러 요일에 수업할 수 있으므로 실제 시간표를 구현할 경우 수업 시간은 별도 반복 행으로 저장한다. 원천에서 제공하지 않는 시간, 수강 자격과 동일과목 관계를 생성해 넣지 않는다.
+
+# 14 검증 규칙과 오류 처리
+
+| 대상 | 검증과 처리 |
+| - | - |
+| 학년 | 양의 정수. 학년 상한은 지원 과정에 맞게 정함 |
+| 학점 | 0 이상 숫자. 단위가 붙은 문자열은 숫자로 검증·변환 후 저장 |
+| GPA | 입력하면 만점도 필수. gpa_scale > 0, 0 ≤ gpa ≤ gpa_scale |
+| 선택 숫자 | 미입력은 NULL. 0으로 대체하지 않음 |
+| 소속 관계 | 학과는 선택 학교에 속해야 하고 목록은 선택 학과에 속해야 함 |
+| 과목 식별 | 존재하는 course_id와 검증된 목록 연결만 저장 |
+| Boolean | JSON true·false만 허용. 문자열 true나 임의 숫자를 상태로 저장하지 않음 |
+| 중복 선택 | 요청·과목별 한 행. 변경 배열에 동일 과목이 중복되면 검증 오류 |
+| 목록 밖 선택 | 기존 선택 보관·해제는 허용하되 임의 신규 과목 선택은 거절 |
+| 동시 저장 | 기대 revision 불일치는 충돌로 반환. 조용히 최신 선택을 덮지 않음 |
+| 확인 상태 | 확인 목록·선택 버전이 현재 값과 일치할 때만 유효 |
+| 목록 실패 | 조회 실패·미지원·정상 빈 목록을 구분. 실패를 이수 0개로 분석하지 않음 |
+| 문서 | 빈 추출 결과, 일부 추출, OCR 필요와 실패를 정상 완료와 구분 |
+| 접근 | 요청 소유자만 문서·입력·이수 선택을 조회·수정 |
+| 결과 | 이전 입력으로 만든 결과를 최신 결과로 표시하지 않음 |
+
+현재 목록에서 선택한 과목의 학점 합계는 해당 목록의 true 항목을 기준으로 계산한다. 선택한 과목 중 학점이 NULL인 항목이 있으면 알려진 학점의 부분 합계와 미확인 과목 수를 함께 보여준다. 이를 `earned_credits`에 자동 덮어쓰지 않으며 GPA도 계산하지 않는다.
+
+# 15 기존 명세에서 바뀌는 항목
+
+| 기존 항목 | 변경 후 |
+| - | - |
+| 사용자 입력 university_name, major_name | 기준 목록 선택 university_id, department_id |
+| completed_courses에 과목명·코드·학점 직접 저장 | input_course_states에 course_id와 is_completed 저장 |
+| 사용자가 입력하는 과목명·코드·학점 | courses와 catalog_courses에서 제공 |
+| provided, none, unknown만으로 이수 상태 구분 | 목록 ID·선택 버전·확인 범위를 근거로 review_status 계산 |
+| 과목명 기준 매칭 | 검증된 course_id와 목록 연결 사용 |
+| 현재 입력에만 연결된 결과 | 생성 시점 input_snapshot과 source_input_revision 연결 |
+
+기존 자유 입력 기록이 실제로 존재한다면 과목명만으로 자동 매칭하지 않는다. 후보 과목을 제시해 사용자 확인 후 ID 기반 선택으로 옮긴다. 확인되지 않은 기존 기록은 원문을 보존하고 미확인 상태로 남긴다. 실제 데이터가 없는 개발 전 단계라면 새 구조부터 적용하면 된다.
+
+진로 설명과 선택 희망 직무, 프로젝트 문서, 학업 현황을 입력으로 사용한다. 취득학점과 GPA는 선택 정보로 유지한다. 이수 과목은 과목 목록의 토글로 선택하며, 해당 선택과 확인 범위를 함께 저장한다.
+
+# 관련 기획서
+
+서비스의 배경, 전체 기능, 화면, 개인화 방식과 구현·검증 범위는 [대학생 개인화 진로 로드맵 서비스 기획서](https://chatgpt.com/space/page_2ccafea835988191bf985ff0e592fafe)에서 설명한다.
