@@ -1,5 +1,7 @@
 # 로컬 Python 백엔드의 PostgreSQL 연결
 
+연결 실패 로그에는 비밀값 대신 `authentication_failed`, `dns_error`, `connection_timeout`, `network_unreachable`, `tls_ca_error`, `tls_verification_failed`, `tls_hostname_mismatch`, `invalid_dsn` 또는 `connection_failed`가 표시된다. 분류는 드라이버 메시지에 의존하므로 일반 코드로 남는 경우도 있다. DNS 또는 네트워크 오류는 Session pooler 사용 여부와 IPv4/IPv6 경로를 점검한다. CA 파일은 PEM 형식이어야 하며 Render Secret Files를 사용한다면 예를 들어 `PGSSLROOTCERT=/etc/secrets/supabase-ca.crt`를 설정한다. 연결 문자열의 `sslrootcert`가 환경변수보다 우선하므로 이전 로컬 경로를 제거해야 한다. `sslrootcert=system`은 이를 지원하는 libpq에서 시스템 신뢰 저장소를 사용한다. 호스트 이름과 CA 검증은 드라이버가 연결 시 수행하며 `verify-full`을 유지한다. 분류만으로 실제 장애 원인을 확정할 수는 없다.
+
 ## 현재 상태
 
 P1/P2의 실제 PostgreSQL 연결 및 API 검증을 완료했다. 백엔드 연결 방식은 **Session pooler**이며 `verify-full`로 서버 인증서를 검증했다. `SELECT 1`과 지정 교육과정 조회, 테스트 세션·계획의 쓰기 및 동시성 검증에 성공했다. 기존 기준 과목 데이터는 수정하지 않았다.
