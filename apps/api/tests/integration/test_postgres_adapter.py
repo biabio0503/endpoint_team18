@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 APP = Path(__file__).resolve().parents[2] / 'app'
 sys.path.insert(0, str(APP))
 from repositories.postgres import PostgresConnection, StorageUnavailable, connect_postgres
-from repositories import p1
+from repositories import plans as p1
 
 
 class PostgresBoundaryTest(unittest.TestCase):
@@ -63,7 +63,7 @@ class PostgresBoundaryTest(unittest.TestCase):
 
     def test_no_dsn_fails_without_secret(self):
         env = dict(os.environ, ROADMAP_DB_BACKEND='postgres', ROADMAP_DATABASE_URL='')
-        script = "import asyncio; from main import app; from repositories.p1 import StorageUnavailable\nasync def run():\n try:\n  async with app.router.lifespan_context(app): pass\n except StorageUnavailable as e:\n  print(str(e)); raise SystemExit(1)\nasyncio.run(run())"
+        script = "import asyncio; from main import app; from repositories.plans import StorageUnavailable\nasync def run():\n try:\n  async with app.router.lifespan_context(app): pass\n except StorageUnavailable as e:\n  print(str(e)); raise SystemExit(1)\nasyncio.run(run())"
         env['PYTHONPATH'] = str(APP)
         result = subprocess.run([sys.executable, '-c', script], env=env, text=True, capture_output=True)
         self.assertNotEqual(result.returncode, 0)

@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from starlette.convertors import Convertor, register_url_convertor
 from api.domain import COOKIE, Problem, now
 from config import APP_ORIGIN, SECURE_COOKIE
-from repositories.p1 import Repository, connect
+from repositories.plans import Repository, connect
 
 
 class RoadmapIdConvertor(Convertor):

@@ -5,7 +5,7 @@ import logging
 import threading
 import time
 import uuid
-from repositories.p1 import connect
+from repositories.plans import connect
 from repositories.documents import DocumentRepository
 from providers.document_storage import get_storage
 from providers.document_parser import extract

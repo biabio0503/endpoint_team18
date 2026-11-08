@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 import sys
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'app'))
-import repositories.p1 as storage
+import repositories.plans as storage
 from repositories.external import ExternalRepository
 from services import external_collection as service
 

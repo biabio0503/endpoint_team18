@@ -5,7 +5,7 @@ import json
 import uuid
 from providers.external import jobs_fixture,activities_fixture,pdf_fixture
 from providers.external.fixture_source import SOURCES
-from repositories.p1 import connect
+from repositories.plans import connect
 from repositories.external import ExternalRepository
 from services.external_evidence import validate
 

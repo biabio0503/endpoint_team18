@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 import sys
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from repositories.p1 import migrate
+from repositories.plans import migrate
 from config import DB_BACKEND
 from services.external_collection import init_fixtures,enqueue,process_once,retry,status,inspect
 

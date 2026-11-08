@@ -1,4 +1,4 @@
-"""SQLite persistence adapter for sessions, input plans and reference data."""
+"""Database connection and persistence for sessions, plans and reference data."""
 from contextlib import closing
 import os
 import sqlite3

@@ -3,6 +3,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { Heading } from '../../components/layout/Shell';
 import { apiRequest } from '../../lib/api/client';
+import { resolvePlanId } from '../../lib/api/session';
 const tabs = ['준비 상태','직무 역량 비교','실행 로드맵','수강 후보','공모전·대외활동'];
 export default function Result() {
  const [selected, setSelected] = useState(0);
@@ -11,8 +12,8 @@ export default function Result() {
  async function generate() {
   setPhase('loading'); setMessage(''); setResult(null);
   try {
-   let id=sessionStorage.getItem('roadmap_request_id');
-   if(!id){const latest=await apiRequest('/roadmap-inputs/resume');if(!latest.found)throw new Error('계획이 없습니다. 기본 정보를 먼저 입력해 주세요.');id=latest.request.request_id;sessionStorage.setItem('roadmap_request_id',id);}
+   const id=await resolvePlanId();
+   if(!id)throw new Error('계획이 없습니다. 기본 정보를 먼저 입력해 주세요.');
    const data=await apiRequest(`/roadmap-inputs/${encodeURIComponent(id)}/course-recommendations`,{method:'POST',body:'{}'});
    setGoal(data.career_goal || ''); setResult(data); setPhase('ready');
   } catch(e){setMessage(e.message);setPhase('error');}

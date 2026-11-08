@@ -1,6 +1,6 @@
 # Render 배포 준비 상태
 
-**Phase 3 코드는 구현됐으며 최초 배포에서는 문서 플래그를 OFF로 유지한다.** 운영 문서 테이블·Storage 버킷 적용과 실서비스 쓰기 검증은 아직 승인 전이다. [운영 사전 검사](phase3-production-preflight.md)와 [문서 이관 절차](phase3-document-migration.md)를 따른다.
+문서 기능의 실제 활성화 상태는 Render 환경과 운영 점검 결과를 확인한다. 플래그를 이 문서만 보고 변경하지 않는다. [운영 사전 검사](phase3-production-preflight.md)와 [문서 이관 절차](phase3-document-migration.md)를 따른다.
 
 기존 Render Web Service의 설정을 대시보드에서 직접 확인한다. 이 저장소 변경만으로 기존 서비스 설정이 바뀌지는 않는다.
 
@@ -24,6 +24,10 @@ Next.js 서버 빌드 환경에 `ROADMAP_API_ORIGIN=https://<render-service>.onr
 
 자동 배포가 켜진 경우 GitHub 연결 브랜치에 push하면 Render가 새 빌드와 배포를 시작한다. 배포 로그에서 의존성 설치, 설정 오류 및 포트 바인딩을 확인한다. `/api/health`는 프로세스 생존만, `/api/health/db`는 DB 연결도 확인한다. DB 오류 메시지는 내부 연결 정보를 노출하지 않는다. 학교·학과·과목 목록과 계획 생성, 수정 및 복원을 확인한다. 실제 운영 DB에서 파괴적 SQL을 실행하지 않는다.
 
-Free 서비스는 유휴 시 중지될 수 있고 로컬 파일은 영구 보관되지 않는다. PostgreSQL 문서 원본은 비공개 Supabase Storage에 저장되며 작업은 DB lease와 후속 문서 요청으로 재개한다. 상시 작업 실행은 보장되지 않는다. 최초 Environment에는 `ROADMAP_POSTGRES_DOCUMENTS_ENABLED=0`, `SUPABASE_URL`, `SUPABASE_STORAGE_BUCKET=roadmap-documents`, 서버 키 변수 하나만 설정한다. DB·버킷 점검 후 승인된 활성화 단계에서만 플래그를 `1`로 바꾼다.
+Free 서비스는 유휴 시 중지될 수 있고 로컬 파일은 영구 보관되지 않는다. PostgreSQL 문서 원본은 비공개 Supabase Storage에 저장되며 작업은 DB lease와 후속 문서 요청으로 재개한다. 상시 작업 실행은 보장되지 않는다. 문서 기능 설정에는 `ROADMAP_POSTGRES_DOCUMENTS_ENABLED`, `SUPABASE_URL`, `SUPABASE_STORAGE_BUCKET`, 서버 키 변수 하나가 사용된다. 현재 운영 값을 유지하고 활성화 또는 비활성화 전 DB·버킷과 작업 상태를 확인한다.
 
 로컬 SQLite 개발: `cd apps/api`, 가상환경에서 `pip install -r requirements.txt`, `ROADMAP_DB_BACKEND=sqlite ROADMAP_INSECURE_LOCAL_COOKIE=1 uvicorn app.main:app --host 127.0.0.1 --port 8000`. 프론트엔드는 `apps/web`에서 `npm install` 후 `npm run dev`; 기본 프록시는 `http://127.0.0.1:8000`이다.
+
+## 마이그레이션 이력 확인 (2026-11-08)
+
+연결된 프로젝트의 읽기 전용 이력은 core `20261108035123`, course columns `20261108035354`, documents `20261108125912` (`phase3_documents_20261108122001`), reservations `20261108125921` (`document_upload_reservations_20261108122527`)이다. 저장소의 마지막 두 파일 버전은 각각 `20261108122001`, `20261108122527`이다. 버전 불일치를 기록만 했으며 SQL 내용의 동일성은 검증하지 않았다. 자동 repair, 재적용, 파일 이름 변경은 하지 않는다. 이력 동기화는 별도 백업·검토 후 결정한다.

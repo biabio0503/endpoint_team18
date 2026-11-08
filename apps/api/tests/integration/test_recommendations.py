@@ -55,14 +55,14 @@ class RecommendationAPI(unittest.TestCase):
         self.assertEqual(self.request('PATCH','/roadmap-inputs/'+rid+'/course-selections',selection,cookie)[0],200)
         def fake(profile,courses,status):
             return recommend(profile,courses,status,lambda p,c:[first,'not-in-db',second,second])
-        with patch('api.routes.core.recommend',side_effect=fake):
+        with patch('api.routes.recommendations.recommend',side_effect=fake):
             code,result,_=self.request('POST',path,{},cookie)
         self.assertEqual(code,200); self.assertEqual([c['course_id'] for c in result['courses']],[second]); self.assertEqual(result['courses'][0]['completion_state'],'unconfirmed')
         def stale(profile,courses,status):
             current=self.request('GET','/roadmap-inputs/'+rid,cookie=cookie)[1]
             self.request('PATCH','/roadmap-inputs/'+rid,{'expected_input_revision':current['input_revision'],'changes':{'career_goal':'머신러닝'}},cookie)
             return []
-        with patch('api.routes.core.recommend',side_effect=stale):
+        with patch('api.routes.recommendations.recommend',side_effect=stale):
             self.assertEqual(self.request('POST',path,{},cookie)[1]['error'],'revision_conflict')
 
     def test_empty_catalog_and_missing_key(self):

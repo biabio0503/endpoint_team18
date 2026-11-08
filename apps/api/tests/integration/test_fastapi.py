@@ -39,6 +39,8 @@ with TestClient(app) as c:
     created = c.post('/api/roadmap-inputs', headers=origin)
     assert created.status_code == 201 and 'HttpOnly' in created.headers['set-cookie']
     rid = created.json()['request_id']
+    resumed = c.get('/api/roadmap-inputs/resume')
+    assert resumed.status_code == 200 and resumed.json()['request']['request_id'] == rid
     url = '/api/roadmap-inputs/' + rid
     assert c.patch(url, headers=origin, content='invalid').json()['error'] == 'invalid_json'
     assert c.patch(url, headers=origin, json={'expected_input_revision': True, 'changes': {}}).status_code == 422
