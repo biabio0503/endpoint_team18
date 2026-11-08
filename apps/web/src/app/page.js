@@ -17,8 +17,7 @@ catch (e) {
   });
   setMessage(`Google 로그인 오류: ${e?.message || '알 수 없는 오류'}`);
   setBusy(false);
-};
-setBusy(false)}}
+}}
  async function guest(){setBusy(true);setMessage('');try {const {error}=await authClient().auth.signInAnonymously();if(error)throw error;await open();}catch(e){setMessage(e.message||'게스트 인증에 실패했습니다.');setBusy(false)}}
  async function open(){setBusy(true);setMessage('');try {let data=await apiRequest('/roadmap-inputs/resume');if(!data.found)data=await apiRequest('/roadmap-inputs',{method:'POST'});router.push('/input/basic');}catch(e){setMessage(e.message);setBusy(false)}}
  async function logout(){if(user?.is_anonymous&&!window.confirm('게스트 세션을 종료하면 이 데이터를 자동으로 복원할 수 없습니다. 로그아웃할까요?'))return;setBusy(true);try{const {error}=await authClient().auth.signOut();if(error)throw error;sessionStorage.removeItem('roadmap_request_id');setMessage('로그아웃했습니다.');}catch(e){setMessage('로그아웃하지 못했습니다. 다시 시도해 주세요.')}finally{setBusy(false)}}
