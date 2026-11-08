@@ -18,7 +18,7 @@ def later(seconds): return (datetime.now(timezone.utc)+timedelta(seconds=seconds
 
 def claim():
     with closing(connect()) as db:
-        db.execute('BEGIN IMMEDIATE'); t=timestamp()
+        db.execute('BEGIN' if getattr(db, 'backend', 'sqlite') == 'postgres' else 'BEGIN IMMEDIATE'); t=timestamp()
         repo=DocumentRepository(db); row=repo.next_job(t)
         if not row: db.commit(); return None
         token=str(uuid.uuid4()); cleanup=row['removed_at'] is not None
@@ -33,7 +33,7 @@ def run_once(storage=None):
         try:
             storage.delete(row['storage_key'])
             with closing(connect()) as db:
-                db.execute('BEGIN IMMEDIATE')
+                db.execute('BEGIN' if getattr(db, 'backend', 'sqlite') == 'postgres' else 'BEGIN IMMEDIATE')
                 DocumentRepository(db).finish_cleanup(did,token)
                 db.commit()
         except Exception:
@@ -48,7 +48,7 @@ def run_once(storage=None):
         log.exception('document extraction failed')
         result={'text':'','segments':[],'limitations':['파일을 읽는 중 오류가 발생했습니다.'],'status':'failed','error_code':'extraction_failed'}
     with closing(connect()) as db:
-        db.execute('BEGIN IMMEDIATE')
+        db.execute('BEGIN' if getattr(db, 'backend', 'sqlite') == 'postgres' else 'BEGIN IMMEDIATE')
         DocumentRepository(db).finish_extraction(row,token,result,timestamp())
         db.commit()
     return True

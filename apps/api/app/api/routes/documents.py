@@ -58,6 +58,14 @@ async def upload_data(request: Request):
             raise Problem(413, 'too_large', '파일 크기 제한을 초과했습니다.')
         if not request.headers.get('content-type', '').lower().startswith('multipart/form-data;'):
             raise ValueError
+        # Content-Length is untrusted. Bound the multipart envelope before
+        # Starlette parses or spools any uploaded files.
+        raw = bytearray()
+        async for chunk in request.stream():
+            raw.extend(chunk)
+            if len(raw) > MAX_DOCUMENT_BYTES + 65536:
+                raise Problem(413, 'too_large', '파일 크기 제한을 초과했습니다.')
+        request._body = bytes(raw)
         async with request.form(max_files=1, max_fields=1) as form:
             fields = list(form.multi_items())
             if len(fields) != 2 or {key for key, _ in fields} != {'file', 'expected_input_revision'}:
