@@ -1,1 +1,1 @@
-{"name":"career-roadmap-web","private":true,"version":"0.1.0","scripts":{"dev":"next dev","build":"next build","start":"next start","check":"node --check next.config.mjs"},"dependencies":{"next":"15.5.12","react":"19.2.0","react-dom":"19.2.0"}}
+{"name":"career-roadmap-web","private":true,"version":"0.1.0","scripts":{"dev":"next dev","build":"next build","start":"next start","check":"node --check next.config.mjs"},"dependencies":{"@supabase/supabase-js":"2.89.0","next":"15.5.12","react":"19.2.0","react-dom":"19.2.0"}}
