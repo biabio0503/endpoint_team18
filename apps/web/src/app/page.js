@@ -7,7 +7,18 @@ import { authClient } from '../lib/api/auth';
 export default function Home() {
  const router=useRouter(); const [busy,setBusy]=useState(true); const [message,setMessage]=useState(''); const [user,setUser]=useState(null);
  useEffect(()=>{let subscription;try {const auth=authClient().auth; const params=new URLSearchParams(window.location.hash.slice(1)); const query=new URLSearchParams(window.location.search); if(params.get('error')||query.get('error')) {setMessage('Google 인증을 완료하지 못했습니다. 다시 시도해 주세요.'); window.history.replaceState({},'',window.location.pathname);} auth.getSession().then(({data,error})=>{if(error)setMessage('세션을 확인하지 못했습니다. 다시 로그인해 주세요.');setUser(data.session?.user||null);setBusy(false)}); subscription=auth.onAuthStateChange((_event,session)=>{setUser(session?.user||null)}).data.subscription;}catch(e){setMessage(e.message);setBusy(false)} return()=>subscription?.unsubscribe()},[]);
- async function google(){setBusy(true);setMessage('');try {const {error}=await authClient().auth.signInWithOAuth({provider:'google',options:{redirectTo:window.location.origin+'/'}});if(error)throw error;}catch(e){setMessage('Google 인증을 시작하지 못했습니다. 설정을 확인하고 다시 시도해 주세요.');setBusy(false)}}
+ async function google(){setBusy(true);setMessage('');try {const {error}=await authClient().auth.signInWithOAuth({provider:'google',options:{redirectTo:window.location.origin+'/'}});if(error)throw error;}
+catch (e) {
+  console.error('Google OAuth 시작 실패:', {
+    name: e?.name,
+    message: e?.message,
+    code: e?.code,
+    status: e?.status,
+  });
+  setMessage(`Google 로그인 오류: ${e?.message || '알 수 없는 오류'}`);
+  setBusy(false);
+};
+setBusy(false)}}
  async function guest(){setBusy(true);setMessage('');try {const {error}=await authClient().auth.signInAnonymously();if(error)throw error;await open();}catch(e){setMessage(e.message||'게스트 인증에 실패했습니다.');setBusy(false)}}
  async function open(){setBusy(true);setMessage('');try {let data=await apiRequest('/roadmap-inputs/resume');if(!data.found)data=await apiRequest('/roadmap-inputs',{method:'POST'});router.push('/input/basic');}catch(e){setMessage(e.message);setBusy(false)}}
  async function logout(){if(user?.is_anonymous&&!window.confirm('게스트 세션을 종료하면 이 데이터를 자동으로 복원할 수 없습니다. 로그아웃할까요?'))return;setBusy(true);try{const {error}=await authClient().auth.signOut();if(error)throw error;sessionStorage.removeItem('roadmap_request_id');setMessage('로그아웃했습니다.');}catch(e){setMessage('로그아웃하지 못했습니다. 다시 시도해 주세요.')}finally{setBusy(false)}}
