@@ -11,7 +11,7 @@ def connect():
         return connect_postgres(DATABASE_URL)
     if DB_BACKEND != 'sqlite':
         raise StorageUnavailable('ROADMAP_DB_BACKEND는 sqlite 또는 postgres여야 합니다.')
-    db = sqlite3.connect(DB_PATH, timeout=10, isolation_level=None)
+    db = sqlite3.connect(DB_PATH, timeout=10, isolation_level=None, check_same_thread=False)
     db.row_factory = sqlite3.Row
     db.execute('PRAGMA foreign_keys = ON')
     return db

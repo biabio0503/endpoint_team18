@@ -18,7 +18,7 @@ python3 apps/api/app/scripts/seed_dev.py
 이후 터미널 두 개에서 각각 실행합니다.
 
 ```sh
-ROADMAP_INSECURE_LOCAL_COOKIE=1 apps/api/.venv/bin/python apps/api/app/main.py
+(cd apps/api && ROADMAP_INSECURE_LOCAL_COOKIE=1 .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000)
 ```
 
 ```sh
@@ -128,7 +128,7 @@ ROADMAP_DB_PATH=/tmp/roadmap-p5/roadmap.sqlite3 apps/api/.venv/bin/python apps/a
 첫 번째 터미널:
 
 ```sh
-ROADMAP_DB_PATH=/tmp/roadmap-p5/roadmap.sqlite3 ROADMAP_FILE_STORAGE_PATH=/tmp/roadmap-p5/files ROADMAP_INSECURE_LOCAL_COOKIE=1 ROADMAP_API_PORT=19100 ROADMAP_APP_ORIGIN=http://localhost:15100 apps/api/.venv/bin/python apps/api/app/main.py
+(cd apps/api && ROADMAP_DB_PATH=/tmp/roadmap-p5/roadmap.sqlite3 ROADMAP_FILE_STORAGE_PATH=/tmp/roadmap-p5/files ROADMAP_INSECURE_LOCAL_COOKIE=1 ROADMAP_APP_ORIGIN=http://localhost:15100 .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 19100)
 ```
 
 두 번째 터미널:

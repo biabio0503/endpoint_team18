@@ -10,6 +10,7 @@ import sys
 import unittest
 
 TEMP = tempfile.TemporaryDirectory()
+os.environ['ROADMAP_DB_BACKEND'] = 'sqlite'
 os.environ['ROADMAP_DB_PATH'] = str(Path(TEMP.name) / 'test.sqlite3')
 os.environ['ROADMAP_INSECURE_LOCAL_COOKIE'] = '1'
 os.environ['ROADMAP_FILE_STORAGE_PATH'] = str(Path(TEMP.name) / 'files')
@@ -23,15 +24,12 @@ class ApiTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         api.migrate()
-        cls.server = api.ThreadingHTTPServer(('127.0.0.1', 0), api.Handler)
-        cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
-        cls.thread.start()
+        from uvicorn_test_server import TestServer
+        cls.server = TestServer(api.app)
 
     @classmethod
     def tearDownClass(cls):
-        cls.server.shutdown()
-        cls.server.server_close()
-        cls.thread.join()
+        cls.server.stop()
         TEMP.cleanup()
 
     def request(self, method, path, data=None, cookie=None, origin='http://localhost:3000'):
@@ -80,17 +78,18 @@ class ApiTest(unittest.TestCase):
         self.assertNotEqual(rid, other_id)
 
     def test_secure_cookie_and_expiration(self):
-        previous = api.SECURE_COOKIE
+        from api import dependencies
+        previous = dependencies.SECURE_COOKIE
         try:
-            api.SECURE_COOKIE = True
+            dependencies.SECURE_COOKIE = True
             status, body, cookie = self.request('POST', '/roadmap-inputs')
             self.assertEqual(status, 201)
             self.assertIn('; Secure', cookie)
         finally:
-            api.SECURE_COOKIE = previous
+            dependencies.SECURE_COOKIE = previous
         token_cookie = cookie.split(';')[0]
         with api.closing(api.connect()) as db:
-            db.execute("UPDATE session_owners SET expires_at='2000-01-01T00:00:00+00:00' WHERE token_digest=?", (api.sha256(token_cookie.split('=', 1)[1].encode()).hexdigest(),))
+            db.execute("UPDATE session_owners SET expires_at='2000-01-01T00:00:00+00:00' WHERE token_digest=?", (__import__('hashlib').sha256(token_cookie.split('=', 1)[1].encode()).hexdigest(),))
         self.assertEqual(self.request('GET', '/roadmap-inputs/' + body['request_id'], cookie=token_cookie)[0], 401)
         self.assertFalse(self.request('GET', '/roadmap-inputs/resume', cookie=token_cookie)[1]['found'])
 

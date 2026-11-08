@@ -18,9 +18,11 @@ from repositories import p1
 class PostgresBoundaryTest(unittest.TestCase):
     def test_no_dsn_fails_without_secret(self):
         env = dict(os.environ, ROADMAP_DB_BACKEND='postgres', ROADMAP_DATABASE_URL='')
-        result = subprocess.run([sys.executable, str(APP / 'main.py')], env=env, text=True, capture_output=True)
+        script = "import asyncio; from main import app; from repositories.p1 import StorageUnavailable\nasync def run():\n try:\n  async with app.router.lifespan_context(app): pass\n except StorageUnavailable as e:\n  print(str(e)); raise SystemExit(1)\nasyncio.run(run())"
+        env['PYTHONPATH'] = str(APP)
+        result = subprocess.run([sys.executable, '-c', script], env=env, text=True, capture_output=True)
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn('ROADMAP_DATABASE_URL', result.stderr)
+        self.assertIn('ROADMAP_DATABASE_URL', result.stdout)
         self.assertNotIn('Traceback', result.stderr)
 
     def test_failed_connection_hides_driver_message(self):
@@ -50,7 +52,7 @@ class PostgresBoundaryTest(unittest.TestCase):
         self.assertEqual(params, ('request', 'owner'))
 
     def test_postgres_values_serialize_and_validate(self):
-        import main
+        from api import domain as main
         encoded = json.dumps({'n': Decimal('3.25'), 't': datetime(2026, 1, 1, tzinfo=timezone.utc)}, default=main.json_value)
         self.assertEqual(json.loads(encoded), {'n': 3.25, 't': '2026-01-01T00:00:00.000000+00:00'})
         values = dict.fromkeys(main.FIELDS)
