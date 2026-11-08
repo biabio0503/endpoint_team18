@@ -7,12 +7,15 @@ from api.dependencies import get_context, owned_context, parse_body, require_ori
 from api.domain import now, payload
 from api.schemas import PlanPatch, openapi_body
 from services.plans import plan_action
+from config import DB_BACKEND
 
 router = APIRouter(prefix='/api')
 
 @router.post('/roadmap-inputs', dependencies=[Depends(require_origin)], status_code=201)
 def create_plan(ctx=Depends(get_context)):
     db, repo, owner = ctx
+    if DB_BACKEND == 'postgres':
+        require_owner(owner)
     repo.begin()
     cookie = None
     if owner is None:
@@ -33,6 +36,8 @@ def create_plan(ctx=Depends(get_context)):
 @router.get('/roadmap-inputs/resume')
 def resume(ctx=Depends(get_context)):
     db, repo, owner = ctx
+    if DB_BACKEND == 'postgres':
+        require_owner(owner)
     row = repo.resume(owner['owner_id']) if owner else None
     return respond(200, {'found': bool(row), 'request': dict(row) if row else None})
 
