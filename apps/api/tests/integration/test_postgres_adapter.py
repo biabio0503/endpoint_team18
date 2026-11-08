@@ -16,6 +16,36 @@ from repositories import p1
 
 
 class PostgresBoundaryTest(unittest.TestCase):
+    def test_env_ca_overrides_embedded_dsn_path(self):
+        with patch.dict(os.environ, {'PGSSLROOTCERT': '/render/secret.crt'}), patch('repositories.postgres._validate_ca_file') as validate, patch('psycopg.connect') as connect:
+            connect_postgres('postgresql://user:secret@example.test/db?sslrootcert=%2FUsers%2Fold%2Fca.crt')
+            validate.assert_called_once_with('/render/secret.crt')
+            self.assertEqual(connect.call_args.kwargs['sslrootcert'], '/render/secret.crt')
+            self.assertEqual(connect.call_args.kwargs['sslmode'], 'verify-full')
+
+    def test_dsn_ca_used_when_env_absent(self):
+        with patch.dict(os.environ, {}, clear=True), patch('repositories.postgres._validate_ca_file') as validate, patch('psycopg.connect') as connect:
+            connect_postgres('postgresql://user:secret@example.test/db?sslrootcert=%2Fcert.crt')
+            validate.assert_called_once_with('/cert.crt')
+            self.assertNotIn('sslrootcert', connect.call_args.kwargs)
+
+    def test_close_rolls_back_unfinished_transactions(self):
+        from psycopg.pq import TransactionStatus
+        for status in (TransactionStatus.INTRANS, TransactionStatus.INERROR):
+            connection = Mock()
+            connection.info.transaction_status = status
+            PostgresConnection(connection, RuntimeError).close()
+            connection.execute.assert_called_once_with('ROLLBACK')
+            connection.close.assert_called_once()
+
+    def test_close_even_when_rollback_fails(self):
+        from psycopg.pq import TransactionStatus
+        connection = Mock()
+        connection.info.transaction_status = TransactionStatus.INERROR
+        connection.execute.side_effect = RuntimeError('secret')
+        PostgresConnection(connection, RuntimeError).close()
+        connection.close.assert_called_once()
+
     def test_no_dsn_fails_without_secret(self):
         env = dict(os.environ, ROADMAP_DB_BACKEND='postgres', ROADMAP_DATABASE_URL='')
         script = "import asyncio; from main import app; from repositories.p1 import StorageUnavailable\nasync def run():\n try:\n  async with app.router.lifespan_context(app): pass\n except StorageUnavailable as e:\n  print(str(e)); raise SystemExit(1)\nasyncio.run(run())"

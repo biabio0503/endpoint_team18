@@ -13,7 +13,8 @@ class StorageUnavailable(Exception):
 def _connection_error_code(error):
     """Classify libpq errors without ever returning their potentially secret text."""
     message = str(error).lower()
-    if 'password authentication failed' in message or 'authentication failed' in message:
+    sqlstate = getattr(error, 'sqlstate', None) or ''
+    if sqlstate.startswith('28') or 'password authentication failed' in message or 'authentication failed' in message:
         return 'authentication_failed'
     if 'certificate' in message and ('does not match' in message or 'hostname' in message):
         return 'tls_hostname_mismatch'
@@ -39,10 +40,18 @@ def _validate_ca_file(path):
     try:
         with open(path, 'rb') as certificate:
             certificate.read(1)
-        ssl.create_default_context(cafile=path)
-    except (OSError, ValueError, ssl.SSLError):
-        logger.error('PostgreSQL connection failed: tls_ca_error')
-        raise StorageUnavailable('PostgreSQL CA 인증서 파일을 읽거나 검증할 수 없습니다. (tls_ca_error)') from None
+    except FileNotFoundError:
+        code = 'tls_ca_missing'
+    except OSError:
+        code = 'tls_ca_unreadable'
+    else:
+        try:
+            ssl.create_default_context(cafile=path)
+            return
+        except (OSError, ValueError, ssl.SSLError):
+            code = 'tls_ca_invalid_pem'
+    logger.error('PostgreSQL connection failed: %s', code)
+    raise StorageUnavailable(f'PostgreSQL CA 인증서 파일을 읽거나 검증할 수 없습니다. ({code})') from None
 
 
 def connect_postgres(url):
@@ -55,10 +64,13 @@ def connect_postgres(url):
     except ImportError:
         raise StorageUnavailable('PostgreSQL 드라이버를 설치해 주세요.') from None
     try:
-        # An explicit DSN sslrootcert overrides PGSSLROOTCERT in libpq.
+        # A deployment-level PGSSLROOTCERT deliberately overrides an embedded
+        # DSN path, which may have been copied from a developer's machine.
         options = conninfo_to_dict(url)
-        _validate_ca_file(options.get('sslrootcert', os.environ.get('PGSSLROOTCERT')))
-        connection = psycopg.connect(url, autocommit=True, row_factory=dict_row, connect_timeout=10, sslmode='verify-full')
+        env_ca = os.environ.get('PGSSLROOTCERT')
+        _validate_ca_file(env_ca or options.get('sslrootcert'))
+        overrides = {'sslrootcert': env_ca} if env_ca else {}
+        connection = psycopg.connect(url, autocommit=True, row_factory=dict_row, connect_timeout=10, sslmode='verify-full', **overrides)
         return PostgresConnection(connection, psycopg.Error)
     except (psycopg.Error, ValueError, UnicodeError) as error:
         code = _connection_error_code(error)
@@ -87,4 +99,13 @@ class PostgresConnection:
             raise StorageUnavailable('PostgreSQL 저장을 완료하지 못했습니다.') from None
 
     def close(self):
-        self.connection.close()
+        # Explicit BEGIN is used with autocommit. Always discard unfinished
+        # work before releasing this request's dedicated connection.
+        from psycopg.pq import TransactionStatus
+        try:
+            if self.connection.info.transaction_status in (TransactionStatus.INTRANS, TransactionStatus.INERROR):
+                self.connection.execute('ROLLBACK')
+        except self.error_type:
+            logger.warning('PostgreSQL rollback before close failed')
+        finally:
+            self.connection.close()
