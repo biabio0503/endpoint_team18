@@ -3,7 +3,7 @@ from contextlib import closing
 from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from repositories.p1 import connect, migrate
+from repositories.plans import connect, migrate
 from config import DB_BACKEND
 
 U='10000000-0000-4000-8000-000000000001'

@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Stepper, Heading } from '../../components/layout/Shell';
 import { apiRequest } from '../../lib/api/client';
+import { resolvePlanId } from '../../lib/api/session';
 
 const names={unavailable:'목록 사용 불가',unconfirmed:'미확인',confirmed:'이수 선택 확인 완료',partial:'일부 누락 · 부분 확인'};
 export default function Courses(){
@@ -19,7 +20,7 @@ export default function Courses(){
   if(seq===sequence.current){setData(response);if(!missingDirty.current)setMissing(response.reported_missing_courses);return response;}
  },[]);
  const filters={search,year,category,only,page};
- useEffect(()=>{let active=true;(async()=>{try{let id=sessionStorage.getItem('roadmap_request_id');if(!id){const latest=await apiRequest('/roadmap-inputs/resume');if(!latest.found){if(active)setPhase('empty');return;}id=latest.request.request_id;sessionStorage.setItem('roadmap_request_id',id);}const plan=await apiRequest(`/roadmap-inputs/${encodeURIComponent(id)}`);if(!active)return;setRequestId(id);if(!plan.input.catalog_id){setPhase('unavailable');return;}setCatalogId(plan.input.catalog_id);setPhase('ready');}catch(e){if(active){setPhase('failed');setMessage(e.message);}}})();return()=>{active=false;sequence.current++}},[]);
+ useEffect(()=>{let active=true;(async()=>{try{const id=await resolvePlanId();if(!id){if(active)setPhase('empty');return;}const plan=await apiRequest(`/roadmap-inputs/${encodeURIComponent(id)}`);if(!active)return;setRequestId(id);if(!plan.input.catalog_id){setPhase('unavailable');return;}setCatalogId(plan.input.catalog_id);setPhase('ready');}catch(e){if(active){setPhase('failed');setMessage(e.message);}}})();return()=>{active=false;sequence.current++}},[]);
  useEffect(()=>{if(!requestId||!catalogId)return;let active=true;setPhase('loading');load(requestId,catalogId,{search,year,category,only,page}).then(()=>{if(active)setPhase('ready')}).catch(e=>{if(active){setPhase('failed');setMessage(e.message)}});return()=>{active=false;sequence.current++}},[requestId,catalogId,search,year,category,only,page,load]);
  async function refresh(){if(lock.current)return;lock.current=true;setPhase('loading');setMessage('');try{const plan=await apiRequest(`/roadmap-inputs/${encodeURIComponent(requestId)}`);if(!plan.input.catalog_id){setData(null);setCatalogId(null);setPhase('unavailable');return;}const cid=plan.input.catalog_id;setCatalogId(cid);missingDirty.current=false;await load(requestId,cid,filters);setPhase('ready');setMessage('최신 선택 상태를 불러왔습니다.');}catch(e){setPhase('failed');setMessage(e.message)}finally{lock.current=false}}
  async function mutate(action,body){if(lock.current || phase!=='ready')return;lock.current=true;sequence.current++;setPhase('saving');setMessage('저장 중입니다…');try{await apiRequest(`/roadmap-inputs/${encodeURIComponent(requestId)}/${action}`,{method:action==='course-selections'?'PATCH':'POST',body:JSON.stringify(body)});if(action==='course-selection-review')missingDirty.current=false;await load(requestId,catalogId,filters);setPhase('ready');setMessage(action==='course-selections'?'이수 선택이 저장되었습니다.':'현재 목록 전체의 확인 상태가 저장되었습니다.');}catch(e){setPhase('failed');setMessage(e.status===409?'다른 화면에서 선택이나 입력이 변경되었습니다. 최신 상태를 불러와 확인해 주세요.':e.message+' 저장 여부를 확인하려면 최신 상태를 불러와 주세요.')}finally{lock.current=false}}

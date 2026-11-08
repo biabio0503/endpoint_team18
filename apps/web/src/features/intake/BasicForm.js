@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Stepper, Heading } from '../../components/layout/Shell';
 import { apiRequest } from '../../lib/api/client';
+import { resolvePlanId } from '../../lib/api/session';
 const fields=['career_goal','target_role','university_id','department_id','catalog_id','year_level','earned_credits','gpa','gpa_scale'];
 function formFrom(input) { return Object.fromEntries(fields.map(k=>[k,input[k] == null ? '' : String(input[k])])); }
 function toChanges(form) { return Object.fromEntries(fields.map(k=>[k,form[k] === '' ? (k==='career_goal'?'':null) : ['year_level','earned_credits','gpa','gpa_scale'].includes(k) ? Number(form[k]) : form[k]])); }
@@ -11,7 +12,7 @@ export default function BasicForm() {
  const router=useRouter();
  const [id,setId]=useState(null), [form,setForm]=useState(null), [revision,setRevision]=useState(null), [reference,setReference]=useState(null), [status,setStatus]=useState('loading'), [message,setMessage]=useState(''), [dirty,setDirty]=useState(false);
  async function load(requestId) { const plan=await apiRequest(`/roadmap-inputs/${encodeURIComponent(requestId)}`); setId(requestId); setForm(formFrom(plan.input)); setRevision(plan.input_revision); setDirty(false); setStatus('ready'); setMessage('저장된 기본 정보를 불러왔습니다.'); }
- useEffect(()=>{ let active=true; (async()=>{try {const ref=await apiRequest('/reference');if(!active)return;setReference(ref);let requestId=sessionStorage.getItem('roadmap_request_id');if(!requestId){const latest=await apiRequest('/roadmap-inputs/resume');if(!latest.found){setStatus('empty');return;}requestId=latest.request.request_id;sessionStorage.setItem('roadmap_request_id',requestId);}if(active)await load(requestId);} catch(e){if(active){setStatus('error');setMessage(e.message);}}})();return()=>{active=false}},[]);
+ useEffect(()=>{ let active=true; (async()=>{try {const ref=await apiRequest('/reference');if(!active)return;setReference(ref);const requestId=await resolvePlanId();if(!requestId){setStatus('empty');return;}if(active)await load(requestId);} catch(e){if(active){setStatus('error');setMessage(e.message);}}})();return()=>{active=false}},[]);
  useEffect(()=>{function warn(e){if(dirty){e.preventDefault();e.returnValue='';}}window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn)},[dirty]);
  function update(e) { const {name,value}=e.target; setForm(old=>({...old,[name]:value,...(name==='university_id'?{department_id:'',catalog_id:''}:name==='department_id'?{catalog_id:''}:{})}));setDirty(true);if(status!=='conflict'){setStatus('ready');setMessage('변경 사항을 저장해 주세요.');} }
  async function save(next=false) { if(!form.career_goal.trim()){setMessage('목표·관심 분야를 입력해 주세요.');setStatus('error');return;}setStatus('saving');setMessage('저장 중입니다…');try {const result=await apiRequest(`/roadmap-inputs/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({expected_input_revision:revision,changes:toChanges(form)})});setForm(formFrom(result.input));setRevision(result.input_revision);setDirty(false);setStatus('saved');setMessage('저장되었습니다.');if(next)router.push('/input/documents');}catch(e){setStatus(e.status===409?'conflict':'error');setMessage(e.message);} }

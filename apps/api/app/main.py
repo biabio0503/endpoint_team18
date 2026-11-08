@@ -13,10 +13,10 @@ from fastapi import FastAPI
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from api.dependencies import respond
 from api.domain import Problem
-from api.routes.core import router as core_router
+from api.routes import courses, health, plans, recommendations, reference
 from api.routes.documents import router as documents_router
 from config import APP_ORIGIN, DB_BACKEND, validate_deployment
-from repositories.p1 import connect, migrate, StorageUnavailable
+from repositories.plans import connect, migrate, StorageUnavailable
 from services.gemini import GeminiError
 from worker.documents import start_worker
 
@@ -44,7 +44,10 @@ async def lifespan(application):
 
 
 app = FastAPI(title='Career Roadmap API', version='1.0.0', lifespan=lifespan, redirect_slashes=False)
-app.include_router(core_router)
+app.include_router(reference.router)
+app.include_router(plans.router)
+app.include_router(recommendations.router)
+app.include_router(courses.router)
 app.include_router(documents_router)
 
 
@@ -62,16 +65,7 @@ def http_error(request, error):
     return respond(error.status_code, {'detail': error.detail})
 
 
-@app.get('/api/health', tags=['health'])
-def health():
-    return respond(200, {'status': 'ok'})
-
-
-@app.get('/api/health/db', tags=['health'])
-def database_health():
-    with closing(connect()) as db:
-        db.execute('SELECT 1').fetchone()
-    return respond(200, {'status': 'ok'})
+app.include_router(health.router)
 
 
 @app.exception_handler(Problem)

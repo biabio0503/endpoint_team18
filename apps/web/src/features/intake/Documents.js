@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Stepper, Heading } from '../../components/layout/Shell';
 import { apiRequest } from '../../lib/api/client';
+import { resolvePlanId } from '../../lib/api/session';
 
 const labels={pending:'처리 중',ready:'읽기 완료 · 분석 포함 가능',partial:'일부만 읽힘 · 확인 필요',needs_ocr:'OCR 필요 · 분석 제외',failed:'읽기 실패 · 분석 제외'};
 export default function Documents(){
@@ -11,7 +12,7 @@ export default function Documents(){
  const [id,setId]=useState(null),[data,setData]=useState(null),[phase,setPhase]=useState('loading'),[message,setMessage]=useState(''),[modal,setModal]=useState(null);
  const lock=useRef(false),seq=useRef(0),fileRef=useRef(null);
  const load=useCallback(async requestId=>{const version=++seq.current;const result=await apiRequest(`/roadmap-inputs/${encodeURIComponent(requestId)}/documents`);if(version===seq.current)setData(result);return result},[]);
- useEffect(()=>{let active=true;(async()=>{try{let requestId=sessionStorage.getItem('roadmap_request_id');if(!requestId){const latest=await apiRequest('/roadmap-inputs/resume');if(!latest.found){if(active)setPhase('empty');return}requestId=latest.request.request_id;sessionStorage.setItem('roadmap_request_id',requestId)}if(active)setId(requestId);await load(requestId);if(active)setPhase('ready')}catch(e){if(active){setPhase(e.code==='feature_unavailable'?'unavailable':'error');setMessage(e.message)}}})();return()=>{active=false;seq.current++}},[load]);
+ useEffect(()=>{let active=true;(async()=>{try{const requestId=await resolvePlanId();if(!requestId){if(active)setPhase('empty');return}if(active)setId(requestId);await load(requestId);if(active)setPhase('ready')}catch(e){if(active){setPhase(e.code==='feature_unavailable'?'unavailable':'error');setMessage(e.message)}}})();return()=>{active=false;seq.current++}},[load]);
  useEffect(()=>{if(!id||!data?.documents.some(d=>d.extraction_status==='pending')||phase!=='ready')return;const timer=setInterval(()=>{if(lock.current)return;load(id).catch(e=>{setPhase('error');setMessage(e.message)})},2000);return()=>clearInterval(timer)},[id,data,phase,load]);
  async function refresh(){if(lock.current)return;lock.current=true;setPhase('loading');try{await load(id);setMessage('최신 문서 상태를 불러왔습니다.');setPhase('ready')}catch(e){setMessage(e.message);setPhase('error')}finally{lock.current=false}}
  async function action(path,method,body,success){if(lock.current||phase!=='ready')return;lock.current=true;seq.current++;setPhase('working');setMessage('처리 중입니다…');try{await apiRequest(`/roadmap-inputs/${encodeURIComponent(id)}/documents${path}`,{method,body});await load(id);setPhase('ready');setMessage(success);return true}catch(e){setPhase('error');setMessage(e.status===409?'다른 화면에서 입력이 변경되었습니다. 최신 상태를 불러와 확인해 주세요.':e.message);return false}finally{lock.current=false}}
