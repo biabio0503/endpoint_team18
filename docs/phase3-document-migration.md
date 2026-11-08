@@ -18,7 +18,7 @@ PostgreSQL 문서 API는 `ROADMAP_POSTGRES_DOCUMENTS_ENABLED=1`일 때만 활성
 
 ## 사전 검증 및 운영 적용 순서
 
-1. 격리 DB에서 두 마이그레이션과 API 테스트를 실행한다. `ROADMAP_TEST_POSTGRES_URL`은 `team18_document_test`라는 이름의 로컬 일회용 DB만 가리켜야 한다. 테스트는 해당 DB의 public 스키마를 삭제하므로 운영 DB에 절대 사용하지 않는다.
+1. 격리 DB에서 두 마이그레이션과 API 테스트를 실행한다. `ROADMAP_TEST_POSTGRES_URL`은 명시적 포트가 있는 `team18_document_test`라는 이름의 로컬 일회용 DB만 가리켜야 한다. `ROADMAP_ALLOW_TEST_DB_RESET=1`도 필요하다. 테스트는 해당 DB의 public 스키마를 삭제한다. 원격 호스트, DSN query override, libpq의 대상 변경 환경변수, Render 환경, Supabase 마이그레이션 스키마가 발견되면 거부한다. `python -O`에서도 검사가 유지된다.
 2. 운영 스키마·마이그레이션 이력, 버킷 이름, 과목과 관계 개수, 백업 및 복원 가능성을 확인한다. 이전 적용 여부와 구조가 다르면 중단한다. 각 SQL은 기존 객체를 무조건 재생성하지 않고 충돌 시 실패한다.
 3. 사용자 승인 후 Supabase 마이그레이션 이력을 사용하는 정상 절차로 두 파일을 순서대로 적용한다. 실패하면 트랜잭션과 이력을 확인하고 원인을 해결한다. 사용자 데이터를 삭제해 복구하지 않는다.
 4. Dashboard에서 `roadmap-documents` 또는 설정된 이름의 **비공개** 버킷을 만들고 크기 제한이 10MB 이상인지 확인한다. 공개 URL이나 anon/authenticated 직접 접근 정책을 추가하지 않는다.
@@ -28,6 +28,10 @@ PostgreSQL 문서 API는 `ROADMAP_POSTGRES_DOCUMENTS_ENABLED=1`일 때만 활성
 ## Render 환경변수
 
 - 기존: `ROADMAP_DB_BACKEND=postgres`, `ROADMAP_DATABASE_URL`, `ROADMAP_AUTO_SEED_DEV=0`, `ROADMAP_APP_ORIGIN`
-- 추가: `SUPABASE_URL`, `SUPABASE_SECRET_KEY` (또는 기존 `SUPABASE_SERVICE_ROLE_KEY`), `SUPABASE_STORAGE_BUCKET=roadmap-documents`, `ROADMAP_POSTGRES_DOCUMENTS_ENABLED=1`
+- 최초 배포: `SUPABASE_URL`, `SUPABASE_SECRET_KEY` (또는 기존 `SUPABASE_SERVICE_ROLE_KEY`), `SUPABASE_STORAGE_BUCKET=roadmap-documents`, **`ROADMAP_POSTGRES_DOCUMENTS_ENABLED=0`**
+- 승인된 DB·버킷 변경 및 점검 후에만 `ROADMAP_POSTGRES_DOCUMENTS_ENABLED=1`로 변경한다.
+- 키 변수는 하나만 설정한다. 새 `sb_secret_...` 값은 `apikey` 헤더로 보내며, 기존 JWT `service_role` 값은 `apikey`와 `Authorization: Bearer`로 보낸다. 두 변수를 함께 설정하거나 공개 키를 넣으면 실패하도록 처리한다. 로컬 점검은 가짜 키와 모의 HTTP로 수행하며 실제 키는 Render에만 저장한다.
 
 비밀값은 Render 서버 환경에만 저장한다. 빌드 명령은 `pip install -r requirements.txt`, 시작 명령은 `uvicorn app.main:app --host 0.0.0.0 --port $PORT`, 헬스 경로는 `/api/health`다. 기존 `sslmode=require` 동작을 유지하며 TLS 서버 인증서 검증 복구와 SQLite 제거는 후속 작업이다.
+
+운영 사전 검사 결과와 승인할 변경 범위는 [운영 적용 검증 기록](phase3-production-preflight.md)을 참고한다.
