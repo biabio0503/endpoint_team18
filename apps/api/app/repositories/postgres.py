@@ -9,6 +9,10 @@ class StorageUnavailable(Exception):
     """A safe error which must not expose connection details."""
 
 
+class StorageConflict(StorageUnavailable):
+    """Retry a short transaction with a fresh snapshot, never the external AI call."""
+
+
 def _connection_error_code(error):
     """Classify libpq errors without ever returning their potentially secret text."""
     message = str(error).lower()
@@ -78,7 +82,9 @@ class PostgresConnection:
         # All P1/P2 statements are static and use ? only as parameter markers.
         try:
             return self.connection.execute(sql.replace('?', '%s'), params)
-        except self.error_type:
+        except self.error_type as error:
+            if getattr(error, 'sqlstate', None) in ('40001', '40P01'):
+                raise StorageConflict('동시에 입력이 변경되었습니다.') from None
             raise StorageUnavailable('PostgreSQL 저장소 작업에 실패했습니다.') from None
 
     def commit(self):

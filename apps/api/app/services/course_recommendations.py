@@ -2,14 +2,13 @@
 from services.gemini import recommend_ids
 
 
-def recommend(profile, courses, review_status, call=recommend_ids):
-    candidates = [c for c in courses if not c['is_completed']]
-    if not candidates:
-        return []
-    fields = ('course_id', 'course_name', 'description_text', 'category', 'recommended_year', 'recommended_term')
-    model_courses = [{field: c.get(field) for field in fields} for c in candidates]
-    ids = call(profile, model_courses)
-    allowed = {str(c['course_id']): c for c in candidates}
+def available_courses(courses):
+    return {str(c['course_id']): c for c in courses if not c['is_completed']}
+
+
+def selected_courses(ids, courses, review_status):
+    """Shared catalog membership, completion, deduplication and maximum rules."""
+    allowed = available_courses(courses)
     result, seen = [], set()
     for course_id in ids:
         if course_id in allowed and course_id not in seen:
@@ -22,3 +21,13 @@ def recommend(profile, courses, review_status, call=recommend_ids):
             if len(result) == 5:
                 break
     return result
+
+
+def recommend(profile, courses, review_status, call=recommend_ids):
+    candidates = [c for c in courses if not c['is_completed']]
+    if not candidates:
+        return []
+    fields = ('course_id', 'course_name', 'description_text', 'category', 'recommended_year', 'recommended_term')
+    model_courses = [{field: c.get(field) for field in fields} for c in candidates]
+    ids = call(profile, model_courses)
+    return selected_courses(ids, courses, review_status)

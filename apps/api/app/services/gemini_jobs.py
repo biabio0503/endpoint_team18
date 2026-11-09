@@ -47,7 +47,11 @@ def _response_schema(node):
     # Gemini rejects some nested bounded arrays/strings with HTTP 400. Keep the
     # structural schema on the wire and enforce ALL bounds with Pydantic locally.
     if isinstance(node, dict):
-        return {key: _response_schema(value) for key, value in node.items()
+        # Property/definition names are user fields, not schema keywords. In
+        # particular, keep the roadmap task's required field named "title".
+        return {key: ({name: _response_schema(schema) for name, schema in value.items()}
+                      if key in ('properties', '$defs', 'definitions') else _response_schema(value))
+                for key, value in node.items()
                 if key not in ('maxItems', 'minItems', 'maxLength', 'minLength', 'title')}
     if isinstance(node, list):
         return [_response_schema(value) for value in node]
@@ -69,7 +73,7 @@ def _retry_wait(exc, attempt):
     return 0.5 * (2 ** attempt)
 
 
-def _generate(schema, instruction, data):
+def _generate(schema, instruction, data, *, max_attempts=MAX_ATTEMPTS):
     key = os.environ.get('GEMINI_API_KEY', '').strip()
     if not key:
         raise GeminiError('gemini_not_configured', 'Gemini API 키가 설정되지 않았습니다.', 503)
@@ -84,7 +88,7 @@ def _generate(schema, instruction, data):
     except Exception:
         raise GeminiError('gemini_call_failed', 'Gemini 클라이언트를 초기화하지 못했습니다.') from None
     try:
-        for attempt in range(MAX_ATTEMPTS):
+        for attempt in range(max_attempts):
             try:
                 response = client.models.generate_content(
                     model=os.environ.get('GEMINI_MODEL', '').strip() or 'gemini-3.5-flash',
@@ -104,7 +108,7 @@ def _generate(schema, instruction, data):
                 timeout = isinstance(exc, TimeoutError) or 'timeout' in type(exc).__name__.lower()
                 transient = timeout or code == 429 or (isinstance(code, int) and 500 <= code < 600)
                 delay = _retry_wait(exc, attempt)
-                if transient and attempt + 1 < MAX_ATTEMPTS and delay is not None:
+                if transient and attempt + 1 < max_attempts and delay is not None:
                     time.sleep(delay)
                     continue
                 if code in (401, 403):
