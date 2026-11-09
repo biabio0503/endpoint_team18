@@ -1,12 +1,14 @@
 # Gemini 채용공고 기술 스택 분석
 
+현재 `job-skills-v2`의 고정 fixture와 수정 전후 검증은 [추천 품질 진단](recommendation-quality-audit-2026-11-09.md)을 참고한다. 이전 저장 결과는 원래 이름·근거·답변을 보존하며, 명시적 분석 재실행에만 새 기준을 사용한다.
+
 ## API와 처리 흐름
 
 `POST /api/roadmap-inputs/{request_id}/job-skill-analysis`에 `{}`를 보낸다. 기존 인증·세션, Origin 및 계획 소유권 검사를 사용한다. 클라이언트의 사용자 ID·목표 재정의는 거부한다. DB에서 `career_goal`, 선택 `target_role`, 전체 `input_revision`을 읽고 트랜잭션을 종료한 뒤 외부 API를 호출한다. 완료 직전에 버전을 재확인하며, 과목·문서 등 전체 입력이 변경되거나 계획이 삭제되었다면 409를 반환한다. 4단계부터 성공·부분 성공 결과를 서버 `job_skill_snapshots`에 저장한다. 목표·직무·모델·분석 규칙 기준이 같으면 재사용하며, `{ "refresh": true }`로 명시적으로 새 분석을 요청할 수 있다. 새 분석이 실패하면 이전 검증 결과를 보존하고 `refresh_error`를 반환한다.
 
 1. `gemini_jobs.generate_job_keywords`가 두 입력을 함께 Gemini에 전달한다. 희망 직무를 우선하되 목표의 구체적인 활동·분야를 반영한다. 희망 직무가 없어도 목표가 충분하면 해석하며, 부족하면 `needs_clarification`을 반환한다.
 2. `RoleInterpretation`이 상태·영어 대표 직무·최대 3개 짧은 영어 검색어·`direct`/`related`를 검증한다. 중복은 제거하고 상충하는 관계는 거부한다. 잘못된 응답을 규칙 사전으로 대체하지 않는다.
-3. `himalayas.fetch_jobs_with_keywords`가 검색어를 재생성하지 않고 기존 수집·중복 제거·경력 구분·마감/빈 본문 제외·직접/연관 표본 균형 로직에 전달한다. 기존 `fetch_jobs()`와 GET `/jobs`도 유지된다.
+3. `himalayas.fetch_jobs_with_keywords`가 검색어를 재생성하지 않고 기존 수집·중복 제거·경력 구분·마감/빈 본문 제외·직접/연관 표본 균형 로직에 전달한다. 제목 매칭 후 핵심 업무와 목표 직무/명시된 제조 도메인의 충돌을 검사하고 사유를 기록한다. 기존 `fetch_jobs()`와 GET `/jobs`도 유지된다.
 4. `gemini_jobs.extract_job_skills`가 최대 20개 선정 공고를 기본 5개씩 분석한다. ID·제목·직무 관계·경력 그룹·전체 본문·출처 URL만 보낸다. 사용자 문서·과목·프로필·세션을 보내지 않는다.
 5. `verify_skills`가 ID와 근거를 검증하고, `aggregate_skills`가 정규화한 기술별 고유 공고 수를 집계한다.
 
@@ -17,12 +19,12 @@
 - `job_analyses[].model_skills`: 미확정 AI 출력. `verified_skills`: 서버 검증 통과 항목. `rejected_skills`: 거부 항목과 사유. UI는 검증된 집계 결과만 표시한다.
 - 배치에 없는 ID는 거부한다. 누락·중복 ID에 해당하는 공고는 실패로 처리하며 다른 정상 공고는 유지한다.
 - `evidence_text`는 해당 `description_text`의 정확한 연속 부분 문자열이어야 한다. 번역·생략·공백 변경은 허용하지 않는다. `evidence_start`, `evidence_end`는 Python Unicode 문자 위치이며 끝은 제외한다.
-- 기술명은 알려진 별칭을 포함해 인용에 단어 경계로 존재해야 한다. `technical_competency`는 번역·요약을 허용하므로 인용 존재만 확인하며, 역량 이름의 의미적 타당성은 모델 판단으로 남는다.
-- `required`/`preferred`에는 인용의 명시적 필수/우대 표현도 요구한다. 표현이 없거나 충돌하면 `unknown`으로 낮춘다. 원래 분류는 `model_requirement_type`에 남긴다. 원문의 요구조건 제목이 인용에서 빠지면 보수적으로 판단 불가가 될 수 있다.
-- 명시적 별칭만 병합한다. `Python3`/`Python 3` → Python, Postgres → PostgreSQL, Amazon Web Services → AWS. SQL/PostgreSQL, Java/JavaScript는 구분한다. 알려지지 않은 이름은 공백·대소문자 기준으로만 묶는다.
+- 기술명은 알려진 별칭을 포함해 인용에 단어 경계로 존재해야 한다. 알려진 기술은 `technical_competency`로 분류해도 이름을 검증한다. 그 외 자유 서술 역량은 번역·요약을 허용하므로 의미적 타당성은 모델 판단으로 남는다.
+- `required`/`preferred`는 기술이 나온 문장의 명시 표현과 원문의 국소 제목으로 확인한다. 표현이 없거나 충돌하면 `unknown`으로 낮춘다. 원래 분류는 `model_requirement_type`에 남긴다. 회사 소개·주변 맥락 또는 부정된 요건은 인용을 보존하되 `recommendation_eligible=false`로 핵심 추천에서 제외한다.
+- 명시적 별칭만 병합한다. `Python3`/`Python 3` → Python, Postgres → PostgreSQL, Amazon Web Services → AWS, PowerBI/Microsoft Power BI → Power BI. SQL/PostgreSQL, Java/JavaScript, CAD/AutoCAD, CATIA/SolidWorks는 구분한다. 알려지지 않은 이름은 Unicode·공백·대소문자 기준으로만 묶는다.
 - 같은 공고에서 같은 기술이 여러 번 나와도 1개다. 요구 수준 카운터는 공고별 `required > preferred > mentioned > unknown` 중 하나만 계산한다. 각 인용의 분류는 근거에 남는다.
 - `mention_frequency = mentioned_job_count / analysis_summary.analyzed_jobs`. 실패·건너뜀은 분모에서 제외한다. 정상적인 빈 기술 목록은 분석 성공으로 센다. 추출 항목이 모두 거부된 공고는 실패로 처리한다.
-- 기술별 `direct_job_count`, `related_job_count`, `seniority_distribution`도 고유 공고 기준이다. 정렬은 언급 공고 수순이며 중요도·학습 우선순위가 아니다.
+- 기술별 `direct_job_count`, `related_job_count`, `seniority_distribution`도 고유 공고 기준이다. 업무·요건 근거 수는 `supporting_*`로 별도 집계한다. 정렬은 추천 가능 여부, 직접 직무의 독립 근거 공고 수, 전체 근거 공고 수, 필수/우대 수, 경험 비교 시 확인된 경험을 반영한다. 취업 가능성이나 숙련도 점수는 아니다. 1개 공고 기술과 작은 표본은 이유·출처·한계를 표시한다.
 
 외부 본문은 시스템 지시와 분리한 JSON 데이터로 전달하며, 시스템 지시는 본문 내 명령을 무시하도록 명시한다. HTML을 실행하지 않는다. 링크는 모델 출력이 아닌 수집기의 검증된 출처 URL을 사용한다. 인용 검증은 원문 존재를 보장하지만 의미 해석이나 추출의 완전성을 보장하지 않는다.
 
@@ -42,7 +44,7 @@
 
 ## 화면과 설정
 
-기존 결과 화면의 **직무 역량 비교** 탭에서 처음 열 때 분석한다. 진행 중 요청은 컴포넌트에서 중복을 방지하고, 새로고침·페이지 이탈 후에도 서버 스냅샷을 재사용한다. 탭 재진입·창 포커스·가시성 복귀 시 현재 입력 버전과 최신 비교를 조회한다. 프로젝트 경험·답변은 별도 원문 근거와 함께 표시한다. 오류·부분 성공에는 명시적 다시 분석을 제공한다. 수강 후보 상태는 독립적으로 유지한다.
+기존 결과 화면의 **직무 역량 비교** 탭은 처음 열 때 저장 결과만 조회한다. 유료 분석은 ‘직무 분석 실행/다시 실행’을 눌러야 시작한다. 진행 중 요청은 컴포넌트에서 중복을 방지하고, 새로고침·페이지 이탈 후에도 서버 스냅샷을 조회한다. 탭 재진입·창 포커스·가시성 복귀 시 현재 입력 버전과 최신 비교를 조회한다. 프로젝트 경험·답변은 별도 원문 근거와 함께 표시한다. 오류·부분 성공에는 명시적 다시 분석을 제공한다. 수강 후보 상태는 독립적으로 유지한다.
 
 추가 환경변수·패키지는 없다. 4단계 DB 마이그레이션은 [프로젝트 경험 비교 문서](project-experience-comparison.md)를 따른다. 기존 서버 전용 `GEMINI_API_KEY`, `GEMINI_MODEL`을 사용하며 미설정 모델은 기존과 같은 `gemini-3.5-flash`다. 선택적 `HIMALAYAS_API_KEY`도 유지한다.
 

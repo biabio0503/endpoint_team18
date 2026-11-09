@@ -9,8 +9,9 @@ from services.course_recommendations import available_courses, selected_courses
 from services.gemini import GeminiError
 from services.project_experience import current_comparison, digest, model_basis, skill_key
 from services.roadmap_schemas import GeneratedRoadmap
+from services.job_skill_analysis import skill_priority
 
-RULES_VERSION = 'personalized-roadmap-v2'
+RULES_VERSION = 'personalized-roadmap-v3'
 MARKET_LIMIT = '해외 원격근무 채용공고의 제한된 표본입니다. 국내 대학생의 필수 기술이나 학습 우선순위를 뜻하지 않습니다.'
 
 
@@ -46,7 +47,11 @@ def capture_basis(db, row):
         skills.append({k: item[k] for k in ('skill_name', 'category', 'student_status', 'reason', 'job_requirement', 'skill_answer')} |
                       {'comparison_ref': ref, 'job_refs': job_refs, 'project_refs': project_refs})
     limits = [MARKET_LIMIT, '경험 확인이나 작업 완료는 기술 숙련도를 보증하지 않습니다.']
-    if not jobs.get('snapshot_id') or not skills:
+    if jobs.get('sample_notice'):
+        limits.append(jobs['sample_notice'])
+    if jobs.get('previous_analysis_version'):
+        limits.append('이전 기준의 직무 분석입니다. 직무 역량 비교에서 분석을 다시 실행하면 개선된 공고·기술 기준을 적용합니다.')
+    if not jobs.get('snapshot_id') or not focused_skills({'skills': skills}):
         limits.append('검증된 직무 기술 근거가 없어 기술별 준비 상태와 수강 후보를 판단하지 않았습니다.')
     elif jobs['status'] != 'success':
         limits.append('직무 분석이 일부 미완료되어 검증된 기술과 근거만 사용했습니다.')
@@ -68,6 +73,7 @@ def capture_basis(db, row):
              'reviewed_at': row['reviewed_at'], 'reported_missing_courses': bool(row['reported_missing_courses']),
              'outside_completed_courses': repo.outside(row['request_id'], row['catalog_id']),
              'job_snapshot_id': jobs.get('snapshot_id'), 'job_status': jobs['status'],
+             'job_analysis_outdated': jobs.get('previous_analysis_version', False),
              'job_analyzed_at': jobs.get('saved_at'), 'job_summary': jobs.get('analysis_summary', {}),
              'document_basis': project['document_basis'], 'project_version': project['analysis_version'],
              'project_status': project['status'],
@@ -76,7 +82,7 @@ def capture_basis(db, row):
              'excluded_documents': [{k: d[k] for k in ('document_id', 'extraction_revision', 'reason')}
                                     for d in project['excluded_documents']],
              'skills': skills, 'evidence': refs, 'limitations': limits}
-    basis['generation_mode'] = 'ai' if basis['job_snapshot_id'] and skills else 'limited_guidance'
+    basis['generation_mode'] = 'ai' if basis['job_snapshot_id'] and focused_skills(basis) else 'limited_guidance'
     if basis['generation_mode'] == 'limited_guidance':
         basis['model_name'] = 'server-guidance-v1'
     # Stable JSON types across SQLite and PostgreSQL (Decimal/datetime included).
@@ -84,8 +90,12 @@ def capture_basis(db, row):
 
 
 def focused_skills(basis):
-    known = [s for state in ('no_experience', 'confirmed_experience') for s in basis['skills'] if s['student_status'] == state]
-    unknown = [s for s in basis['skills'] if s['student_status'] not in ('no_experience', 'confirmed_experience')]
+    eligible = [s for s in basis['skills'] if s.get('job_requirement', {}).get('recommendation_eligible', True)]
+    # Legacy snapshots keep their recorded order; new evidence has explicit ranking fields.
+    if any('supporting_job_count' in s.get('job_requirement', {}) for s in eligible):
+        eligible.sort(key=lambda s: skill_priority({**s['job_requirement'], 'name': s['skill_name']}, s['student_status']))
+    known = [s for s in eligible if s['student_status'] in ('no_experience', 'confirmed_experience')]
+    unknown = [s for s in eligible if s['student_status'] not in ('no_experience', 'confirmed_experience')]
     return known[:12] + unknown[:3]
 
 
@@ -95,7 +105,8 @@ def model_input(basis):
     focused = focused_skills(basis)
     for skill in focused:
         # Counts/status use ALL verified evidence; a small exact-quote sample suffices for generation.
-        item = {**skill, 'job_refs': skill.get('job_refs', [])[:2], 'project_refs': skill.get('project_refs', [])[:3]}
+        job_refs = [r for r in skill.get('job_refs', []) if basis['evidence'][r].get('recommendation_eligible', True)]
+        item = {**skill, 'job_refs': job_refs[:2], 'project_refs': skill.get('project_refs', [])[:3]}
         item['allowed_action_type'] = 'learn' if skill['student_status'] == 'no_experience' else 'deepen' if skill['student_status'] == 'confirmed_experience' else 'verify_experience'
         skills.append(item)
         for ref in [item['comparison_ref'], *item['job_refs'], *item['project_refs']]:
@@ -104,7 +115,7 @@ def model_input(basis):
     return {k: basis[k] for k in ('profile', 'review_status', 'limitations', 'job_summary', 'project_status')} | {
         'skills': skills, 'evidence': evidence,
         'evidence_scope': {'verified_skill_count': len(basis['skills']), 'included_skill_count': len(skills),
-                           'selection': 'Up to 12 explicit no-experience/confirmed skills and 3 unverified skills; counts use all evidence, quotes are sampled.'},
+                           'selection': 'Role relevance, independent job support, requirement level, then verified experience; up to 12 explicit no-experience/confirmed skills and 3 unverified skills. Context-only evidence is excluded.'},
         'eligible_courses': [{k: c.get(k) for k in fields} for c in available_courses(basis['courses']).values()],
         'completed_courses': [{k: c.get(k) for k in ('course_id', 'course_name')} for c in basis['courses'] if c['is_completed']],
         'catalog': basis['catalog'],
@@ -120,7 +131,7 @@ def validate_result(raw, basis):
         result = GeneratedRoadmap.model_validate(raw.model_dump() if isinstance(raw, GeneratedRoadmap) else raw)
     except (ValidationError, TypeError, ValueError):
         invalid()
-    skills = {s['skill_name']: s for s in basis['skills']}
+    skills = {s['skill_name']: s for s in focused_skills(basis)}
     allowed = available_courses(basis['courses'])
 
     def verify_refs(names, refs):

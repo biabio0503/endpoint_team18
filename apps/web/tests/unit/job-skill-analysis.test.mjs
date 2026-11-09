@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createJobSkillLoader } from '../../src/features/roadmap/jobSkillAnalysis.mjs';
+import { createJobSkillLoader, orderedSkills, recommendationScope } from '../../src/features/roadmap/jobSkillAnalysis.mjs';
 
 function setup() {
  let revision = 1, id = 'plan-a', posts = 0, wait = null, error = null, saved = null;
@@ -71,4 +71,21 @@ test('same revision reads newly completed project evidence without AI', async ()
  assert.equal((await load()).comparison.project_analysis.status, 'not_started');
  complete = true;
  assert.equal((await load()).comparison.project_analysis.status, 'success');
+});
+
+test('comparison display, actual model input and proposed activities remain distinct', () => {
+ const result = { generation_scope: { included_skills: ['SQL', 'Python', 'Excel'] },
+  roadmap: [{ related_skills: ['SQL'] }, { skill_targets: [{ skill_name: 'Python' }] }] };
+ assert.deepEqual(recommendationScope(result, 'CAD'), { included: false, activities: 0 });
+ assert.deepEqual(recommendationScope(result, 'Excel'), { included: true, activities: 0 });
+ assert.deepEqual(recommendationScope(result, 'SQL'), { included: true, activities: 1 });
+ assert.deepEqual(recommendationScope({ roadmap: [] }, 'SQL'), { included: null, activities: 0 });
+});
+
+test('new comparison order reflects server evidence/experience; legacy saved names stay intact', () => {
+ const skills = [{ name: 'PowerBI' }, { name: 'Power BI' }, { name: 'SQL' }];
+ const comparisons = [{ skill_name: 'SQL' }, { skill_name: 'Power BI' }];
+ assert.deepEqual(orderedSkills({ skills, comparison: { comparisons } }), skills);
+ assert.deepEqual(orderedSkills({ analysis_version: 'job-skills-v2', skills, comparison: { comparisons } }).map(s => s.name), ['SQL', 'Power BI', 'PowerBI']);
+ assert.deepEqual(skills.map(s => s.name), ['PowerBI', 'Power BI', 'SQL']);
 });

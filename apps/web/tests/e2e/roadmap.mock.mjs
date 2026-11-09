@@ -12,10 +12,14 @@ export function installRoadmapMock() {
   const r = { run_id: 'run-' + m.posts, status: 'partial', input_revision: m.revision, created_at: '2026-11-09T06:00:0' + m.posts + 'Z', career_goal: '데이터 분석', target_role: '데이터 분석가',
    preparation_summary: { confirmed_skills: ['Python'], skills_to_verify: m.sql === 'no_experience' ? [] : ['SQL'], learning_candidates: m.sql === 'no_experience' ? ['SQL'] : [] },
    preparation_items: [{ skill_name: 'SQL', student_status: m.sql, reason: '사용자 응답을 반영했습니다.', comparison_ref: 'comparison:sql', job_refs: ['job:sql'], project_refs: [] }],
+   generation_scope: { verified_skill_count: 2, included_skills: ['SQL'] },
    evidence: { 'comparison:sql': { skill_name: 'SQL', kind: 'comparison', student_status: m.sql, reason: '사용자가 답변한 상태', job_refs: ['job:sql'], project_refs: [] }, 'job:sql': { skill_name: 'SQL', kind: 'job', evidence_text: 'SQL is required.', source_url: 'https://himalayas.app/jobs/test' } },
    basis: { catalog, review_status: 'unconfirmed', outside_completed_courses: [], job_summary: { analyzed_jobs: 2 }, project_documents: [], job_snapshot_id: 'test-snapshot', job_analyzed_at: '2026-11-09T00:00:00Z' },
    course_status: 'provisional', recommended_courses: m.completed ? [] : [course], limitations: ['해외 원격근무 표본입니다.', '경험 자료 부족은 경험 없음을 뜻하지 않습니다.'], progress: { completed: 0, total: 3 },
    roadmap: [1,2,3].map(i => ({ step_id: 'step-' + i, order: i, title: (m.sql === 'no_experience' ? 'SQL 학습' : 'SQL 경험 확인') + ' ' + i, purpose: '수행 가능한 활동', reason: m.sql + ' 응답 기준', related_skills: ['SQL'], related_course_ids: m.completed ? [] : ['db-course'], depends_on: i > 1 ? ['step-' + (i-1)] : [], evidence_refs: ['comparison:sql'], limitations: '추천 의견입니다.', tasks: [{ task_id: 'task-' + i, title: '실행 작업 ' + i, action: '검토 자료를 정리한다.', completion_criteria: '검토 가능한 파일을 남긴다.', deliverable: '기록 파일', is_completed: false, progress_version: 0 }] })) };
+  // Legacy saved comparison can contain a tool never sent to the generator.
+  r.preparation_items.push({ skill_name: 'CAD', student_status: 'not_verified', reason: '이전 저장 결과의 비교 항목', comparison_ref: 'comparison:cad', job_refs: [], project_refs: [] });
+  r.evidence['comparison:cad'] = { skill_name: 'CAD', kind: 'comparison', student_status: 'not_verified', reason: '이전 저장 결과', job_refs: [], project_refs: [] };
   m.runs.unshift(r); return r;
  };
  const nativeFetch = window.fetch;

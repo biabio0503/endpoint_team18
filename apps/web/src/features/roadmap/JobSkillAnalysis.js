@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { apiRequest } from '../../lib/api/client';
 import { resolvePlanId } from '../../lib/api/session';
-import { createJobSkillLoader } from './jobSkillAnalysis.mjs';
+import { createJobSkillLoader, orderedSkills } from './jobSkillAnalysis.mjs';
 import ProjectEvidence, { statusLabels } from './ProjectEvidence';
 
 const requirementLabels = { required: '필수', preferred: '우대', mentioned: '단순 언급', unknown: '판단 불가' };
@@ -81,6 +81,8 @@ export default function JobSkillAnalysis({ active, onResult }) {
     {data.retrieved_at && <div><dt>조회 시각</dt><dd>{new Date(data.retrieved_at).toLocaleString('ko-KR')}</dd></div>}
    </dl>
    {data.status === 'partial' && <p className="notice" role="status">일부 수집·분석 또는 근거 검증이 완료되지 않았습니다. 확인된 결과만 표시합니다.</p>}
+   {data.previous_analysis_version && <p className="notice">이전 분석 기준의 저장 결과입니다. 원문과 경험 답변은 유지됩니다. ‘직무 분석 다시 실행’을 눌러야 개선된 기준으로 새로 분석합니다.</p>}
+   {data.sample_notice && <p className="notice" role="status">{data.sample_notice}</p>}
    {data.refresh_error && <p role="alert">다시 분석을 완료하지 못해 이전 검증 결과를 유지했습니다. {data.refresh_error.errors.find(e => e.message)?.message}</p>}
    {data.snapshot_id && <p className="field-help">직무 분석 당시 입력 버전 {data.analyzed_input_revision} · 현재 비교 입력 버전 {data.input_revision} · {data.reused ? '저장된 직무 분석 재사용' : '직무 분석 저장 완료'}</p>}
    {data.comparison?.project_analysis && <div className="notice">프로젝트 문서 {data.comparison.project_analysis.analyzed_documents}개 분석 · 원문 검증 경험 {data.comparison.project_analysis.verified_experiences}개. {data.comparison.project_analysis.status === 'no_documents' ? '분석 가능한 문서가 없어 경험 정보를 확인할 수 없습니다.' : data.comparison.project_analysis.status !== 'success' ? '프로젝트 분석이 미실행 또는 일부 미완료 상태입니다.' : '확인하지 않은 항목은 미확인 상태로 표시합니다.'} <Link href="/input/review">분석 내용 확인·수정 →</Link></div>}
@@ -88,10 +90,13 @@ export default function JobSkillAnalysis({ active, onResult }) {
    {data.status === 'no_jobs' && <p role="status">현재 검색어로 분석할 수 있는 관련 공고가 없습니다.</p>}
    {data.status === 'needs_clarification' && <p role="status">{data.clarification_message} 기존 입력 수정 화면에서 목표나 희망 직무를 구체화해 주세요.</p>}
    {['success', 'partial'].includes(data.status) && !data.skills.length && <p role="status">분석한 공고에서 원문으로 확인할 수 있는 기술을 찾지 못했습니다.</p>}
-   <ul className="skill-list">{data.skills.map(skill => <li key={skill.name} className="skill-card">
+   {data.analysis_version === 'job-skills-v2' && <p className="field-help">표시 순서는 목표 직무와의 관련성, 독립 공고 수, 필수·우대 근거, 확인된 경험을 반영합니다. 회사 소개만으로 확인된 기술은 뒤에 표시하며 핵심 추천에 사용하지 않습니다.</p>}
+   <ul className="skill-list">{orderedSkills(data).map(skill => <li key={skill.name} className="skill-card">
     <div className="skill-title"><h3>{skill.name}</h3><span className="badge">{categoryLabels[skill.category] || skill.category}</span></div>
     <p><b>{skill.mentioned_job_count} / {summary.analyzed_jobs}개 공고</b>에서 언급 · {(skill.mention_frequency * 100).toFixed(0)}%</p>
     <p className="skill-counts">필수 {skill.required_job_count} · 우대 {skill.preferred_job_count} · 단순 언급 {skill.mentioned_only_job_count} · 판단 불가 {skill.unknown_job_count}</p>
+    {skill.priority_reason && <p className="field-help">{skill.priority_reason}</p>}
+    {skill.single_job_notice && <p className="notice">{skill.single_job_notice} 아래 원문 근거에서 출처를 확인할 수 있습니다.</p>}
     <p className="field-help">직접 관련 {skill.direct_job_count} · 연관 직무 {skill.related_job_count} · {Object.entries(skill.seniority_distribution).map(([level, count]) => `${levelLabels[level]} ${count}`).join(' · ')}</p>
     {data.comparison?.comparisons?.filter(c => c.skill_name === skill.name).map(c => <div className="project-comparison" key={c.skill_name}>
      <p><span className="badge">{statusLabels[c.student_status]}</span></p><p>{c.reason}</p>
@@ -102,6 +107,7 @@ export default function JobSkillAnalysis({ active, onResult }) {
     <details><summary>{skill.name} 원문 근거 {skill.evidence.length}건</summary>
      <ul className="skill-evidence">{skill.evidence.map((e, i) => <li key={`${e.job_id}-${i}`}>
       <span className="badge">{requirementLabels[e.requirement_type]}</span>{' '}
+      {e.recommendation_eligible === false && <span className="badge">맥락 언급 · 핵심 추천 제외</span>}
       {e.source_url ? <a href={e.source_url} target="_blank" rel="noopener noreferrer">{e.title} · Himalayas ↗</a> : <span>{e.title} · 원문 링크 미확인</span>}
       <blockquote>{e.evidence_text}</blockquote>
      </li>)}</ul>

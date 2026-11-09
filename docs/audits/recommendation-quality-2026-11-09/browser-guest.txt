@@ -1,0 +1,1 @@
+PASS: real local API plan/create/resume, basic restore, document upload/extract, 20/10 page size, search/reset/selection/review restore, limited roadmap persistence/checks, 5 tabs, no automatic AI, mobile

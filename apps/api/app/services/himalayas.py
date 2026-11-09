@@ -10,6 +10,7 @@ from html.parser import HTMLParser
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
+from services.job_relevance import classify_job, target_context
 
 SEARCH_URL = 'https://himalayas.app/jobs/api/search'
 MAX_LIMIT = 100
@@ -175,6 +176,7 @@ def _exclusion_reasons(job, now):
     reasons = []
     if job['match_type'] == 'unverified':
         reasons.append('unverified')
+    reasons.extend(job.get('relevance', {}).get('reasons', []))
     if not isinstance(job.get('description_text'), str) or not job['description_text'].strip():
         reasons.append('missing_description')
     if job.get('expires_at'):
@@ -188,6 +190,8 @@ def _exclusion_reasons(job, now):
 
 def select_jobs(candidates, keywords, limit, now):
     """Select deterministically from unique normalized jobs, returning audit counts."""
+    # The collector deduplicates too; enforce identity at this public boundary.
+    candidates = list({job['id']: job for job in candidates}.values())
     eligible = []
     excluded = {'unverified': 0, 'missing_description': 0, 'expired': 0}
     excluded_count = 0
@@ -199,7 +203,7 @@ def select_jobs(candidates, keywords, limit, now):
         if reasons:
             excluded_count += 1
             for reason in reasons:
-                excluded[reason] += 1
+                excluded[reason] = excluded.get(reason, 0) + 1
         else:
             eligible.append(job)
     direct = [j for j in eligible if j['match_type'] == 'direct']
@@ -269,7 +273,7 @@ def select_jobs(candidates, keywords, limit, now):
     return selected, summary
 
 
-def normalize_job(raw, keyword, keywords):
+def normalize_job(raw, keyword, keywords, target=None):
     description = raw.get('description')
     job = {'id': raw['guid'], 'source': 'Himalayas', 'source_url': _source_url(raw['guid']),
            'title': raw.get('title'), 'company': raw.get('companyName'), 'company_slug': raw.get('companySlug'),
@@ -281,6 +285,8 @@ def normalize_job(raw, keyword, keywords):
            'location_restrictions': raw.get('locationRestrictions'), 'timezone_restrictions': raw.get('timezoneRestrictions'),
            'application_link': raw.get('applicationLink'), 'matched_keywords': [keyword]}
     job['match_type'], job['match_reason'] = _match(job, keywords)
+    job['relevance'] = classify_job(job, target or target_context(keywords=keywords))
+    job['match_type'] = job['relevance']['match_type']
     job['seniority_group'] = seniority_group(job['seniority'], job['title'])
     return job
 
@@ -375,6 +381,7 @@ def _validate_inputs(career_goal, target_role, limit):
 
 def _fetch_jobs(career_goal, target_role, limit, keywords, reason):
     now = datetime.now(timezone.utc)
+    target = target_context(career_goal, target_role, keywords)
     result = {'source': 'Himalayas', 'source_url': 'https://himalayas.app', 'market_scope': 'global_remote',
               'career_goal': career_goal, 'target_role': target_role, 'search_keywords': [k['keyword'] for k in keywords],
               'keyword_details': keywords, 'status': 'error' if reason else 'success', 'total_collected': 0,
@@ -429,11 +436,14 @@ def _fetch_jobs(career_goal, target_role, limit, keywords, reason):
                         if keyword not in jobs[guid]['matched_keywords']:
                             jobs[guid]['matched_keywords'].append(keyword)
                     else:
-                        jobs[guid] = normalize_job(raw, keyword, keywords)
+                        jobs[guid] = normalize_job(raw, keyword, keywords, target)
     result['jobs'], summary = select_jobs(list(jobs.values()), keywords, limit, now)
     summary['total_candidates'] = sum(search['received_count'] for search in result['searches'])
     summary['duplicate_occurrences'] = summary['total_candidates'] - summary['unique_candidates']
     result['selection_summary'] = summary
+    summary['decisions'] = [{key: job.get(key) for key in
+                             ('id', 'title', 'source_url', 'match_type', 'match_reason', 'relevance', 'analysis_eligible', 'analysis_reasons')}
+                            for job in jobs.values()]
     result['total_collected'] = len(result['jobs'])
     if result['errors']:
         result['status'] = 'partial' if success_pages else 'error'

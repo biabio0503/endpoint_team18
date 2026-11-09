@@ -1,0 +1,844 @@
+{
+  "fixture_version": 1,
+  "scope": "Synthetic fixed English source text and fixed model responses; not production accuracy.",
+  "roles": {
+    "data": {
+      "label": "일반 데이터 분석가",
+      "goal": "고객 지표와 매출 데이터를 분석하는 데이터 분석가",
+      "target": "Data Analyst",
+      "keywords": [
+        [
+          "Data Analyst",
+          "direct"
+        ],
+        [
+          "BI Analyst",
+          "direct"
+        ],
+        [
+          "Data Scientist",
+          "related"
+        ]
+      ],
+      "appropriate": [
+        "SQL",
+        "Python",
+        "Excel",
+        "Power BI",
+        "Tableau",
+        "PostgreSQL"
+      ]
+    },
+    "mechanical": {
+      "label": "CAD 중심 기계설계",
+      "goal": "CAD로 기계 부품과 조립체를 설계하는 기계설계 엔지니어",
+      "target": "Mechanical Design Engineer",
+      "keywords": [
+        [
+          "Mechanical Design Engineer",
+          "direct"
+        ],
+        [
+          "CAD Designer",
+          "direct"
+        ]
+      ],
+      "appropriate": [
+        "CAD",
+        "CATIA",
+        "SolidWorks",
+        "AutoCAD",
+        "GD&T"
+      ]
+    },
+    "security": {
+      "label": "보안 분석가",
+      "goal": "보안 이벤트와 침해 사고를 조사하는 보안 분석가",
+      "target": "Security Analyst",
+      "keywords": [
+        [
+          "Security Analyst",
+          "direct"
+        ],
+        [
+          "SOC Analyst",
+          "direct"
+        ]
+      ],
+      "appropriate": [
+        "SIEM",
+        "Splunk",
+        "CISSP",
+        "Python",
+        "SQL"
+      ]
+    },
+    "manufacturing": {
+      "label": "제조 데이터 분석가",
+      "goal": "제조 생산·불량 데이터와 CAD 설계 속성을 결합해 품질을 분석",
+      "target": "Manufacturing Data Analyst",
+      "keywords": [
+        [
+          "Manufacturing Data Analyst",
+          "direct"
+        ],
+        [
+          "Data Analyst",
+          "related"
+        ]
+      ],
+      "appropriate": [
+        "SQL",
+        "Python",
+        "Excel",
+        "Power BI",
+        "CAD",
+        "CATIA",
+        "SolidWorks",
+        "Tableau",
+        "PostgreSQL"
+      ]
+    }
+  },
+  "jobs": [
+    {
+      "id": "data-a",
+      "title": "Junior Data Analyst",
+      "sections": {
+        "Responsibilities": "Analyze sales data and build reporting dashboards.",
+        "Requirements": "SQL, Python, Excel and Power BI are required.",
+        "Preferred": "Tableau is a plus.",
+        "About the company": "Our customers use CAD, CATIA, CISSP and SolidWorks."
+      },
+      "description": "Responsibilities\nAnalyze sales data and build reporting dashboards.\nRequirements\nSQL, Python, Excel and Power BI are required.\nPreferred\nTableau is a plus.\nAbout the company\nOur customers use CAD, CATIA, CISSP and SolidWorks.",
+      "extracted_skills": [
+        {
+          "name": "SQL",
+          "category": "development_tool",
+          "requirement_type": "required",
+          "evidence_text": "SQL, Python, Excel and Power BI are required."
+        },
+        {
+          "name": "Python",
+          "category": "development_tool",
+          "requirement_type": "required",
+          "evidence_text": "SQL, Python, Excel and Power BI are required."
+        },
+        {
+          "name": "Excel",
+          "category": "development_tool",
+          "requirement_type": "required",
+          "evidence_text": "SQL, Python, Excel and Power BI are required."
+        },
+        {
+          "name": "Power BI",
+          "category": "development_tool",
+          "requirement_type": "required",
+          "evidence_text": "SQL, Python, Excel and Power BI are required."
+        },
+        {
+          "name": "Tableau",
+          "category": "development_tool",
+          "requirement_type": "preferred",
+          "evidence_text": "Tableau is a plus."
+        },
+        {
+          "name": "CAD",
+          "category": "development_tool",
+          "requirement_type": "required",
+          "evidence_text": "Our customers use CAD, CATIA, CISSP and SolidWorks."
+        },
+        {
+          "name": "CATIA",
+          "category": "development_tool",
+          "requirement_type": "required",
+          "evidence_text": "Our customers use CAD, CATIA, CISSP and SolidWorks."
+        },
+        {
+          "name": "CISSP",
+          "category": "development_tool",
+          "requirement_type": "required",
+          "evidence_text": "Our customers use CAD, CATIA, CISSP and SolidWorks."
+        },
+        {
+          "name": "SolidWorks",
+          "category": "development_tool",
+          "requirement_type": "required",
+          "evidence_text": "Our customers use CAD, CATIA, CISSP and SolidWorks."
+        }
+      ],
+      "expected": {
+        "data": {
+          "include": true,
+          "reason": "일반 지표 분석 업무와 필수/우대 기술. 회사 고객의 도구는 추천 근거가 아님"
+        },
+        "mechanical": {
+          "include": false,
+          "reason": "목표 직무/명시한 제조 도메인의 핵심 업무와 다름"
+        },
+        "security": {
+          "include": false,
+          "reason": "목표 직무/명시한 제조 도메인의 핵심 업무와 다름"
+        },
+        "manufacturing": {
+          "include": false,
+          "reason": "목표 직무/명시한 제조 도메인의 핵심 업무와 다름"
+        }
+      }
+    },
+    {
+      "id": "data-b",
+      "title": "Data Analyst",
+      "sections": {
+        "Responsibilities": "Analyze customer metrics and build dashboards.",
+        "Requirements": "SQL, Python, Excel and PowerBI are required.",
+        "Preferred": "",
+        "About the company": ""
+      },
+      "description": "Responsibilities\nAnalyze customer metrics and build dashboards.\nRequirements\nSQL, Python, Excel and PowerBI are required.",
+      "extracted_skills": [
+        {
+          "name": "SQL",
+          "category": "development_tool",
+          "requirement_type": "required",
+          "evidence_text": "SQL, Python, Excel and PowerBI are required."
+        },
+        {
+          "name": "Python",
+          "category": "development_tool",
+          "requirement_type": "required",
+          "evidence_text": "SQL, Python, Excel and PowerBI are required."
+        },
+        {
+          "name": "Excel",
+          "category": "development_tool",
+          "requirement_type": "required",
+          "evidence_text": "SQL, Python, Excel and PowerBI are required."
+        },
+        {
+          "name": "PowerBI",
+          "category": "development_tool",
+          "requirement_type": "required",
+          "evidence_text": "SQL, Python, Excel and PowerBI are required."
+        }
+      ],
+      "expected": {
+        "data": {
+          "include": true,
+          "reason": "일반 분석 필수 도구; PowerBI는 Power BI와 동일"
+        },
+        "mechanical": {
+          "include": false,
+          "reason": "목표 직무/명시한 제조 도메인의 핵심 업무와 다름"
+        },
+        "security": {
+          "include": false,
+          "reason": "목표 직무/명시한 제조 도메인의 핵심 업무와 다름"
+        },
+        "manufacturing": {
+          "include": false,
+          "reason": "목표 직무/명시한 제조 도메인의 핵심 업무와 다름"
+        }
+      }
+    },
+    {
+      "id": "data-c",
+      "title": "BI Analyst",
+      "sections": {
+        "Responsibilities": "Build reporting dashboards and analyze revenue data.",
+        "Requirements": "SQL, Excel, Power BI and PostgreSQL are required.",
+        "Preferred": "Python is a plus.",
+        "About the company": ""
+      },
+      "description": "Responsibilities\nBuild reporting dashboards and analyze revenue data.\nRequirements\nSQL, Excel, Power BI and PostgreSQL are required.\nPreferred\nPython is a plus.",
+      "extracted_skills": [
+        {
+          "name": "SQL",
+          "category": "development_tool",
+          "requirement_type": "required",
+          "evidence_text": "SQL, Excel, Power BI and PostgreSQL are required."
+        },
+        {
+          "name": "Excel",
+          "category": "development_tool",
+          "requirement_type": "required",
+          "evidence_text": "SQL, Excel, Power BI and PostgreSQL are required."
+        },
+        {
+          "name": "Power BI",
+          "category": "development_tool",
+          "requirement_type": "required",
+          "evidence_text": "SQL, Excel, Power BI and PostgreSQL are required."
+        },
+        {
+          "name": "PostgreSQL",
+          "category": "development_tool",
+          "requirement_type": "required",
+          "evidence_text": "SQL, Excel, Power BI and PostgreSQL are required."
+        },
+        {
+          "name": "Python",
+          "category": "development_tool",
+          "requirement_type": "preferred",
+          "evidence_text": "Python is a plus."
+        }
+      ],
+      "expected": {
+        "data": {
+          "include": true,
+          "reason": "BI 분석 동의 직무이며 PostgreSQL과 SQL은 구분"
+        },
+        "mechanical": {
+          "include": false,
+          "reason": "목표 직무/명시한 제조 도메인의 핵심 업무와 다름"
+        },
+        "security": {
+          "include": false,
+          "reason": "목표 직무/명시한 제조 도메인의 핵심 업무와 다름"
+        },
+        "manufacturing": {
+          "include": false,
+          "reason": "목표 직무/명시한 제조 도메인의 핵심 업무와 다름"
+        }
+      }
+    },
+    {
+      "id": "mixed-mechanical",
+      "title": "Data Analyst / Mechanical Design Engineer",
+      "sections": {
+        "Responsibilities": "Design mechanical parts and assemblies. Create 3D models for tooling.",
+        "Requirements": "CAD, CATIA, SolidWorks, AutoCAD and GD&T are required.",
+        "Preferred": "",
+        "About the company": ""
+      },
+      "description": "Responsibilities\nDesign mechanical parts and assemblies. Create 3D models for tooling.\nRequirements\nCAD, CATIA, SolidWorks, AutoCAD and GD&T are required.",
+      "extracted_skills": [
+        {
+          "name": "CAD",
+          "category": "development_tool",
+          "requirement_type": "required",
+          "evidence_text": "CAD, CATIA, SolidWorks, AutoCAD and GD&T are required."
+        },
+        {
+          "name": "CATIA",
+          "category": "development_tool",
+          "requirement_type": "required",
+          "evidence_text": "CAD, CATIA, SolidWorks, AutoCAD and GD&T are required."
+        },
+        {
+          "name": "SolidWorks",
+          "category": "development_tool",
+          "requirement_type": "required",
+          "evidence_text": "CAD, CATIA, SolidWorks, AutoCAD and GD&T are required."
+        },
+        {
+          "name": "AutoCAD",
+          "category": "development_tool",
+          "requirement_type": "required",
+          "evidence_text": "CAD, CATIA, SolidWorks, AutoCAD and GD&T are required."
+        },
+        {
+          "name": "GD&T",
+          "category": "development_tool",
+          "requirement_type": "required",
+          "evidence_text": "CAD, CATIA, SolidWorks, AutoCAD and GD&T are required."
+        }
+      ],
+      "expected": {
+        "data": {
+          "include": false,
+          "reason": "목표 직무/명시한 제조 도메인의 핵심 업무와 다름"
+        },
+        "mechanical": {
+          "include": true,
+          "reason": "제목의 Data Analyst와 달리 핵심 업무는 기계설계뿐"
+        },
+        "security": {
+          "include": false,
+          "reason": "목표 직무/명시한 제조 도메인의 핵심 업무와 다름"
+        },
+        "manufacturing": {
+          "include": false,
+          "reason": "목표 직무/명시한 제조 도메인의 핵심 업무와 다름"
+        }
+      }
+    },
+    {
+      "id": "mechanical",
+      "title": "Mechanical Design Engineer",
+      "sections": {
+        "Responsibilities": "Design mechanical parts and assemblies.",
+        "Requirements": "CAD, CATIA, SolidWorks, AutoCAD and GD&T are required.",
+        "Preferred": "",
+        "About the company": ""
+      },
+      "description": "Responsibilities\nDesign mechanical parts and assemblies.\nRequirements\nCAD, CATIA, SolidWorks, AutoCAD and GD&T are required.",
+      "extracted_skills": [
+        {
+          "name": "CAD",
+          "category": "development_tool",
+          "requirement_type": "required",
+          "evidence_text": "CAD, CATIA, SolidWorks, AutoCAD and GD&T are required."
+        },
+        {
+          "name": "CATIA",
+          "category": "development_tool",
+          "requirement_type": "required",
+          "evidence_text": "CAD, CATIA, SolidWorks, AutoCAD and GD&T are required."
+        },
+        {
+          "name": "SolidWorks",
+          "category": "development_tool",
+          "requirement_type": "required",
+          "evidence_text": "CAD, CATIA, SolidWorks, AutoCAD and GD&T are required."
+        },
+        {
+          "name": "AutoCAD",
+          "category": "development_tool",
+          "requirement_type": "required",
+          "evidence_text": "CAD, CATIA, SolidWorks, AutoCAD and GD&T are required."
+        },
+        {
+          "name": "GD&T",
+          "category": "development_tool",
+          "requirement_type": "required",
+          "evidence_text": "CAD, CATIA, SolidWorks, AutoCAD and GD&T are required."
+        }
+      ],
+      "expected": {
+        "data": {
+          "include": false,
+          "reason": "목표 직무/명시한 제조 도메인의 핵심 업무와 다름"
+        },
+        "mechanical": {
+          "include": true,
+          "reason": "순수 기계설계; CAD 계열은 정당한 직무 기술"
+        },
+        "security": {
+          "include": false,
+          "reason": "목표 직무/명시한 제조 도메인의 핵심 업무와 다름"
+        },
+        "manufacturing": {
+          "include": false,
+          "reason": "목표 직무/명시한 제조 도메인의 핵심 업무와 다름"
+        }
+      }
+    },
+    {
+      "id": "cad",
+      "title": "CAD Designer",
+      "sections": {
+        "Responsibilities": "Create 3D models and design mechanical assemblies.",
+        "Requirements": "CAD and SolidWorks are required.",
+        "Preferred": "CATIA is a plus.",
+        "About the company": ""
+      },
+      "description": "Responsibilities\nCreate 3D models and design mechanical assemblies.\nRequirements\nCAD and SolidWorks are required.\nPreferred\nCATIA is a plus.",
+      "extracted_skills": [
+        {
+          "name": "CAD",
+          "category": "development_tool",
+          "requirement_type": "required",
+          "evidence_text": "CAD and SolidWorks are required."
+        },
+        {
+          "name": "SolidWorks",
+          "category": "development_tool",
+          "requirement_type": "required",
+          "evidence_text": "CAD and SolidWorks are required."
+        },
+        {
+          "name": "CATIA",
+          "category": "development_tool",
+          "requirement_type": "preferred",
+          "evidence_text": "CATIA is a plus."
+        }
+      ],
+      "expected": {
+        "data": {
+          "include": false,
+          "reason": "목표 직무/명시한 제조 도메인의 핵심 업무와 다름"
+        },
+        "mechanical": {
+          "include": true,
+          "reason": "설계 동의 직무; 우대 요구를 필수로 승격하지 않음"
+        },
+        "security": {
+          "include": false,
+          "reason": "목표 직무/명시한 제조 도메인의 핵심 업무와 다름"
+        },
+        "manufacturing": {
+          "include": false,
+          "reason": "목표 직무/명시한 제조 도메인의 핵심 업무와 다름"
+        }
+      }
+    },
+    {
+      "id": "mixed-security",
+      "title": "Security Data Analyst / Security Analyst",
+      "sections": {
+        "Responsibilities": "Investigate security alerts and respond to security incidents.",
+        "Requirements": "SIEM, Splunk, CISSP, Python and SQL are required.",
+        "Preferred": "",
+        "About the company": ""
+      },
+      "description": "Responsibilities\nInvestigate security alerts and respond to security incidents.\nRequirements\nSIEM, Splunk, CISSP, Python and SQL are required.",
+      "extracted_skills": [
+        {
+          "name": "SIEM",
+          "category": "development_tool",
+          "requirement_type": "required",
+          "evidence_text": "SIEM, Splunk, CISSP, Python and SQL are required."
+        },
+        {
+          "name": "Splunk",
+          "category": "development_tool",
+          "requirement_type": "required",
+          "evidence_text": "SIEM, Splunk, CISSP, Python and SQL are required."
+        },
+        {
+          "name": "CISSP",
+          "category": "development_tool",
+          "requirement_type": "required",
+          "evidence_text": "SIEM, Splunk, CISSP, Python and SQL are required."
+        },
+        {
+          "name": "Python",
+          "category": "development_tool",
+          "requirement_type": "required",
+          "evidence_text": "SIEM, Splunk, CISSP, Python and SQL are required."
+        },
+        {
+          "name": "SQL",
+          "category": "development_tool",
+          "requirement_type": "required",
+          "evidence_text": "SIEM, Splunk, CISSP, Python and SQL are required."
+        }
+      ],
+      "expected": {
+        "data": {
+          "include": false,
+          "reason": "목표 직무/명시한 제조 도메인의 핵심 업무와 다름"
+        },
+        "mechanical": {
+          "include": false,
+          "reason": "목표 직무/명시한 제조 도메인의 핵심 업무와 다름"
+        },
+        "security": {
+          "include": true,
+          "reason": "제목에 Data Analyst가 있으나 핵심 업무는 보안 관제·사고 대응"
+        },
+        "manufacturing": {
+          "include": false,
+          "reason": "목표 직무/명시한 제조 도메인의 핵심 업무와 다름"
+        }
+      }
+    },
+    {
+      "id": "security",
+      "title": "Security Analyst",
+      "sections": {
+        "Responsibilities": "Investigate security alerts and respond to security incidents.",
+        "Requirements": "SIEM, Splunk and CISSP are required.",
+        "Preferred": "Python and SQL are preferred.",
+        "About the company": ""
+      },
+      "description": "Responsibilities\nInvestigate security alerts and respond to security incidents.\nRequirements\nSIEM, Splunk and CISSP are required.\nPreferred\nPython and SQL are preferred.",
+      "extracted_skills": [
+        {
+          "name": "SIEM",
+          "category": "development_tool",
+          "requirement_type": "required",
+          "evidence_text": "SIEM, Splunk and CISSP are required."
+        },
+        {
+          "name": "Splunk",
+          "category": "development_tool",
+          "requirement_type": "required",
+          "evidence_text": "SIEM, Splunk and CISSP are required."
+        },
+        {
+          "name": "CISSP",
+          "category": "development_tool",
+          "requirement_type": "required",
+          "evidence_text": "SIEM, Splunk and CISSP are required."
+        },
+        {
+          "name": "Python",
+          "category": "development_tool",
+          "requirement_type": "preferred",
+          "evidence_text": "Python and SQL are preferred."
+        },
+        {
+          "name": "SQL",
+          "category": "development_tool",
+          "requirement_type": "preferred",
+          "evidence_text": "Python and SQL are preferred."
+        }
+      ],
+      "expected": {
+        "data": {
+          "include": false,
+          "reason": "목표 직무/명시한 제조 도메인의 핵심 업무와 다름"
+        },
+        "mechanical": {
+          "include": false,
+          "reason": "목표 직무/명시한 제조 도메인의 핵심 업무와 다름"
+        },
+        "security": {
+          "include": true,
+          "reason": "순수 보안 직무; CISSP 등 근거 보존"
+        },
+        "manufacturing": {
+          "include": false,
+          "reason": "목표 직무/명시한 제조 도메인의 핵심 업무와 다름"
+        }
+      }
+    },
+    {
+      "id": "soc",
+      "title": "SOC Analyst",
+      "sections": {
+        "Responsibilities": "Investigate security incidents and perform threat hunting.",
+        "Requirements": "SIEM and Splunk are required.",
+        "Preferred": "CISSP is preferred.",
+        "About the company": ""
+      },
+      "description": "Responsibilities\nInvestigate security incidents and perform threat hunting.\nRequirements\nSIEM and Splunk are required.\nPreferred\nCISSP is preferred.",
+      "extracted_skills": [
+        {
+          "name": "SIEM",
+          "category": "development_tool",
+          "requirement_type": "required",
+          "evidence_text": "SIEM and Splunk are required."
+        },
+        {
+          "name": "Splunk",
+          "category": "development_tool",
+          "requirement_type": "required",
+          "evidence_text": "SIEM and Splunk are required."
+        },
+        {
+          "name": "CISSP",
+          "category": "development_tool",
+          "requirement_type": "preferred",
+          "evidence_text": "CISSP is preferred."
+        }
+      ],
+      "expected": {
+        "data": {
+          "include": false,
+          "reason": "목표 직무/명시한 제조 도메인의 핵심 업무와 다름"
+        },
+        "mechanical": {
+          "include": false,
+          "reason": "목표 직무/명시한 제조 도메인의 핵심 업무와 다름"
+        },
+        "security": {
+          "include": true,
+          "reason": "보안 관제 동의 직무"
+        },
+        "manufacturing": {
+          "include": false,
+          "reason": "목표 직무/명시한 제조 도메인의 핵심 업무와 다름"
+        }
+      }
+    },
+    {
+      "id": "manufacturing-a",
+      "title": "Manufacturing Data Analyst",
+      "sections": {
+        "Responsibilities": "Analyze manufacturing defect data and join CAD attributes to quality metrics.",
+        "Requirements": "SQL, Python, Excel and CAD are required.",
+        "Preferred": "CATIA and SolidWorks are preferred for reading design metadata.",
+        "About the company": ""
+      },
+      "description": "Responsibilities\nAnalyze manufacturing defect data and join CAD attributes to quality metrics.\nRequirements\nSQL, Python, Excel and CAD are required.\nPreferred\nCATIA and SolidWorks are preferred for reading design metadata.",
+      "extracted_skills": [
+        {
+          "name": "SQL",
+          "category": "development_tool",
+          "requirement_type": "required",
+          "evidence_text": "SQL, Python, Excel and CAD are required."
+        },
+        {
+          "name": "Python",
+          "category": "development_tool",
+          "requirement_type": "required",
+          "evidence_text": "SQL, Python, Excel and CAD are required."
+        },
+        {
+          "name": "Excel",
+          "category": "development_tool",
+          "requirement_type": "required",
+          "evidence_text": "SQL, Python, Excel and CAD are required."
+        },
+        {
+          "name": "CAD",
+          "category": "development_tool",
+          "requirement_type": "required",
+          "evidence_text": "SQL, Python, Excel and CAD are required."
+        },
+        {
+          "name": "CATIA",
+          "category": "development_tool",
+          "requirement_type": "preferred",
+          "evidence_text": "CATIA and SolidWorks are preferred for reading design metadata."
+        },
+        {
+          "name": "SolidWorks",
+          "category": "development_tool",
+          "requirement_type": "preferred",
+          "evidence_text": "CATIA and SolidWorks are preferred for reading design metadata."
+        }
+      ],
+      "expected": {
+        "data": {
+          "include": true,
+          "reason": "실제 분석 업무. 제조 목표에서는 설계 메타데이터의 특화 기술도 타당"
+        },
+        "mechanical": {
+          "include": false,
+          "reason": "목표 직무/명시한 제조 도메인의 핵심 업무와 다름"
+        },
+        "security": {
+          "include": false,
+          "reason": "목표 직무/명시한 제조 도메인의 핵심 업무와 다름"
+        },
+        "manufacturing": {
+          "include": true,
+          "reason": "실제 분석 업무. 제조 목표에서는 설계 메타데이터의 특화 기술도 타당"
+        }
+      }
+    },
+    {
+      "id": "manufacturing-b",
+      "title": "Data Analyst - Manufacturing",
+      "sections": {
+        "Responsibilities": "Analyze manufacturing production data and build dashboards.",
+        "Requirements": "SQL, Python and PowerBI are required.",
+        "Preferred": "CAD is preferred for interpreting part attributes.",
+        "About the company": ""
+      },
+      "description": "Responsibilities\nAnalyze manufacturing production data and build dashboards.\nRequirements\nSQL, Python and PowerBI are required.\nPreferred\nCAD is preferred for interpreting part attributes.",
+      "extracted_skills": [
+        {
+          "name": "SQL",
+          "category": "development_tool",
+          "requirement_type": "required",
+          "evidence_text": "SQL, Python and PowerBI are required."
+        },
+        {
+          "name": "Python",
+          "category": "development_tool",
+          "requirement_type": "required",
+          "evidence_text": "SQL, Python and PowerBI are required."
+        },
+        {
+          "name": "PowerBI",
+          "category": "development_tool",
+          "requirement_type": "required",
+          "evidence_text": "SQL, Python and PowerBI are required."
+        },
+        {
+          "name": "CAD",
+          "category": "development_tool",
+          "requirement_type": "preferred",
+          "evidence_text": "CAD is preferred for interpreting part attributes."
+        }
+      ],
+      "expected": {
+        "data": {
+          "include": true,
+          "reason": "제조 도메인의 데이터 분석이며 CAD는 명시적 우대"
+        },
+        "mechanical": {
+          "include": false,
+          "reason": "목표 직무/명시한 제조 도메인의 핵심 업무와 다름"
+        },
+        "security": {
+          "include": false,
+          "reason": "목표 직무/명시한 제조 도메인의 핵심 업무와 다름"
+        },
+        "manufacturing": {
+          "include": true,
+          "reason": "제조 도메인의 데이터 분석이며 CAD는 명시적 우대"
+        }
+      }
+    },
+    {
+      "id": "sales",
+      "title": "Sales Manager",
+      "sections": {
+        "Responsibilities": "Sell analytics software to customers.",
+        "Requirements": "Excel is required.",
+        "Preferred": "",
+        "About the company": ""
+      },
+      "description": "Responsibilities\nSell analytics software to customers.\nRequirements\nExcel is required.",
+      "extracted_skills": [
+        {
+          "name": "Excel",
+          "category": "development_tool",
+          "requirement_type": "required",
+          "evidence_text": "Excel is required."
+        }
+      ],
+      "expected": {
+        "data": {
+          "include": false,
+          "reason": "목표 직무/명시한 제조 도메인의 핵심 업무와 다름"
+        },
+        "mechanical": {
+          "include": false,
+          "reason": "목표 직무/명시한 제조 도메인의 핵심 업무와 다름"
+        },
+        "security": {
+          "include": false,
+          "reason": "목표 직무/명시한 제조 도메인의 핵심 업무와 다름"
+        },
+        "manufacturing": {
+          "include": false,
+          "reason": "목표 직무/명시한 제조 도메인의 핵심 업무와 다름"
+        }
+      }
+    }
+  ],
+  "duplicate_ids": [
+    "data-a",
+    "manufacturing-a"
+  ],
+  "course_catalog": [
+    {
+      "course_id": "sql-intro",
+      "course_name": "SQL 입문",
+      "description_text": "SQL 조회 기초",
+      "is_completed": false
+    },
+    {
+      "course_id": "sql-advanced",
+      "course_name": "SQL 분석 프로젝트",
+      "description_text": "SQL 분석 검증",
+      "is_completed": false
+    },
+    {
+      "course_id": "completed",
+      "course_name": "이수한 데이터베이스",
+      "description_text": "SQL 조회",
+      "is_completed": true
+    },
+    {
+      "course_id": "equivalent",
+      "course_name": "검증된 대체 데이터베이스",
+      "description_text": "SQL 조회",
+      "is_completed": false,
+      "equivalent_completed": true
+    },
+    {
+      "course_id": "python-project",
+      "course_name": "Python 분석 프로젝트",
+      "description_text": "Python 데이터 분석",
+      "is_completed": false
+    }
+  ]
+}

@@ -1,0 +1,274 @@
+{
+  "scope": "Synthetic fixed English source text and fixed model responses; not production accuracy.",
+  "roles": {
+    "data": {
+      "selected_count": 5,
+      "selected_ids": [
+        "data-a",
+        "data-b",
+        "data-c",
+        "manufacturing-a",
+        "manufacturing-b"
+      ],
+      "expected_count": 5,
+      "false_positive_ids": [],
+      "false_negative_ids": [],
+      "top5": [
+        "SQL",
+        "Python",
+        "Excel",
+        "Power BI",
+        "PostgreSQL"
+      ],
+      "top5_appropriate": 5,
+      "top5_denominator": 5,
+      "duplicate_names": 0,
+      "all_skills": [
+        "SQL",
+        "Python",
+        "Excel",
+        "Power BI",
+        "PostgreSQL",
+        "Tableau",
+        "CAD",
+        "CATIA",
+        "SolidWorks",
+        "CISSP"
+      ],
+      "core_skills": [
+        "SQL",
+        "Python",
+        "Excel",
+        "Power BI",
+        "PostgreSQL",
+        "Tableau",
+        "CAD",
+        "CATIA",
+        "SolidWorks"
+      ],
+      "counts": {
+        "SQL": 5,
+        "Python": 5,
+        "Excel": 4,
+        "Power BI": 4,
+        "PostgreSQL": 1,
+        "Tableau": 1,
+        "CAD": 3,
+        "CATIA": 2,
+        "SolidWorks": 2,
+        "CISSP": 1
+      },
+      "sample_notice": "목표 직무·도메인과 원문 조건을 통과한 공고는 5개입니다. 요청한 20개보다 적으며 다른 직무로 채우지 않았습니다. 작은 해외 원격근무 표본입니다."
+    },
+    "mechanical": {
+      "selected_count": 3,
+      "selected_ids": [
+        "cad",
+        "mechanical",
+        "mixed-mechanical"
+      ],
+      "expected_count": 3,
+      "false_positive_ids": [],
+      "false_negative_ids": [],
+      "top5": [
+        "CAD",
+        "SolidWorks",
+        "CATIA",
+        "AutoCAD",
+        "GD&T"
+      ],
+      "top5_appropriate": 5,
+      "top5_denominator": 5,
+      "duplicate_names": 0,
+      "all_skills": [
+        "CAD",
+        "SolidWorks",
+        "CATIA",
+        "AutoCAD",
+        "GD&T"
+      ],
+      "core_skills": [
+        "CAD",
+        "SolidWorks",
+        "CATIA",
+        "AutoCAD",
+        "GD&T"
+      ],
+      "counts": {
+        "CAD": 3,
+        "SolidWorks": 3,
+        "CATIA": 3,
+        "AutoCAD": 2,
+        "GD&T": 2
+      },
+      "sample_notice": "목표 직무·도메인과 원문 조건을 통과한 공고는 3개입니다. 요청한 20개보다 적으며 다른 직무로 채우지 않았습니다. 작은 해외 원격근무 표본입니다."
+    },
+    "security": {
+      "selected_count": 3,
+      "selected_ids": [
+        "mixed-security",
+        "security",
+        "soc"
+      ],
+      "expected_count": 3,
+      "false_positive_ids": [],
+      "false_negative_ids": [],
+      "top5": [
+        "SIEM",
+        "Splunk",
+        "CISSP",
+        "Python",
+        "SQL"
+      ],
+      "top5_appropriate": 5,
+      "top5_denominator": 5,
+      "duplicate_names": 0,
+      "all_skills": [
+        "SIEM",
+        "Splunk",
+        "CISSP",
+        "Python",
+        "SQL"
+      ],
+      "core_skills": [
+        "SIEM",
+        "Splunk",
+        "CISSP",
+        "Python",
+        "SQL"
+      ],
+      "counts": {
+        "SIEM": 3,
+        "Splunk": 3,
+        "CISSP": 3,
+        "Python": 2,
+        "SQL": 2
+      },
+      "sample_notice": "목표 직무·도메인과 원문 조건을 통과한 공고는 3개입니다. 요청한 20개보다 적으며 다른 직무로 채우지 않았습니다. 작은 해외 원격근무 표본입니다."
+    },
+    "manufacturing": {
+      "selected_count": 2,
+      "selected_ids": [
+        "manufacturing-a",
+        "manufacturing-b"
+      ],
+      "expected_count": 2,
+      "false_positive_ids": [],
+      "false_negative_ids": [],
+      "top5": [
+        "Python",
+        "SQL",
+        "CAD",
+        "Excel",
+        "Power BI"
+      ],
+      "top5_appropriate": 5,
+      "top5_denominator": 5,
+      "duplicate_names": 0,
+      "all_skills": [
+        "Python",
+        "SQL",
+        "CAD",
+        "Excel",
+        "Power BI",
+        "CATIA",
+        "SolidWorks"
+      ],
+      "core_skills": [
+        "Python",
+        "SQL",
+        "CAD",
+        "Excel",
+        "Power BI",
+        "CATIA",
+        "SolidWorks"
+      ],
+      "counts": {
+        "Python": 2,
+        "SQL": 2,
+        "CAD": 2,
+        "Excel": 1,
+        "Power BI": 1,
+        "CATIA": 1,
+        "SolidWorks": 1
+      },
+      "sample_notice": "목표 직무·도메인과 원문 조건을 통과한 공고는 2개입니다. 요청한 20개보다 적으며 다른 직무로 채우지 않았습니다. 작은 해외 원격근무 표본입니다."
+    }
+  },
+  "personalization": {
+    "absent": {
+      "status": "not_verified",
+      "action_type": "verify_experience",
+      "activity": "SQL 경험 확인 자료를 정리한다.",
+      "courses": [
+        "sql-intro"
+      ],
+      "eligible_courses": [
+        "sql-intro",
+        "sql-advanced",
+        "python-project"
+      ],
+      "focused_skills": [
+        "SQL",
+        "Python",
+        "Excel"
+      ]
+    },
+    "document_only": {
+      "status": "document_supported",
+      "action_type": "verify_experience",
+      "activity": "SQL 경험 확인 자료를 정리한다.",
+      "courses": [
+        "sql-intro"
+      ],
+      "eligible_courses": [
+        "sql-intro",
+        "sql-advanced",
+        "python-project"
+      ],
+      "focused_skills": [
+        "SQL",
+        "Python",
+        "Excel"
+      ]
+    },
+    "confirmed": {
+      "status": "confirmed_experience",
+      "action_type": "deepen",
+      "activity": "SQL 분석 결과를 검증한다.",
+      "courses": [
+        "sql-advanced"
+      ],
+      "eligible_courses": [
+        "sql-intro",
+        "sql-advanced",
+        "python-project"
+      ],
+      "focused_skills": [
+        "SQL",
+        "Python",
+        "Excel",
+        "Power BI"
+      ]
+    },
+    "no_experience": {
+      "status": "no_experience",
+      "action_type": "learn",
+      "activity": "SQL 조회 예제를 작성한다.",
+      "courses": [
+        "sql-intro"
+      ],
+      "eligible_courses": [
+        "sql-intro",
+        "sql-advanced",
+        "python-project"
+      ],
+      "focused_skills": [
+        "SQL",
+        "Python",
+        "Excel",
+        "Power BI"
+      ]
+    }
+  }
+}

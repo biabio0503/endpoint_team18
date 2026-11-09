@@ -1,4 +1,16 @@
 // Tab visits/focus/reload only read saved evidence. Paid work requires run:true.
+export function orderedSkills(data) {
+ if (data.analysis_version !== 'job-skills-v2') return data.skills || [];
+ const order = new Map((data.comparison?.comparisons || []).map((item, index) => [item.skill_name, index]));
+ return [...(data.skills || [])].sort((a, b) => (order.get(a.name) ?? Infinity) - (order.get(b.name) ?? Infinity));
+}
+
+export function recommendationScope(result, name) {
+ const included = result.generation_scope?.included_skills;
+ const actions = (result.roadmap || []).filter(step => (step.related_skills || step.skill_targets?.map(t => t.skill_name) || []).includes(name));
+ return { included: included ? included.includes(name) : null, activities: actions.length };
+}
+
 export function createJobSkillLoader({ apiRequest, resolvePlanId }) {
  const pending = new Map();
  const conflict = () => Object.assign(new Error('분석 중 입력이 변경되었습니다. 최신 내용을 불러와 주세요.'), { status: 409 });

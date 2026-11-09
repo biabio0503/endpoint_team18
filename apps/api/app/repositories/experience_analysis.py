@@ -23,6 +23,10 @@ class AnalysisRepository:
         row = self.db.execute('SELECT * FROM job_skill_snapshots WHERE request_id=? AND basis_key=?', (rid, basis)).fetchone()
         return dict(row) if row else None
 
+    def job_history(self, rid):
+        return [dict(row) for row in self.db.execute(
+            'SELECT * FROM job_skill_snapshots WHERE request_id=? ORDER BY created_at DESC,snapshot_id DESC', (rid,))]
+
     def save_job(self, rid, basis, revision, result):
         # An explicit refresh replaces the snapshot ID and invalidates skill answers.
         self.db.execute('DELETE FROM job_skill_snapshots WHERE request_id=? AND basis_key=?', (rid, basis))

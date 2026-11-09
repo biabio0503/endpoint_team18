@@ -51,6 +51,8 @@ def generate(rid: str, ctx=Depends(owned_context), body=Depends(parse_body)):
     basis = read_basis(ctx, rid, request.expected_input_revision, serialize=True)
     if not (basis['profile']['career_goal'] or '').strip():
         raise Problem(422, 'goal_required', '진로 목표를 먼저 입력해 주세요.')
+    if basis.get('job_analysis_outdated'):
+        raise Problem(409, 'job_analysis_outdated', '이전 직무 분석 기준입니다. 직무 역량 비교에서 직무 분석 다시 실행 후 새 로드맵을 생성해 주세요. 저장 결과와 완료 기록은 유지됩니다.')
     limited = basis['generation_mode'] == 'limited_guidance'
     store = RoadmapRepository(db)
     if not request.refresh or limited:

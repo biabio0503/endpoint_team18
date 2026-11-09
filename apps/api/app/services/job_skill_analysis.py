@@ -6,7 +6,9 @@ import unicodedata
 from services.gemini import GeminiError
 from services.gemini_jobs import extract_job_skills, generate_job_keywords
 from services.himalayas import fetch_jobs_with_keywords
+from services.job_relevance import evidence_context
 
+ANALYSIS_VERSION = 'job-skills-v2'
 MAX_JOBS = 20
 BATCH_SIZE = 5
 MAX_DESCRIPTION_CHARS = 40000
@@ -32,6 +34,13 @@ TECHNOLOGIES = (
     ('Kubernetes', 'devops', ('K8s',)),
     ('Git', 'development_tool', ()),
     ('Excel', 'development_tool', ('Microsoft Excel', 'MS Excel')),
+    ('Power BI', 'data_ai', ('PowerBI', 'Microsoft Power BI', 'MS Power BI')),
+    ('Tableau', 'data_ai', ()),
+    ('CAD', 'development_tool', ()),
+    ('CATIA', 'development_tool', ()),
+    ('SolidWorks', 'development_tool', ('Solid Works',)),
+    ('AutoCAD', 'development_tool', ('Auto CAD',)),
+    ('CISSP', 'other', ()),
     ('PyTorch', 'data_ai', ('Py Torch',)),
     ('TensorFlow', 'data_ai', ('Tensor Flow',)),
     ('Spark', 'data_ai', ('Apache Spark',)),
@@ -50,7 +59,7 @@ ALIASES = {_key(alias): (name, category, (name,) + aliases)
 
 def normalize_skill(name, category):
     known = ALIASES.get(_key(name))
-    return (known[0], known[1]) if known else (' '.join(name.split()), category)
+    return (known[0], known[1]) if known else (' '.join(unicodedata.normalize('NFKC', name).split()), category)
 
 
 def _skill_in_quote(name, quote):
@@ -78,14 +87,24 @@ def verify_skills(job, extracted):
         raw = item.model_dump()
         start = job['description_text'].find(item.evidence_text)
         reason = 'evidence_not_in_source' if start < 0 else None
-        if not reason and item.category != 'technical_competency' and not _skill_in_quote(item.name, item.evidence_text):
+        if not reason and (item.category != 'technical_competency' or _key(item.name) in ALIASES) and not _skill_in_quote(item.name, item.evidence_text):
             reason = 'skill_not_in_evidence'
         if reason:
             rejected.append({'skill': raw, 'reason': reason})
             continue
         name, category = normalize_skill(item.name, item.category)
+        section, local, actionable = evidence_context(
+            job['description_text'], start, start + len(item.evidence_text),
+            lambda clause: _skill_in_quote(name, clause) or (category == 'technical_competency' and _key(name) not in ALIASES))
+        kind = _requirement(item.requirement_type, local)
+        if not actionable:
+            kind = 'mentioned'
+        elif section in ('required', 'preferred'):
+            kind = _requirement(section, section + ': ' + local)
         verified.append({**raw, 'name': name, 'category': category,
-                         'requirement_type': _requirement(item.requirement_type, item.evidence_text),
+                         'requirement_type': kind, 'evidence_section': section,
+                         'recommendation_eligible': actionable,
+                         'relevance_reason': 'role_requirement_or_duty' if actionable else 'context_or_negated_requirement',
                          'model_requirement_type': item.requirement_type,
                          'evidence_start': start, 'evidence_end': start + len(item.evidence_text),
                          'evidence_verified': True})
@@ -97,10 +116,14 @@ def aggregate_skills(analyses):
     groups = {}
     for job in successful.values():
         for skill in job['verified_skills']:
-            key = _key(skill['name'])
-            group = groups.setdefault(key, {'name': skill['name'], 'category': skill['category'], 'jobs': {}, 'evidence': []})
+            name, category = normalize_skill(skill['name'], skill['category'])
+            key = _key(name)
+            group = groups.setdefault(key, {'name': name, 'category': category, 'jobs': {}, 'support': {}, 'evidence': []})
             group['jobs'].setdefault(job['job_id'], set()).add(skill['requirement_type'])
+            if skill.get('recommendation_eligible', True):
+                group['support'].setdefault(job['job_id'], set()).add(skill['requirement_type'])
             evidence = {key: skill[key] for key in ('requirement_type', 'evidence_text', 'evidence_start', 'evidence_end')}
+            evidence.update({k: skill[k] for k in ('evidence_section', 'recommendation_eligible', 'relevance_reason') if k in skill})
             evidence.update(job_id=job['job_id'], source_url=job['source_url'], title=job['title'],
                             match_type=job['match_type'], seniority_group=job['seniority_group'])
             if evidence not in group['evidence']:
@@ -108,10 +131,21 @@ def aggregate_skills(analyses):
     output = []
     for group in groups.values():
         jobs = group.pop('jobs')
+        support = group.pop('support')
         # Per-job counters are exclusive. Preserve all original statements in evidence.
         kinds = Counter(next(kind for kind in ('required', 'preferred', 'mentioned', 'unknown') if kind in values)
                         for values in jobs.values())
+        support_kinds = Counter(next(kind for kind in ('required', 'preferred', 'mentioned', 'unknown') if kind in values)
+                                for values in support.values())
         output.append({**group, 'mentioned_job_count': len(jobs),
+                       'recommendation_eligible': bool(support),
+                       'supporting_job_count': len(support),
+                       'supporting_direct_job_count': sum(successful[j]['match_type'] == 'direct' for j in support),
+                       'supporting_required_job_count': support_kinds['required'],
+                       'supporting_preferred_job_count': support_kinds['preferred'],
+                       'priority_reason': (f'직무 업무·요건 근거 {len(support)}개 독립 공고; 필수 {support_kinds["required"]}, 우대 {support_kinds["preferred"]}.'
+                                           if support else '회사 소개·주변 맥락 또는 부정된 요건만 확인되어 핵심 추천에서 제외합니다.'),
+                       'single_job_notice': '1개 독립 공고에서만 확인했습니다. 일반화하지 말고 원문과 요구 수준을 확인해 주세요.' if len(jobs) == 1 else None,
                        'required_job_count': kinds['required'], 'preferred_job_count': kinds['preferred'],
                        'mentioned_only_job_count': kinds['mentioned'], 'unknown_job_count': kinds['unknown'],
                        'mention_frequency': len(jobs) / len(successful),
@@ -119,13 +153,24 @@ def aggregate_skills(analyses):
                        'related_job_count': sum(successful[j]['match_type'] == 'related' for j in jobs),
                        'seniority_distribution': {level: sum(successful[j]['seniority_group'] == level for j in jobs)
                                                  for level in ('entry', 'mid', 'senior', 'unknown')}})
-    return sorted(output, key=lambda item: (-item['mentioned_job_count'], item['name'].casefold()))
+    return sorted(output, key=skill_priority)
+
+
+def skill_priority(item, status=None):
+    """Explainable lexicographic order, not an employability or mastery score."""
+    return (not item.get('recommendation_eligible', True),
+            -item.get('supporting_direct_job_count', item.get('direct_job_count', 0)),
+            -item.get('supporting_job_count', item.get('mentioned_job_count', 0)),
+            -item.get('supporting_required_job_count', item.get('required_job_count', 0)),
+            -item.get('supporting_preferred_job_count', item.get('preferred_job_count', 0)),
+            {'confirmed_experience': 0, 'no_experience': 1, 'document_supported': 2}.get(status, 3),
+            _key(item.get('name', item.get('skill_name', ''))))
 
 
 def analyze_job_skills(career_goal, target_role=None, limit=MAX_JOBS):
     if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= MAX_JOBS:
         raise ValueError('Analysis limit must be between 1 and 20')
-    result = {'status': 'error', 'career_goal': career_goal, 'target_role': target_role,
+    result = {'status': 'error', 'analysis_version': ANALYSIS_VERSION, 'career_goal': career_goal, 'target_role': target_role,
               'canonical_role': None, 'search_keywords': [], 'keyword_details': [],
               'source': 'Himalayas', 'source_url': 'https://himalayas.app', 'market_scope': 'global_remote',
               'retrieved_at': None, 'searches': [], 'selection_summary': None,
@@ -149,6 +194,9 @@ def analyze_job_skills(career_goal, target_role=None, limit=MAX_JOBS):
     for key in ('search_keywords', 'keyword_details', 'retrieved_at', 'searches', 'selection_summary'):
         result[key] = collection[key]
     result['collection_summary'] = {'status': collection['status'], 'selected_jobs': len(collection['jobs'])}
+    result['sample_notice'] = (f'목표 직무·도메인과 원문 조건을 통과한 공고는 {len(collection["jobs"])}개입니다. '
+                               f'요청한 {limit}개보다 적으며 다른 직무로 채우지 않았습니다. 작은 해외 원격근무 표본입니다.'
+                               if len(collection['jobs']) < limit else None)
     result['errors'].extend(dict(error, stage='collection') for error in collection['errors'])
     if not collection['jobs']:
         result['status'] = 'no_jobs' if collection['status'] == 'success' else 'error'
@@ -225,6 +273,8 @@ def analyze_job_skills(career_goal, target_role=None, limit=MAX_JOBS):
                                       skipped_jobs=counts['skipped'],
                                       rejected_skill_count=sum(len(r['rejected_skills']) for r in records.values()))
     result['skills'] = aggregate_skills(result['job_analyses'])
+    if counts['success'] < len(collection['jobs']):
+        result['sample_notice'] = (result['sample_notice'] or '') + f' 선정 공고 중 기술 분석에 성공한 표본은 {counts["success"]}개입니다. 빈도의 분모는 성공 공고만 사용합니다.'
     result['status'] = ('error' if not counts['success'] else 'partial'
                         if result['errors'] or counts['failed'] or counts['skipped'] else 'success')
     return result
