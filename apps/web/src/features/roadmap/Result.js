@@ -1,26 +1,113 @@
 'use client';
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import JobSkillAnalysis from './JobSkillAnalysis';
+import { Preparation, RoadmapSteps, CourseCandidates } from './RoadmapPanels';
 import { Heading } from '../../components/layout/Shell';
 import { apiRequest } from '../../lib/api/client';
 import { resolvePlanId } from '../../lib/api/session';
-const tabs = ['준비 상태','직무 역량 비교','실행 로드맵','수강 후보','공모전·대외활동'];
+
+const tabs = ['준비 상태', '직무 역량 비교', '실행 로드맵', '수강 후보', '공모전·대외활동'];
 export default function Result() {
- const [selected, setSelected] = useState(0);
- const [skillResult, setSkillResult] = useState(null);
- const [phase,setPhase]=useState('idle'), [message,setMessage]=useState(''), [result,setResult]=useState(null), [goal,setGoal]=useState('');
- function onKeyDown(e) { let next; if (e.key === 'ArrowRight') next = (selected + 1) % tabs.length; else if (e.key === 'ArrowLeft') next = (selected + tabs.length - 1) % tabs.length; else if (e.key === 'Home') next = 0; else if (e.key === 'End') next = tabs.length - 1; else return; e.preventDefault(); setSelected(next); document.getElementById(`tab-${next}`)?.focus(); }
- async function generate() {
-  setPhase('loading'); setMessage(''); setResult(null);
+ const [selected, setSelected] = useState(0), [plan, setPlan] = useState(null);
+ const [result, setResult] = useState(null), [history, setHistory] = useState([]);
+ const [phase, setPhase] = useState('loading'), [message, setMessage] = useState(''), [errorCode, setErrorCode] = useState('');
+ const [saving, setSaving] = useState(false), [skillResult, setSkillResult] = useState(null);
+ const epoch = useRef(0), selectedRun = useRef(''), generating = useRef(false);
+ const load = useCallback(async (runId = selectedRun.current) => {
+  const ticket = ++epoch.current;
   try {
-   const id=await resolvePlanId();
-   if(!id)throw new Error('계획이 없습니다. 기본 정보를 먼저 입력해 주세요.');
-   const data=await apiRequest(`/roadmap-inputs/${encodeURIComponent(id)}/course-recommendations`,{method:'POST',body:'{}'});
-   setGoal(data.career_goal || ''); setResult(data); setPhase('ready');
-  } catch(e){setMessage(e.message);setPhase('error');}
+   const id = await resolvePlanId();
+   if (!id) throw new Error('계획이 없습니다. 기본 정보를 먼저 입력해 주세요.');
+   const base = `/roadmap-inputs/${encodeURIComponent(id)}`;
+   const [input, data, runs] = await Promise.all([
+    apiRequest(base), apiRequest(runId ? `${base}/roadmaps/${encodeURIComponent(runId)}` : `${base}/roadmap`), apiRequest(`${base}/roadmaps`),
+   ]);
+   if (ticket !== epoch.current) return;
+   setPlan(input); setResult(data); setHistory(runs.runs || []); setPhase('ready');
+  } catch (error) {
+   if (ticket !== epoch.current) return;
+   setResult(null); setPlan(null); setHistory([]); setMessage(error.message); setErrorCode(error.code); setPhase('error');
+  }
+ }, []);
+ useEffect(() => { load(); return () => { epoch.current++; }; }, [load]);
+ useEffect(() => {
+  const refresh = () => { if (phase !== 'generating' && !saving) load(); };
+  window.addEventListener('focus', refresh);
+  return () => window.removeEventListener('focus', refresh);
+ }, [load, phase, saving]);
+ const pending = history.some(r => r.status === 'generating' && !r.generation_expired);
+ useEffect(() => {
+  if (!pending || phase === 'generating') return;
+  const timer = setInterval(() => load(), 5000);
+  return () => clearInterval(timer);
+ }, [pending, phase, load]);
+ const onSkillResult = useCallback(data => { setSkillResult(data); if (!generating.current) load(); }, [load]);
+ function changeTab(index) { setSelected(index); if (phase !== 'generating' && !saving) load(); }
+ function onKeyDown(e) {
+  let next;
+  if (e.key === 'ArrowRight') next = (selected + 1) % tabs.length;
+  else if (e.key === 'ArrowLeft') next = (selected + tabs.length - 1) % tabs.length;
+  else if (e.key === 'Home') next = 0;
+  else if (e.key === 'End') next = tabs.length - 1;
+  else return;
+  e.preventDefault(); changeTab(next); document.getElementById(`tab-${next}`)?.focus();
  }
- const displayedResult = selected === 1 ? skillResult : result;
- const displayedGoal = selected === 1 ? skillResult?.career_goal : goal;
- return <><div className="result-head"><Heading number="06" title="로드맵 결과" description="입력 기준에 따른 결과 화면입니다."/><Link href="/input/basic" className="button">입력 수정</Link></div><div className="result-summary"><div><span>진로 목표</span><strong>{displayedGoal || '결과 생성 전'}</strong></div><div><span>생성 당시 입력 기준</span><strong>{displayedResult ? `입력 버전 ${displayedResult.input_revision}` : '표시할 기준 없음'}</strong></div></div><div className="result-tabs" role="tablist" aria-label="결과 구성" onKeyDown={onKeyDown}>{tabs.map((tab,i)=><button key={tab} role="tab" id={`tab-${i}`} aria-controls="result-panel" aria-selected={selected===i} tabIndex={selected===i?0:-1} onClick={()=>setSelected(i)}>{tab}</button>)}</div><section id="result-panel" role="tabpanel" aria-labelledby={`tab-${selected}`} className={selected===1 ? "empty-state skill-panel" : "empty-state"}><JobSkillAnalysis active={selected===1} onResult={setSkillResult}/>{selected===1 ? null : selected===3 ? <><strong>수강 후보</strong><p>저장된 진로 목표와 과목 목록을 바탕으로 후보를 확인합니다.</p>{phase==='loading'&&<p role="status">과목을 분석하고 있습니다…</p>}{phase==='error'&&<p role="alert">{message}</p>}{result && (result.courses.length ? <ul>{result.courses.map(c=><li key={c.course_id}>{c.course_name}{c.category ? ` · ${c.category}` : ''}{c.recommended_year ? ` · ${c.recommended_year}학년` : ''}{c.recommended_term ? ` ${c.recommended_term}` : ''}</li>)}</ul> : <p role="status">{result.status==='empty_catalog' ? '선택한 과목 목록에 과목이 없습니다.' : '추천할 만한 과목이 없습니다.'}</p>)}{result?.review_status==='unconfirmed'&&<p className="field-help">이수 목록을 아직 확인하지 않아 선택하지 않은 과목의 이수 여부는 확정되지 않았습니다.</p>}<button className="primary" onClick={generate} disabled={phase==='loading'}>{result?'다시 분석':'수강 후보 분석'}</button></> : <><strong>아직 생성된 분석 결과가 없습니다</strong><p>{tabs[selected]} 결과가 생성되면 이곳에서 확인할 수 있습니다.</p><button className="primary" disabled>로드맵 생성</button></>}</section><footer className="footer"><span className="field-help">직무 기술 스택과 수강 후보를 확인할 수 있습니다. 나머지 결과 기능은 준비 중입니다.</span><Link className="button" href="/input/basic">입력 수정</Link></footer></>;
+ async function generate(refresh) {
+  if (!plan) return;
+  generating.current = true; ++epoch.current; setPhase('generating'); setMessage(''); setErrorCode('');
+  try {
+   const data = await apiRequest(`/roadmap-inputs/${plan.request_id}/roadmap`, {
+    method: 'POST', body: JSON.stringify({ expected_input_revision: plan.input_revision, refresh }),
+   });
+   selectedRun.current = ''; setResult(data); setSelected(2);
+   await load('');
+  } catch (error) { setMessage(error.message); setErrorCode(error.code); await load(); }
+  finally { generating.current = false; }
+ }
+ async function toggle(task) {
+  ++epoch.current; setSaving(true); setMessage('');
+  try {
+   const data = await apiRequest(`/roadmap-inputs/${plan.request_id}/roadmaps/${result.run_id}/tasks/${encodeURIComponent(task.task_id)}`, {
+    method: 'PATCH', body: JSON.stringify({ is_completed: !task.is_completed, expected_progress_version: task.progress_version }),
+   });
+   setResult(data);
+  } catch (error) { setMessage(error.message); setErrorCode(error.code); await load(result.run_id); }
+  finally { setSaving(false); }
+ }
+ const usable = result?.roadmap && !result.details_restricted;
+ const busy = phase === 'generating' || phase === 'loading' || saving;
+ const displayed = selected === 1 ? skillResult : result;
+ const displayedGoal = displayed?.career_goal || plan?.input?.career_goal;
+ return <>
+  <div className="result-head"><Heading number="06" title="로드맵 결과" description="입력 기준에 따른 결과 화면입니다."/><Link href="/input/basic" className="button">입력 수정</Link></div>
+  <div className="result-summary"><div><span>진로 목표</span><strong>{displayedGoal || '입력 확인 중'}</strong></div><div><span>생성 당시 입력 기준</span><strong>{displayed?.run_id || selected === 1 && displayed ? `입력 버전 ${displayed.input_revision}` : '표시할 기준 없음'}</strong></div></div>
+  <div className="result-tabs" role="tablist" aria-label="결과 구성" onKeyDown={onKeyDown}>{tabs.map((tab, i) => <button key={tab} role="tab" id={`tab-${i}`} aria-controls="result-panel" aria-selected={selected === i} tabIndex={selected === i ? 0 : -1} onClick={() => changeTab(i)}>{tab}</button>)}</div>
+  <section id="result-panel" role="tabpanel" aria-labelledby={`tab-${selected}`} className={selected === 4 ? 'empty-state' : 'empty-state skill-panel'}>
+   <JobSkillAnalysis active={selected === 1} onResult={onSkillResult}/>
+   {selected !== 1 && selected !== 4 && <>
+    <div className="doc-actions roadmap-controls"><button className="primary" onClick={() => generate(false)} disabled={busy || !plan}>로드맵 생성</button>
+     {history.some(r => ['success', 'partial'].includes(r.status)) && <button onClick={() => generate(true)} disabled={busy || !plan}>현재 입력으로 다시 분석</button>}
+     <button onClick={() => load()} disabled={busy}>저장 결과 새로고침</button>
+    </div>
+    <p className="field-help">로드맵 생성 시 확인된 분석 요약과 과목 정보를 Gemini에 전달합니다. 같은 기준의 저장 결과는 재사용하며, 다시 분석은 새 실행 이력을 만듭니다.</p>
+    {phase === 'loading' && <p role="status">저장된 결과를 불러오고 있습니다…</p>}
+    {phase === 'generating' && <p role="status">확인된 경험과 과목 정보를 바탕으로 로드맵을 생성하고 있습니다…</p>}
+    {message && <p role="alert">{message}</p>}
+    {(errorCode === 'needs_job_analysis' || result?.status === 'needs_job_analysis') && <div className="notice">저장된 직무 분석이 필요합니다. <button onClick={() => changeTab(1)}>직무 역량 비교에서 분석하기</button></div>}
+    {pending && phase !== 'generating' && <p role="status">진행 중인 생성 요청이 있습니다. 저장 결과를 확인하고 있습니다.</p>}
+    {result?.generation_expired && <p role="status">이전 생성 요청의 유효 시간이 지났습니다. 다시 생성할 수 있습니다.</p>}
+    {history.length > 0 && <label className="field">결과 이력<select aria-label="결과 이력" value={selectedRun.current} disabled={busy} onChange={e => { selectedRun.current = e.target.value; load(e.target.value); }}>
+     <option value="">최신 유효 결과 우선</option>{history.map(r => <option key={r.run_id} value={r.run_id}>{new Date(r.created_at).toLocaleString('ko-KR')} · 입력 {r.input_revision} · {r.status === 'failed' ? '생성 실패' : r.status === 'generating' ? '생성 중' : r.is_stale ? '이전 기준' : '현재 기준'}{r.details_restricted ? ' · 상세 제한' : ''}</option>)}
+    </select></label>}
+    {result?.run_id && <p className="field-help">{result.finished_at ? '생성 처리 완료' : '생성 요청'} 시각 {new Date(result.finished_at || result.created_at).toLocaleString('ko-KR')} · 입력 버전 {result.input_revision} · 현재 입력 버전 {result.current_input_revision} · {result.model_name} · {result.rules_version}</p>}
+    {result?.is_stale && <p className="notice" role="status">이 결과는 이전 입력·분석 기준입니다. 현재 입력으로 다시 분석하면 새 이력이 생성되며 완료 체크는 옮겨지지 않습니다.</p>}
+    {result?.details_restricted && <p className="notice">문서 삭제·재추출 등으로 근거가 변경되어 과거 결과의 상세 내용과 완료 체크 접근을 제한했습니다.</p>}
+    {result?.status === 'failed' && <p role="status">이 실행은 결과를 생성하지 못했습니다. 오류: {result.error_code}. 이전 저장 결과는 이력에서 확인할 수 있습니다.</p>}
+    {usable ? selected === 0 ? <Preparation result={result}/> : selected === 2 ? <RoadmapSteps result={result} saving={busy} onToggle={toggle}/> : <CourseCandidates result={result}/> : !result?.details_restricted && <p>아직 표시할 로드맵 결과가 없습니다. 분석 근거를 확인한 후 로드맵을 생성해 주세요.</p>}
+   </>}
+   {selected === 4 && <><strong>아직 생성된 분석 결과가 없습니다</strong><p>공모전·대외활동 결과가 생성되면 이곳에서 확인할 수 있습니다.</p><button className="primary" disabled>로드맵 생성</button></>}
+  </section>
+  <footer className="footer"><span className="field-help">완료 체크는 실행 기록이며 기술 숙련도나 취업 준비 점수가 아닙니다.</span><Link className="button" href="/input/review">경험 확인·수정</Link></footer>
+ </>;
 }

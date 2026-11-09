@@ -1,0 +1,154 @@
+{
+  "verified_at": "2026-11-09",
+  "provider": "actual Gemini",
+  "model": "gemini-3.5-flash-lite",
+  "status": "success",
+  "source": "Previously verified Himalayas snapshot; 68 existing SeoulTech CSE curriculum rows exported READ ONLY",
+  "user_data": "Synthetic SQL answers and course selections; no project document; no production user data",
+  "final_verification_calls": 2,
+  "checks": {
+    "reused_without_ai": true,
+    "progress_restored": true,
+    "sql_no_experience_preserved": true,
+    "completed_courses_excluded": true,
+    "unverified_not_a_gap": true,
+    "personalized_actions_changed": true
+  },
+  "scenarios": {
+    "A: SQL no experience": {
+      "generation_status": "partial",
+      "input_revision": 3,
+      "courses": [
+        {
+          "course_id": "stcse-2026-ac66832f2c533c700dde1354",
+          "course_name": "데이터베이스",
+          "related_skills": [
+            "SQL"
+          ]
+        },
+        {
+          "course_id": "stcse-2026-f489b01929ee28951fa7d25b",
+          "course_name": "프로그래밍입문(1)",
+          "related_skills": [
+            "Python"
+          ]
+        },
+        {
+          "course_id": "stcse-2026-25258933948dfe017f5d0566",
+          "course_name": "데이터분석",
+          "related_skills": [
+            "SQL",
+            "Python"
+          ]
+        }
+      ],
+      "steps": [
+        {
+          "title": "SQL 기초 개인 실습",
+          "targets": [
+            {
+              "skill_name": "SQL",
+              "student_status": "no_experience",
+              "action_type": "learn"
+            }
+          ],
+          "task_count": 1
+        },
+        {
+          "title": "Python 및 도구 경험 확인",
+          "targets": [
+            {
+              "skill_name": "Python",
+              "student_status": "not_verified",
+              "action_type": "verify_experience"
+            },
+            {
+              "skill_name": "Power BI",
+              "student_status": "not_verified",
+              "action_type": "verify_experience"
+            },
+            {
+              "skill_name": "Tableau",
+              "student_status": "not_verified",
+              "action_type": "verify_experience"
+            }
+          ],
+          "task_count": 1
+        },
+        {
+          "title": "SQL 적용 및 검증",
+          "targets": [
+            {
+              "skill_name": "SQL",
+              "student_status": "no_experience",
+              "action_type": "learn"
+            }
+          ],
+          "task_count": 2
+        }
+      ]
+    },
+    "C: SQL answer deferred; previous candidates completed": {
+      "generation_status": "partial",
+      "input_revision": 6,
+      "courses": [
+        {
+          "course_id": "stcse-2026-56e5e2a1aedbfd4d2e87404c",
+          "course_name": "Database",
+          "related_skills": [
+            "SQL"
+          ]
+        },
+        {
+          "course_id": "stcse-2026-fe99517e2472f51c862aaa83",
+          "course_name": "Introduction to Programming 1",
+          "related_skills": [
+            "Python"
+          ]
+        },
+        {
+          "course_id": "stcse-2026-007079f732bd4e519b888581",
+          "course_name": "빅데이터처리",
+          "related_skills": [
+            "Power BI"
+          ]
+        }
+      ],
+      "steps": [
+        {
+          "title": "SQL 경험 확인",
+          "targets": [
+            {
+              "skill_name": "SQL",
+              "student_status": "needs_confirmation",
+              "action_type": "verify_experience"
+            }
+          ],
+          "task_count": 1
+        },
+        {
+          "title": "Python 경험 확인",
+          "targets": [
+            {
+              "skill_name": "Python",
+              "student_status": "not_verified",
+              "action_type": "verify_experience"
+            }
+          ],
+          "task_count": 1
+        },
+        {
+          "title": "Power BI 경험 확인",
+          "targets": [
+            {
+              "skill_name": "Power BI",
+              "student_status": "not_verified",
+              "action_type": "verify_experience"
+            }
+          ],
+          "task_count": 1
+        }
+      ]
+    }
+  }
+}

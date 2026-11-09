@@ -73,8 +73,10 @@ try {
  assert.equal(await run("document.querySelector('.skill-evidence a').hostname"), 'himalayas.app');
  assert.ok(await run("document.querySelector('.skill-evidence').innerText.includes('Python is required.')"));
  await tab(3);
- await run("[...document.querySelectorAll('button')].find(b=>b.textContent==='수강 후보 분석').click()");
- await wait("document.getElementById('result-panel').innerText.includes('기존 수강 추천')");
+ await wait("document.getElementById('result-panel').innerText.includes('로드맵 생성')");
+ // The result screen now has one recommendation source; the legacy API remains independent.
+ const legacy = await run("fetch('/api/roadmap-inputs/test-plan/course-recommendations',{method:'POST',body:'{}'}).then(r=>r.json())");
+ assert.equal(legacy.courses[0].course_name, '기존 수강 추천');
  await tab(1);
  await wait("document.querySelector('.job-skills').getAttribute('aria-busy')==='false'");
  assert.equal(await run('window.mockAnalysis.posts'), 1);

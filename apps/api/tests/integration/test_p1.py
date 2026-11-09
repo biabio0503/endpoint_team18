@@ -252,7 +252,8 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(self.request('POST',base+'/analysis-jobs',{},cookie)[0],404)
         self.assertEqual(self.request('GET',base,cookie=cookie)[1],before)
         with api.closing(api.connect()) as db:
-            self.assertEqual(db.execute("SELECT count(*) FROM sqlite_master WHERE type='table' AND name IN ('roadmap_runs','analysis_jobs','analysis_items')").fetchone()[0],0)
+            self.assertEqual(db.execute("SELECT count(*) FROM sqlite_master WHERE type='table' AND name IN ('analysis_jobs','analysis_items')").fetchone()[0],0)
+            self.assertEqual(db.execute('SELECT count(*) FROM roadmap_runs WHERE request_id=?', (rid,)).fetchone()[0],0)
             self.assertEqual(db.execute('SELECT count(*) FROM input_course_states WHERE request_id=?',(rid,)).fetchone()[0],0)
 
     def test_p2_course_lifecycle(self):
