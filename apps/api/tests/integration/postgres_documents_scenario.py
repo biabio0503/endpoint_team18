@@ -183,7 +183,7 @@ with TestClient(app) as stranger:
 
 # Run the same analysis/answer/cache API cases against native JSONB and FK cascades.
 with psycopg.connect(url, autocommit=True) as db:
-    for table in ('job_skill_snapshots', 'project_experience_analyses', 'project_experience_answers', 'skill_experience_answers', 'roadmap_runs', 'roadmap_task_progress'):
+    for table in ('job_skill_snapshots', 'project_experience_analyses', 'project_experience_answers', 'skill_experience_answers', 'roadmap_runs', 'roadmap_task_progress', 'ai_requests', 'verified_course_equivalences'):
         assert db.execute('SELECT relrowsecurity FROM pg_class WHERE oid=%s::regclass', ('public.' + table,)).fetchone()[0]
         for role in ('anon', 'authenticated'):
             assert not db.execute('SELECT has_table_privilege(%s,%s,\'select,insert,update,delete\')', (role, 'public.' + table)).fetchone()[0]
@@ -199,3 +199,7 @@ with psycopg.connect(url, autocommit=True) as db:
     assert types['created_at'] == types['finished_at'] == types['lease_until'] == 'timestamp with time zone'
     assert db.execute("SELECT count(*) FROM pg_indexes WHERE tablename='roadmap_runs'").fetchone()[0] == 4
     assert db.execute("SELECT count(*) FROM pg_constraint WHERE conrelid='public.roadmap_task_progress'::regclass AND contype='f'").fetchone()[0] == 1
+
+scenario = Path(__file__).with_name("guest_guardrail_scenario.py")
+result = subprocess.run([sys.executable, str(scenario)], env=os.environ.copy(), capture_output=True, text=True, timeout=60)
+assert result.returncode == 0, result.stdout + result.stderr

@@ -1,0 +1,20 @@
+✔ tab visits, focus, new input and selected plan changes never call AI (0.988ms)
+✔ explicit concurrent runs deduplicate and saved reads are free (0.469083ms)
+✔ changed input or selected plan rejects in-flight analysis (1.908583ms)
+✔ failed paid request needs another explicit action, missing plan never posts (0.151708ms)
+✔ same revision reads newly completed project evidence without AI (0.113333ms)
+(node:10946) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ selected plan remains selected even when another plan is the latest (3.314084ms)
+✔ selection is scoped to the authenticated user and the tab (1.100917ms)
+✔ session change while selecting cannot retain a previous user plan (1.293458ms)
+✔ missing, failed, and malformed resume responses stay distinct (0.709167ms)
+✔ authenticated requests use the intended user token and reject account changes (9.763208ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 50.932167

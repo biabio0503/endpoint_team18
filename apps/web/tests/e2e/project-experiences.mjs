@@ -93,7 +93,7 @@ try {
  await clickText('프로젝트 경험 분석 실행');
  await wait("document.querySelector('section[aria-busy]').getAttribute('aria-busy')==='false'");
  assert.equal(await run('window.mockProject.projectCalls'), 1);
- await clickText('직무 역량 비교 결과 보기 →');
+ await clickText('다음: 결과 화면에서 직무 분석·로드맵 생성 →');
  await wait("document.querySelectorAll('[role=tab]').length===5");
  await tab(1);
  await wait(`(${card('Python')})?.innerText.includes('확인된 경험')`);
@@ -107,7 +107,7 @@ try {
  await cardClick('SQL', '잘 모르겠어요');
  await wait(`(${card('SQL')})?.innerText.includes('경험 확인 필요')`);
  assert.equal(await run('window.mockProject.projectCalls'), 1);
- assert.equal(await run('window.mockProject.jobCalls'), 1);
+ assert.equal(await run('window.mockProject.jobCalls'), 0);
  await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
  assert.ok(await run('document.documentElement.scrollWidth<=window.innerWidth'));
  const screenshot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true });

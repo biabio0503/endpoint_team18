@@ -15,6 +15,18 @@ def course(cid, name, completed=False, description=None):
 
 
 class RecommendationTest(unittest.TestCase):
+    def test_verified_equivalents_only_and_no_transitive_merge(self):
+        from services.course_recommendations import selected_courses, available_courses
+        courses = [course('a', '동일 이름'), course('b', '동일 이름'), course('c', '다른 이름'), course('d', '동일 이름')]
+        courses[0]['verified_equivalent_ids'] = ['b']
+        courses[1]['verified_equivalent_ids'] = ['a', 'c']
+        courses[2]['verified_equivalent_ids'] = ['b']
+        selected = selected_courses(['a','b','c','d'], courses, 'confirmed')
+        self.assertEqual([c['course_id'] for c in selected], ['a','c','d'])
+        courses[0]['equivalent_completed'] = True  # A verified outside-catalog completion.
+        self.assertNotIn('a', available_courses(courses))
+        self.assertIn('d', available_courses(courses))  # Name equality alone is never merged.
+
     def setUp(self):
         self.courses = [course('data', '데이터 분석', description='통계 분석'), course('ml', '머신러닝'), course('math', '선형대수')]
 

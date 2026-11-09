@@ -52,7 +52,8 @@ def get_context(request: Request, db=Depends(get_db)):
         try:
             req = URLRequest(url + '/auth/v1/user', headers={'Authorization': authorization, 'apikey': key})
             with urlopen(req, timeout=10) as response:
-                user_id = str(uuid.UUID(json.load(response)['id']))
+                user = json.load(response)
+                user_id = str(uuid.UUID(user['id']))
         except HTTPError as error:
             if error.code in (400, 401, 403):
                 raise Problem(401, 'unauthorized', '세션이 만료되었거나 유효하지 않습니다.') from None
@@ -63,7 +64,7 @@ def get_context(request: Request, db=Depends(get_db)):
         owner_id = str(uuid.uuid4())
         repo.db.execute("INSERT INTO session_owners(owner_id, token_digest, expires_at, created_at, auth_user_id) VALUES(?, ?, ?, ?, ?) ON CONFLICT (auth_user_id) DO NOTHING", (owner_id, sha256(secrets.token_bytes(32)).hexdigest(), '9999-12-31T00:00:00+00:00', now(), user_id))
         owner = repo.db.execute('SELECT owner_id FROM session_owners WHERE auth_user_id=?', (user_id,)).fetchone()
-        return db, repo, owner
+        return db, repo, {**dict(owner), 'is_anonymous': user.get('is_anonymous') is not False}
     token = request.cookies.get(COOKIE, '')
     owner = repo.owner(sha256(token.encode()).hexdigest(), now()) if re.fullmatch(r'[A-Za-z0-9_-]{43}', token) else None
     return db, repo, owner

@@ -8,6 +8,7 @@ from repositories.experience_analysis import AnalysisRepository
 from services.job_skill_analysis import analyze_job_skills
 from services.project_experience import job_basis, job_snapshot_payload
 from services.project_experience_schemas import JobAnalysisRequest
+from services.ai_guard import guarded_call
 
 router = APIRouter(prefix='/api')
 
@@ -29,7 +30,8 @@ def job_skill_analysis(rid: str, ctx=Depends(owned_context), body=Depends(parse_
         db.commit()
         return respond(200, result)
     db.commit()  # No transaction or lock during either external service call.
-    result = analyze_job_skills(goal, role)
+    # Keyword call + at most seven 3..5-job batches, each with at most two attempts.
+    result = guarded_call(ctx, 'job_analysis', basis, lambda: analyze_job_skills(goal, role), units=16)
     locked_plan(ctx, rid, revision)
     if result['status'] in ('success', 'partial'):
         # Concurrent first requests keep the winner; explicit refresh may replace it.

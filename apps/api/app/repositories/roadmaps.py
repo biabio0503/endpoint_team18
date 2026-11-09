@@ -66,6 +66,7 @@ def metadata(run, current):
                                 'rules_version', 'created_at', 'finished_at', 'error_code')} | {
         'is_stale': run['basis_hash'] != digest(current), 'current_input_revision': current['input_revision'],
         'details_restricted': restricted,
+        'limited_guidance_available': current.get('generation_mode') == 'limited_guidance',
         'restriction_reason': 'document_basis_changed' if restricted else None,
         'generation_expired': run['status'] == 'generating' and lease < datetime.now(timezone.utc),
     }

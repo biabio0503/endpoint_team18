@@ -46,8 +46,12 @@ try {
  await send('Page.addScriptToEvaluateOnNewDocument', { source: '(' + installRoadmapMock.toString() + ')()' });
  const click = text => run(`[...document.querySelectorAll('button')].find(e=>e.textContent===${JSON.stringify(text)}).click()`);
  await send('Page.navigate', { url: `${origin}/result` });
- await wait("document.body.innerText.includes('저장된 직무 분석이 필요합니다')");
+ await wait("document.body.innerText.includes('검증된 직무 분석이 없어 제한 안내 로드맵')");
  assert.equal(await run('mockRoadmap.posts'), 0);
+ await tab(4);
+ await wait("document.body.innerText.includes('공모전·대외활동 · 준비 중')");
+ assert.ok(await run("document.body.innerText.includes('추천은 제공하지 않습니다')"));
+ await tab(0);
  await run('mockRoadmap.jobAvailable=true');
  await click('로드맵 생성');
  await wait("document.body.innerText.includes('작업 완료 0 / 3개')");

@@ -3,6 +3,7 @@ import Link from 'next/link';
 const statusLabels = { confirmed_experience: '확인된 경험', document_supported: '문서 근거 · 본인 확인 필요', needs_confirmation: '확인 필요', not_verified: '자료 부족 · 확인 필요', no_experience: '사용자가 경험 없음으로 응답' };
 
 function Evidence({ refs, result }) {
+ if (!refs.length) return null;
  return <details><summary>추천 연결 근거</summary><ul>{refs.map(ref => {
   const item = result.evidence[ref];
   return <li key={ref}>{item.skill_name} · {item.kind === 'comparison' ? `${statusLabels[item.student_status]}: ${item.reason}` : item.kind === 'job' ? '검증된 채용공고 근거' : `프로젝트 문서 추출 버전 ${item.extraction_revision}`}
@@ -50,7 +51,7 @@ export function RoadmapSteps({ result, saving, onToggle }) {
 export function CourseCandidates({ result }) {
  const catalog = result.basis.catalog;
  return <><h2>수강 후보</h2><p>이 로드맵 실행의 경험·이수 선택 기준으로 생성한 개인화 후보입니다.</p>
-  {result.course_status === 'catalog_unavailable' ? <p className="notice">과목 목록을 사용할 수 없어 수강 후보를 생성하지 않았습니다.</p> : <>
+  {result.course_status === 'evidence_unavailable' ? <p className="notice">검증된 직무 근거가 없어 수강 후보 추천을 보류했습니다. 직무 분석 후 로드맵을 다시 생성해 주세요.</p> : result.course_status === 'catalog_unavailable' ? <p className="notice">과목 목록을 사용할 수 없어 수강 후보를 생성하지 않았습니다.</p> : <>
    <p className="field-help">목록 출처: {catalog.source_name} · {catalog.scope_description} · 확인 시각 {new Date(catalog.retrieved_at).toLocaleString('ko-KR')} · 완전성 {catalog.completeness_status === 'complete' ? '전체 목록' : '확인 필요'}</p>
    {catalog.source_url?.startsWith('https://') && <p><a href={catalog.source_url} target="_blank" rel="noopener noreferrer">과목 목록 출처 ↗</a></p>}
    {result.basis.review_status === 'unconfirmed' && <p className="notice">이수 선택 확인 전의 잠정 후보입니다. 미이수로 확정하지 않습니다. <Link href="/input/courses">이수 선택 확인 →</Link></p>}

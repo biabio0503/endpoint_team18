@@ -1,0 +1,36 @@
+
+> career-roadmap-web@0.1.0 build
+> next build
+
+   ▲ Next.js 15.5.12
+   - Experiments (use with caution):
+     · middlewareClientMaxBodySize: 11534336
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully in 1291ms
+   Linting and checking validity of types ...
+   Collecting page data ...
+   Generating static pages (0/9) ...
+   Generating static pages (2/9) 
+   Generating static pages (4/9) 
+   Generating static pages (6/9) 
+ ✓ Generating static pages (9/9)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                                 Size  First Load JS
+┌ ○ /                                    3.37 kB         158 kB
+├ ○ /_not-found                            991 B         103 kB
+├ ○ /input/basic                         4.27 kB         159 kB
+├ ○ /input/courses                       5.43 kB         160 kB
+├ ○ /input/documents                      4.6 kB         159 kB
+├ ○ /input/review                         4.7 kB         159 kB
+└ ○ /result                                11 kB         165 kB
++ First Load JS shared by all             102 kB
+  ├ chunks/255-ebd51be49873d76c.js         46 kB
+  ├ chunks/4bd1b696-c023c6e3521b1417.js  54.2 kB
+  └ other shared chunks (total)          1.93 kB
+
+
+○  (Static)  prerendered as static content
+

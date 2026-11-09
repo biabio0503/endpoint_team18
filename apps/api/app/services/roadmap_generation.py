@@ -10,7 +10,7 @@ from services.gemini import GeminiError
 from services.project_experience import current_comparison, digest, model_basis, skill_key
 from services.roadmap_schemas import GeneratedRoadmap
 
-RULES_VERSION = 'personalized-roadmap-v1'
+RULES_VERSION = 'personalized-roadmap-v2'
 MARKET_LIMIT = '해외 원격근무 채용공고의 제한된 표본입니다. 국내 대학생의 필수 기술이나 학습 우선순위를 뜻하지 않습니다.'
 
 
@@ -23,7 +23,7 @@ def capture_basis(db, row):
     department = repo.department(row['department_id']) if row['department_id'] else None
     valid = bool(catalog and department and catalog['department_id'] == row['department_id']
                  and department['university_id'] == row['university_id'])
-    courses = repo.courses(row['request_id'], row['catalog_id'], include_description=True) if valid else []
+    courses = repo.recommendation_courses(row['request_id'], row['catalog_id']) if valid else []
     review_status = payload(row)['review_status'] if valid and courses else 'unavailable'
     refs, skills = {}, []
     for item in comparison['comparisons']:
@@ -46,7 +46,9 @@ def capture_basis(db, row):
         skills.append({k: item[k] for k in ('skill_name', 'category', 'student_status', 'reason', 'job_requirement', 'skill_answer')} |
                       {'comparison_ref': ref, 'job_refs': job_refs, 'project_refs': project_refs})
     limits = [MARKET_LIMIT, '경험 확인이나 작업 완료는 기술 숙련도를 보증하지 않습니다.']
-    if jobs['status'] != 'success':
+    if not jobs.get('snapshot_id') or not skills:
+        limits.append('검증된 직무 기술 근거가 없어 기술별 준비 상태와 수강 후보를 판단하지 않았습니다.')
+    elif jobs['status'] != 'success':
         limits.append('직무 분석이 일부 미완료되어 검증된 기술과 근거만 사용했습니다.')
     if project['status'] != 'success':
         limits.append('프로젝트 분석 자료가 없거나 일부 미완료입니다. 확인되지 않은 경험은 경험 없음으로 판단하지 않습니다.')
@@ -74,6 +76,9 @@ def capture_basis(db, row):
              'excluded_documents': [{k: d[k] for k in ('document_id', 'extraction_revision', 'reason')}
                                     for d in project['excluded_documents']],
              'skills': skills, 'evidence': refs, 'limitations': limits}
+    basis['generation_mode'] = 'ai' if basis['job_snapshot_id'] and skills else 'limited_guidance'
+    if basis['generation_mode'] == 'limited_guidance':
+        basis['model_name'] = 'server-guidance-v1'
     # Stable JSON types across SQLite and PostgreSQL (Decimal/datetime included).
     return json.loads(json.dumps(basis, ensure_ascii=False, default=json_value))
 
@@ -132,6 +137,8 @@ def validate_result(raw, basis):
     if len(set(course_ids)) != len(course_ids) or not set(course_ids).issubset(allowed):
         invalid()
     server_courses = {c['course_id']: c for c in selected_courses(course_ids, basis['courses'], basis['review_status'])}
+    if set(server_courses) != set(course_ids):
+        invalid()  # Duplicate verified equivalents are invalid model output too.
     courses = []
     for suggestion in result.recommended_courses:
         verify_refs(suggestion.related_skills, suggestion.evidence_refs)

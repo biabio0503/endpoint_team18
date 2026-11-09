@@ -150,3 +150,12 @@ def test_generation_focus_prioritizes_user_answers_over_unknown_frequency():
     assert data['skills'][0]['allowed_action_type'] == 'learn'
     assert len(data['skills']) == 4
     assert data['evidence_scope']['verified_skill_count'] == 21
+
+
+def test_model_cannot_return_two_verified_equivalent_candidates():
+    b, raw = basis(), output()
+    b['courses'].append({**b['courses'][0], 'course_id':'db-alt', 'verified_equivalent_ids':['db']})
+    b['courses'][0]['verified_equivalent_ids']=['db-alt']
+    raw['recommended_courses'].append({**raw['recommended_courses'][0], 'course_id':'db-alt'})
+    with pytest.raises(GeminiError):
+        validate_result(raw,b)

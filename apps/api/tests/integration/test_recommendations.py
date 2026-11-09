@@ -59,6 +59,11 @@ class RecommendationAPI(unittest.TestCase):
         with patch('api.routes.recommendations.recommend',side_effect=fake):
             code,result,_=self.request('POST',path,{},cookie)
         self.assertEqual(code,200); self.assertEqual([c['course_id'] for c in result['courses']],[second]); self.assertEqual(result['courses'][0]['completion_state'],'unconfirmed')
+        with patch('api.routes.recommendations.recommend') as cached_ai:
+            self.assertEqual(self.request('POST',path,{},cookie)[0],200)
+            cached_ai.assert_not_called()
+        current=self.request('GET','/roadmap-inputs/'+rid,cookie=cookie)[1]
+        self.request('PATCH','/roadmap-inputs/'+rid,{'expected_input_revision':current['input_revision'],'changes':{'year_level':3}},cookie)
         def stale(profile,courses,status):
             current=self.request('GET','/roadmap-inputs/'+rid,cookie=cookie)[1]
             self.request('PATCH','/roadmap-inputs/'+rid,{'expected_input_revision':current['input_revision'],'changes':{'career_goal':'머신러닝'}},cookie)
