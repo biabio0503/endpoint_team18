@@ -20,7 +20,7 @@ expected = {
  '/api/health', '/api/health/db', '/api/reference', '/api/universities',
  '/api/universities/{university_id}/departments', '/api/departments/{department_id}/catalogs',
  '/api/roadmap-inputs', '/api/roadmap-inputs/resume', '/api/roadmap-inputs/{rid}',
- '/api/roadmap-inputs/{rid}/courses', '/api/roadmap-inputs/{rid}/course-selections',
+ '/api/roadmap-inputs/{rid}/jobs', '/api/roadmap-inputs/{rid}/courses', '/api/roadmap-inputs/{rid}/course-selections',
  '/api/roadmap-inputs/{rid}/course-selection-review', '/api/roadmap-inputs/{rid}/course-recommendations',
  '/api/roadmap-inputs/{rid}/documents', '/api/roadmap-inputs/{rid}/documents/{did}',
  '/api/roadmap-inputs/{rid}/documents/{did}/retry-extraction',
