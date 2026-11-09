@@ -59,7 +59,9 @@ try {
    await new Promise(resolve=>setTimeout(resolve,250));
    if(m.status==='conflict') return json({error:'revision_conflict',message:'분석 중 입력이 변경되었습니다. 다시 시도해 주세요.'},409);
    const skill={name:'Python',category:'programming_language',mentioned_job_count:1,mention_frequency:1,required_job_count:1,preferred_job_count:0,mentioned_only_job_count:0,unknown_job_count:0,direct_job_count:1,related_job_count:0,seniority_distribution:{entry:1,mid:0,senior:0,unknown:0},evidence:[{job_id:'job-1',title:'Security Engineer',source_url:'https://himalayas.app/companies/example/jobs/security',requirement_type:'required',evidence_text:'Python is required.'}]};
-   return json(m.saved={snapshot_id:'job-snapshot',status:m.status,career_goal:'보안 개발',target_role:'보안 엔지니어',canonical_role:'Security Engineer',input_revision:m.revision,keyword_details:[{keyword:'Security Engineer',relation:'direct'}],collection_summary:{selected_jobs:1},analysis_summary:{analyzed_jobs:1,failed_jobs:m.status==='partial'?1:0,skipped_jobs:0},skills:['success','partial'].includes(m.status)?[skill]:[],retrieved_at:'2026-11-09T04:00:00Z',clarification_message:'관심 업무를 구체화해 주세요.',errors:m.status==='error'?[{message:'Gemini 요청 시간이 초과되었습니다.'}]:[]});
+   skill.priority_reason='직무 업무·요건 근거 1개 독립 공고; 필수 1, 우대 0.';
+   skill.single_job_notice='1개 독립 공고에서만 확인했습니다.';
+   return json(m.saved={analysis_version:'job-skills-v2',sample_notice:'조건을 통과한 공고는 1개입니다. 작은 해외 원격근무 표본입니다.',snapshot_id:'job-snapshot',status:m.status,career_goal:'보안 개발',target_role:'보안 엔지니어',canonical_role:'Security Engineer',input_revision:m.revision,keyword_details:[{keyword:'Security Engineer',relation:'direct'}],collection_summary:{selected_jobs:1},analysis_summary:{analyzed_jobs:1,failed_jobs:m.status==='partial'?1:0,skipped_jobs:0},skills:['success','partial'].includes(m.status)?[skill]:[],retrieved_at:'2026-11-09T04:00:00Z',clarification_message:'관심 업무를 구체화해 주세요.',errors:m.status==='error'?[{message:'Gemini 요청 시간이 초과되었습니다.'}]:[]});
   };
  ` });
  await send('Page.navigate', { url: `${origin}/result` });
@@ -72,6 +74,7 @@ try {
  await run("[...document.querySelectorAll('button')].find(b=>b.textContent==='직무 분석 실행').click()");
  await wait("document.querySelector('.skill-card')?.innerText.includes('Python')");
  assert.equal(await run('window.mockAnalysis.posts'), 1);
+ assert.ok(await run("document.body.innerText.includes('1개 독립 공고에서만 확인') && document.body.innerText.includes('작은 해외 원격근무 표본')"));
  await run("document.querySelector('.skill-card summary').click()");
  assert.equal(await run("document.querySelector('.skill-evidence a').hostname"), 'himalayas.app');
  assert.ok(await run("document.querySelector('.skill-evidence').innerText.includes('Python is required.')"));

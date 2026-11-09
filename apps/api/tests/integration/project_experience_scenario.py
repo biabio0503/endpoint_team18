@@ -14,7 +14,7 @@ from config import DB_BACKEND
 from repositories.documents import DocumentRepository
 from repositories.plans import connect, Repository
 from services.gemini import GeminiError
-from services.job_skill_analysis import aggregate_skills, verify_skills
+from services.job_skill_analysis import ANALYSIS_VERSION, aggregate_skills, verify_skills
 from services.job_skill_schemas import ExtractedSkill
 from services.project_experience_schemas import DocumentExperience
 
@@ -42,7 +42,7 @@ def job_result():
                                      ('PostgreSQL', 'required', 'PostgreSQL is required.')]])
         jobs.append({'job_id': str(number), 'title': 'Data Analyst', 'status': 'success', 'source_url': 'https://himalayas.app/jobs/example',
                      'match_type': relation, 'seniority_group': level, 'verified_skills': skills})
-    return {'status': 'success', 'skills': aggregate_skills(jobs), 'job_analyses': jobs,
+    return {'status': 'success', 'analysis_version': ANALYSIS_VERSION, 'skills': aggregate_skills(jobs), 'job_analyses': jobs,
             'analysis_summary': {'analyzed_jobs': 2, 'failed_jobs': 0, 'skipped_jobs': 0}, 'errors': []}
 
 

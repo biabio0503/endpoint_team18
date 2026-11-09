@@ -9,11 +9,11 @@ from repositories.documents import DocumentRepository
 from repositories.experience_analysis import AnalysisRepository, decode
 from services.gemini import GeminiError
 from services.gemini_projects import extract_project_experiences
-from services.job_skill_analysis import normalize_skill, _key, _skill_in_quote
+from services.job_skill_analysis import ANALYSIS_VERSION, normalize_skill, _key, _skill_in_quote, skill_priority
 
 MAX_PROJECT_CHARS = 60000
 PROJECT_VERSION = 'project-experience-v1'
-JOB_VERSION = 'job-skills-v1'
+JOB_VERSION = ANALYSIS_VERSION
 
 
 def digest(value):
@@ -32,8 +32,28 @@ def job_basis(row):
     return digest([JOB_VERSION, model_basis(), row['career_goal'], row['target_role']])
 
 
+def current_job_snapshot(repo, row):
+    current = repo.job(row['request_id'], job_basis(row))
+    if current:
+        return current
+    # Legacy results are read as saved, never silently normalized or regenerated.
+    # Match the original goal/role too, so a previous goal cannot become current evidence.
+    for snapshot in repo.job_history(row['request_id']):
+        result = decode(snapshot['result_json'])
+        if (result.get('analysis_version', 'job-skills-v1') == 'job-skills-v1'
+                and result.get('career_goal') == row['career_goal']
+                and result.get('target_role') == row['target_role']):
+            return snapshot
+    return None
+
+
 def skill_key(name):
     return _key(normalize_skill(name, 'other')[0])
+
+
+def snapshot_skill_key(jobs, name):
+    # Keep v1 answer keys distinct even when a new alias merges names in v2.
+    return _key(name) if jobs.get('analysis_version', 'job-skills-v1') == 'job-skills-v1' else skill_key(name)
 
 
 def documents_for_analysis(db, rid):
@@ -152,7 +172,10 @@ def current_project(db, rid, revision):
 
 
 def job_snapshot_payload(snapshot, revision):
-    return {**decode(snapshot['result_json']), 'snapshot_id': snapshot['snapshot_id'],
+    result = decode(snapshot['result_json'])
+    return {**result, 'analysis_version': result.get('analysis_version', 'job-skills-v1'),
+            'previous_analysis_version': result.get('analysis_version', 'job-skills-v1') != JOB_VERSION,
+            'snapshot_id': snapshot['snapshot_id'],
             'basis_key': snapshot['basis_key'], 'analyzed_input_revision': snapshot['input_revision'],
             'input_revision': revision, 'saved_at': snapshot['created_at'], 'reused': True}
 
@@ -187,7 +210,7 @@ def compare_skill(experiences, answer=None):
 def current_comparison(db, row):
     repo = AnalysisRepository(db)
     project = current_project(db, row['request_id'], row['input_revision'])
-    snapshot = repo.job(row['request_id'], job_basis(row))
+    snapshot = current_job_snapshot(repo, row)
     jobs = job_snapshot_payload(snapshot, row['input_revision']) if snapshot else {'status': 'not_started', 'skills': []}
     answers = repo.skill_answers(snapshot['snapshot_id'], project['document_basis']) if snapshot else {}
     comparisons = []
@@ -200,7 +223,7 @@ def current_comparison(db, row):
             if skill_key(effective) == key:
                 evidence.append({**item, 'effective_skill_name': normalize_skill(effective, item['category'])[0],
                                  'match_source': 'user_correction' if user and user['status'] == 'corrected' else 'document_ai'})
-        answer = answers.get(key)
+        answer = answers.get(snapshot_skill_key(jobs, skill['name']))
         status, reason = compare_skill(evidence, answer)
         comparisons.append({'skill_name': skill['name'], 'category': skill['category'], 'student_status': status,
                             'reason': reason, 'preparation_candidate': 'consider_learning' if status == 'no_experience'
@@ -208,6 +231,9 @@ def current_comparison(db, row):
                             'job_requirement': {k: v for k, v in skill.items() if k not in ('name', 'category', 'evidence')},
                             'project_evidence': evidence, 'job_evidence': skill['evidence'],
                             'skill_answer': ({'status': answer['status'], 'updated_at': answer['updated_at'], 'source': 'user'} if answer else None)})
+    if jobs.get('analysis_version') == JOB_VERSION:
+        comparisons.sort(key=lambda item: skill_priority(
+            {**item['job_requirement'], 'name': item['skill_name']}, item['student_status']))
     return {'status': 'success' if jobs['status'] == project['status'] == 'success' else 'partial' if snapshot else 'error',
             'input_revision': row['input_revision'], 'career_goal': row['career_goal'], 'target_role': row['target_role'],
             'job_analysis': jobs, 'project_analysis': project, 'comparisons': comparisons}

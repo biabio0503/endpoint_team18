@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { recommendationScope } from './jobSkillAnalysis.mjs';
 
 const statusLabels = { confirmed_experience: '확인된 경험', document_supported: '문서 근거 · 본인 확인 필요', needs_confirmation: '확인 필요', not_verified: '자료 부족 · 확인 필요', no_experience: '사용자가 경험 없음으로 응답' };
 
@@ -11,6 +12,7 @@ function Evidence({ refs, result }) {
    {item.kind === 'project' && <p>{item.user_answer?.correction?.activity || item.activity} · {item.user_answer?.status === 'confirmed' ? '본인 수행 확인' : item.user_answer?.status === 'corrected' ? '사용자 수정 답변' : item.user_answer?.status === 'no_experience' ? '경험 없음 응답' : '본인 확인 필요'}</p>}
    {item.match_source === 'user_correction' && <p className="field-help">이 기술 연결은 사용자 수정 답변에 근거합니다. 아래 원문이 수정한 기술을 검증한다는 뜻은 아닙니다.</p>}
    {item.source_url?.startsWith('https://') && <> · <a href={item.source_url} target="_blank" rel="noopener noreferrer">공고 원문 ↗</a></>}
+   {item.recommendation_eligible === false && <span> · 맥락 언급으로 핵심 추천에서 제외</span>}
    {item.evidence_text && <blockquote>{item.evidence_text}</blockquote>}
   </li>;
  })}</ul></details>;
@@ -20,11 +22,19 @@ export function Preparation({ result }) {
  const summary = result.preparation_summary;
  return <>
   <h2>준비 상태</h2><p>{result.career_goal}{result.target_role ? ` · ${result.target_role}` : ''}</p>
+  <p className="notice">아래는 전체 비교 기술 목록입니다. 생성 입력에 포함된 기술과 실제 활동이 제안된 기술은 각 항목에서 구분합니다. 문서에 없는 경험은 미확인으로 유지합니다.</p>
   <div className="columns">{[['confirmed_skills', '확인된 수행 경험'], ['skills_to_verify', '추가 확인이 필요한 기술'], ['learning_candidates', '추가 학습을 검토할 기술']].map(([key, title]) => <div className="wire-box" key={key}><h3>{title}</h3><p>{summary[key].join(', ') || '현재 확인된 항목 없음'}</p></div>)}</div>
   <p>분석된 해외 채용공고 {result.basis.job_summary.analyzed_jobs || 0}개 · 프로젝트 분석 {result.basis.project_documents.filter(d => ['success', 'partial'].includes(d.status)).length}개</p>
-  <ul className="skill-list">{result.preparation_items.map(item => <li className="skill-card" key={item.skill_name}><h3>{item.skill_name} <span className="badge">{statusLabels[item.student_status]}</span></h3><p>{item.reason}</p><Evidence refs={[item.comparison_ref, ...item.job_refs, ...item.project_refs]} result={result}/></li>)}</ul>
+  <ul className="skill-list">{result.preparation_items.map(item => {
+   const scope = recommendationScope(result, item.skill_name);
+   return <li className="skill-card" key={item.skill_name}><h3>{item.skill_name} <span className="badge">{statusLabels[item.student_status]}</span></h3><p>{item.reason}</p>
+    <p className="field-help">{scope.included === null ? '이전 결과의 생성 입력 범위는 기록되지 않았습니다.' : scope.included ? '로드맵 생성 입력에 포함' : '전체 비교에만 표시 · 생성 입력에 미포함'} · 실제 제안 활동 {scope.activities}단계</p>
+    {item.job_requirement?.priority_reason && <p className="field-help">{item.job_requirement.priority_reason}</p>}
+    {item.job_requirement?.single_job_notice && <p className="notice">{item.job_requirement.single_job_notice}</p>}
+    <Evidence refs={[item.comparison_ref, ...item.job_refs, ...item.project_refs]} result={result}/></li>;
+  })}</ul>
   <div className="notice"><ul>{result.limitations.map(text => <li key={text}>{text}</li>)}</ul></div>
-  {result.generation_scope && <p className="field-help">전체 비교 기술 {result.generation_scope.verified_skill_count}개 중 로드맵 생성에서는 경험 답변을 우선하여 {result.generation_scope.included_skills.join(', ')}를 검토했습니다. 경험 없음·확인된 경험 최대 12개, 미확인 기술 최대 3개를 전달합니다.</p>}
+  {result.generation_scope && <p className="field-help">전체 비교 기술 {result.generation_scope.verified_skill_count}개 중 생성 입력: {result.generation_scope.included_skills.join(', ')}. 경험 없음·확인된 경험 최대 12개, 미확인 기술 최대 3개입니다. 입력 포함은 실제 활동 제안을 뜻하지 않습니다.</p>}
   <p className="field-help">직무 분석 시각 {result.basis.job_analyzed_at ? new Date(result.basis.job_analyzed_at).toLocaleString('ko-KR') : '확인 불가'} · 직무 스냅샷 {result.basis.job_snapshot_id}</p>
   <Link href="/input/review">경험 확인 답변 수정 →</Link>
  </>;

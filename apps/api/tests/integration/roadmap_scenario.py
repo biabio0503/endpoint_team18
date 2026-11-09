@@ -37,6 +37,77 @@ def fake_roadmap(data):
 
 
 class RoadmapAPI(ProjectExperienceAPI):
+    def test_context_only_evidence_never_calls_paid_roadmap_generation(self):
+        result = job_result()
+        for skill in result['skills']:
+            skill['recommendation_eligible'] = False
+            skill['supporting_job_count'] = 0
+        with patch('api.routes.job_skill_analysis.analyze_job_skills', return_value=result):
+            self.assertEqual(self.client.post(self.base + '/job-skill-analysis', json={}).status_code, 200)
+        with patch('api.routes.roadmaps.generate_roadmap') as ai:
+            response = self.make()
+            self.assertEqual(response.status_code, 201, response.text)
+            self.assertEqual(response.json()['generation_mode'], 'limited_guidance')
+            self.assertEqual(response.json()['recommended_courses'], [])
+            ai.assert_not_called()
+
+    def test_previous_rules_preserve_reads_evidence_progress_and_explicit_upgrade(self):
+        from services import project_experience as experience
+        from repositories.experience_analysis import AnalysisRepository
+        from repositories.roadmaps import RoadmapRepository
+        legacy = job_result()
+        legacy.pop('analysis_version')
+        legacy.update(career_goal='데이터 분석 분야', target_role='데이터 분석가')
+        # Create a genuine old-version basis/cache key and saved run in the isolated DB.
+        with patch.object(experience, 'JOB_VERSION', 'job-skills-v1'), \
+             patch('services.roadmap_generation.RULES_VERSION', 'personalized-roadmap-v2'), \
+             patch('api.routes.job_skill_analysis.analyze_job_skills', return_value=legacy):
+            saved = self.client.post(self.base + '/job-skill-analysis', json={}).json()
+            old, _ = self.generated()
+            response = self.client.patch(f'{self.base}/roadmaps/{old["run_id"]}/tasks/task-1', json={
+                'is_completed': True, 'expected_progress_version': 0})
+            self.assertEqual(response.status_code, 200, response.text)
+        with closing(connect()) as db:
+            row = db.execute('SELECT * FROM roadmap_inputs WHERE request_id=?', (self.rid,)).fetchone()
+            self.assertIsNone(AnalysisRepository(db).job(self.rid, experience.job_basis(row)))
+            original_run = RoadmapRepository(db).get(self.rid, old['run_id'])
+            original_snapshot = AnalysisRepository(db).job_history(self.rid)[0]
+        with patch('api.routes.job_skill_analysis.analyze_job_skills') as jobs, \
+             patch('api.routes.roadmaps.generate_roadmap') as roadmap:
+            for _ in range(2):  # Entry and browser reload are read-only.
+                comparison = self.comparison()
+                self.assertTrue(comparison['job_analysis']['previous_analysis_version'])
+                self.assertEqual(comparison['job_analysis']['snapshot_id'], saved['snapshot_id'])
+                self.assertEqual(comparison['job_analysis']['skills'], legacy['skills'])
+                self.assertEqual(self.client.get(self.base + '/roadmap').json()['run_id'], old['run_id'])
+                restored = self.client.get(f'{self.base}/roadmaps/{old["run_id"]}').json()
+                self.assertTrue(restored['is_stale'])
+                self.assertFalse(restored['details_restricted'])
+                self.assertEqual(restored['evidence'], old['evidence'])
+                self.assertEqual(restored['progress']['completed'], 1)
+                self.assertEqual(self.client.get(self.base + '/roadmaps').status_code, 200)
+            # New roadmap cannot silently use obsolete job relevance rules.
+            self.assertEqual(self.make(True).json()['error'], 'job_analysis_outdated')
+            jobs.assert_not_called(); roadmap.assert_not_called()
+        with patch('api.routes.job_skill_analysis.analyze_job_skills', return_value={'status':'error','errors':[]}) as ai:
+            failed = self.client.post(self.base + '/job-skill-analysis', json={'refresh':True}).json()
+            self.assertEqual(failed['snapshot_id'], saved['snapshot_id'])
+            self.assertIn('refresh_error', failed)
+            self.assertEqual(ai.call_count, 1)
+        # Explicit POST upgrades to v2 and retains the v1 snapshot/run rows.
+        upgraded, calls = self.jobs()
+        self.assertEqual(calls, 1)
+        self.assertEqual(upgraded['analysis_version'], 'job-skills-v2')
+        self.assertNotEqual(upgraded['snapshot_id'], saved['snapshot_id'])
+        with closing(connect()) as db:
+            self.assertEqual(RoadmapRepository(db).get(self.rid, old['run_id']), original_run)
+            self.assertIn(original_snapshot, AnalysisRepository(db).job_history(self.rid))
+        new, _ = self.generated()
+        self.assertNotEqual(new['run_id'], old['run_id'])
+        self.assertEqual(new['rules_version'], 'personalized-roadmap-v3')
+        self.assertEqual(new['progress']['completed'], 0)
+        self.assertEqual(self.client.get(f'{self.base}/roadmaps/{old["run_id"]}').json()['progress']['completed'], 1)
+
     def setUp(self):
         super().setUp()
         with closing(connect()) as db:

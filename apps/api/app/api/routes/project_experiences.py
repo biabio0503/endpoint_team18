@@ -7,7 +7,7 @@ from api.schemas import RevisionRequest, openapi_body, validate_body
 from repositories.documents import DocumentRepository
 from repositories.experience_analysis import AnalysisRepository, decode
 from services.project_experience import (analyze_document, current_project, current_comparison,
-    documents_for_analysis, job_basis, project_version, skill_key)
+    documents_for_analysis, current_job_snapshot, project_version, skill_key, snapshot_skill_key)
 from services.project_experience_schemas import ExperienceAnswer, SkillAnswer
 from services.ai_guard import guarded_call
 
@@ -103,12 +103,15 @@ def answer_skill(rid: str, ctx=Depends(owned_context), body=Depends(parse_body))
     db, repo, owner = ctx
     row = locked_plan(ctx, rid, answer.expected_input_revision)
     store = AnalysisRepository(db)
-    snapshot = store.job(rid, job_basis(row))
+    snapshot = current_job_snapshot(store, row)
     if not snapshot or snapshot['snapshot_id'] != answer.snapshot_id:
         raise Problem(409, 'revision_conflict', '직무 분석 기준이 변경되었습니다. 다시 불러와 주세요.')
-    key = skill_key(answer.skill_name)
-    if not any(skill_key(s['name']) == key for s in decode(snapshot['result_json'])['skills']):
+    jobs = decode(snapshot['result_json'])
+    exact = next((s for s in jobs['skills'] if s['name'] == answer.skill_name), None)
+    matched = exact or next((s for s in jobs['skills'] if skill_key(s['name']) == skill_key(answer.skill_name)), None)
+    if matched is None:
         raise Problem(422, 'validation_error', '분석된 직무 기술에 대한 답변만 저장할 수 있습니다.')
+    key = snapshot_skill_key(jobs, matched['name'])
     basis = documents_for_analysis(db, rid)[2]
     previous = store.skill_answers(snapshot['snapshot_id'], basis).get(key)
     if not previous or previous['status'] != answer.status:

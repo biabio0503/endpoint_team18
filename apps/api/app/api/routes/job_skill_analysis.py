@@ -6,7 +6,7 @@ from api.schemas import openapi_body, validate_body
 from api.routes.project_experiences import locked_plan
 from repositories.experience_analysis import AnalysisRepository
 from services.job_skill_analysis import analyze_job_skills
-from services.project_experience import job_basis, job_snapshot_payload
+from services.project_experience import job_basis, job_snapshot_payload, current_job_snapshot
 from services.project_experience_schemas import JobAnalysisRequest
 from services.ai_guard import guarded_call
 
@@ -25,6 +25,7 @@ def job_skill_analysis(rid: str, ctx=Depends(owned_context), body=Depends(parse_
     store = AnalysisRepository(db)
     basis = job_basis(row)
     cached = store.job(rid, basis)
+    previous = cached or current_job_snapshot(store, row)
     if cached and not request.refresh:
         result = job_snapshot_payload(cached, revision)
         db.commit()
@@ -39,9 +40,9 @@ def job_skill_analysis(rid: str, ctx=Depends(owned_context), body=Depends(parse_
         if saved is None or request.refresh:
             saved = store.save_job(rid, basis, revision, result)
         result = {**job_snapshot_payload(saved, revision), 'reused': False}
-    elif cached:
+    elif previous:
         # An explicit retry failing must not destroy already verified evidence.
-        result = {**job_snapshot_payload(cached, revision), 'refresh_error': result}
+        result = {**job_snapshot_payload(previous, revision), 'refresh_error': result}
     result['input_revision'] = revision
     db.commit()
     return respond(200, result)

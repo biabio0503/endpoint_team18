@@ -1,0 +1,325 @@
+{
+  "scope": "Synthetic fixed English source text and fixed model responses; not production accuracy.",
+  "roles": {
+    "data": {
+      "selected_count": 7,
+      "selected_ids": [
+        "data-a",
+        "data-b",
+        "data-c",
+        "manufacturing-a",
+        "manufacturing-b",
+        "mixed-mechanical",
+        "mixed-security"
+      ],
+      "expected_count": 5,
+      "false_positive_ids": [
+        "mixed-mechanical",
+        "mixed-security"
+      ],
+      "false_negative_ids": [],
+      "top5": [
+        "Python",
+        "SQL",
+        "CAD",
+        "Excel",
+        "CATIA"
+      ],
+      "top5_appropriate": 3,
+      "top5_denominator": 5,
+      "duplicate_names": 1,
+      "all_skills": [
+        "Python",
+        "SQL",
+        "CAD",
+        "Excel",
+        "CATIA",
+        "SolidWorks",
+        "CISSP",
+        "Power BI",
+        "PowerBI",
+        "AutoCAD",
+        "GD&T",
+        "PostgreSQL",
+        "SIEM",
+        "Splunk",
+        "Tableau"
+      ],
+      "core_skills": [
+        "Python",
+        "SQL",
+        "CAD",
+        "Excel",
+        "CATIA",
+        "SolidWorks",
+        "CISSP",
+        "Power BI",
+        "PowerBI",
+        "AutoCAD",
+        "GD&T",
+        "PostgreSQL",
+        "SIEM",
+        "Splunk",
+        "Tableau"
+      ],
+      "counts": {
+        "Python": 6,
+        "SQL": 6,
+        "CAD": 4,
+        "Excel": 4,
+        "CATIA": 3,
+        "SolidWorks": 3,
+        "CISSP": 2,
+        "Power BI": 2,
+        "PowerBI": 2,
+        "AutoCAD": 1,
+        "GD&T": 1,
+        "PostgreSQL": 1,
+        "SIEM": 1,
+        "Splunk": 1,
+        "Tableau": 1
+      },
+      "sample_notice": null
+    },
+    "mechanical": {
+      "selected_count": 3,
+      "selected_ids": [
+        "cad",
+        "mechanical",
+        "mixed-mechanical"
+      ],
+      "expected_count": 3,
+      "false_positive_ids": [],
+      "false_negative_ids": [],
+      "top5": [
+        "CAD",
+        "CATIA",
+        "SolidWorks",
+        "AutoCAD",
+        "GD&T"
+      ],
+      "top5_appropriate": 5,
+      "top5_denominator": 5,
+      "duplicate_names": 0,
+      "all_skills": [
+        "CAD",
+        "CATIA",
+        "SolidWorks",
+        "AutoCAD",
+        "GD&T"
+      ],
+      "core_skills": [
+        "CAD",
+        "CATIA",
+        "SolidWorks",
+        "AutoCAD",
+        "GD&T"
+      ],
+      "counts": {
+        "CAD": 3,
+        "CATIA": 3,
+        "SolidWorks": 3,
+        "AutoCAD": 2,
+        "GD&T": 2
+      },
+      "sample_notice": null
+    },
+    "security": {
+      "selected_count": 3,
+      "selected_ids": [
+        "mixed-security",
+        "security",
+        "soc"
+      ],
+      "expected_count": 3,
+      "false_positive_ids": [],
+      "false_negative_ids": [],
+      "top5": [
+        "CISSP",
+        "SIEM",
+        "Splunk",
+        "Python",
+        "SQL"
+      ],
+      "top5_appropriate": 5,
+      "top5_denominator": 5,
+      "duplicate_names": 0,
+      "all_skills": [
+        "CISSP",
+        "SIEM",
+        "Splunk",
+        "Python",
+        "SQL"
+      ],
+      "core_skills": [
+        "CISSP",
+        "SIEM",
+        "Splunk",
+        "Python",
+        "SQL"
+      ],
+      "counts": {
+        "CISSP": 3,
+        "SIEM": 3,
+        "Splunk": 3,
+        "Python": 2,
+        "SQL": 2
+      },
+      "sample_notice": null
+    },
+    "manufacturing": {
+      "selected_count": 6,
+      "selected_ids": [
+        "data-a",
+        "data-b",
+        "manufacturing-a",
+        "manufacturing-b",
+        "mixed-mechanical",
+        "mixed-security"
+      ],
+      "expected_count": 2,
+      "false_positive_ids": [
+        "data-a",
+        "data-b",
+        "mixed-mechanical",
+        "mixed-security"
+      ],
+      "false_negative_ids": [],
+      "top5": [
+        "Python",
+        "SQL",
+        "CAD",
+        "CATIA",
+        "Excel"
+      ],
+      "top5_appropriate": 5,
+      "top5_denominator": 5,
+      "duplicate_names": 1,
+      "all_skills": [
+        "Python",
+        "SQL",
+        "CAD",
+        "CATIA",
+        "Excel",
+        "SolidWorks",
+        "CISSP",
+        "PowerBI",
+        "AutoCAD",
+        "GD&T",
+        "Power BI",
+        "SIEM",
+        "Splunk",
+        "Tableau"
+      ],
+      "core_skills": [
+        "Python",
+        "SQL",
+        "CAD",
+        "CATIA",
+        "Excel",
+        "SolidWorks",
+        "CISSP",
+        "PowerBI",
+        "AutoCAD",
+        "GD&T",
+        "Power BI",
+        "SIEM",
+        "Splunk",
+        "Tableau"
+      ],
+      "counts": {
+        "Python": 5,
+        "SQL": 5,
+        "CAD": 4,
+        "CATIA": 3,
+        "Excel": 3,
+        "SolidWorks": 3,
+        "CISSP": 2,
+        "PowerBI": 2,
+        "AutoCAD": 1,
+        "GD&T": 1,
+        "Power BI": 1,
+        "SIEM": 1,
+        "Splunk": 1,
+        "Tableau": 1
+      },
+      "sample_notice": null
+    }
+  },
+  "personalization": {
+    "absent": {
+      "status": "not_verified",
+      "action_type": "verify_experience",
+      "activity": "SQL 경험 확인 자료를 정리한다.",
+      "courses": [
+        "sql-intro"
+      ],
+      "eligible_courses": [
+        "sql-intro",
+        "sql-advanced",
+        "python-project"
+      ],
+      "focused_skills": [
+        "Python",
+        "SQL",
+        "CAD"
+      ]
+    },
+    "document_only": {
+      "status": "document_supported",
+      "action_type": "verify_experience",
+      "activity": "SQL 경험 확인 자료를 정리한다.",
+      "courses": [
+        "sql-intro"
+      ],
+      "eligible_courses": [
+        "sql-intro",
+        "sql-advanced",
+        "python-project"
+      ],
+      "focused_skills": [
+        "Python",
+        "SQL",
+        "CAD"
+      ]
+    },
+    "confirmed": {
+      "status": "confirmed_experience",
+      "action_type": "deepen",
+      "activity": "SQL 분석 결과를 검증한다.",
+      "courses": [
+        "sql-advanced"
+      ],
+      "eligible_courses": [
+        "sql-intro",
+        "sql-advanced",
+        "python-project"
+      ],
+      "focused_skills": [
+        "SQL",
+        "Python",
+        "CAD",
+        "Excel"
+      ]
+    },
+    "no_experience": {
+      "status": "no_experience",
+      "action_type": "learn",
+      "activity": "SQL 조회 예제를 작성한다.",
+      "courses": [
+        "sql-intro"
+      ],
+      "eligible_courses": [
+        "sql-intro",
+        "sql-advanced",
+        "python-project"
+      ],
+      "focused_skills": [
+        "SQL",
+        "Python",
+        "CAD",
+        "Excel"
+      ]
+    }
+  }
+}

@@ -61,6 +61,8 @@ try {
  assert.equal(await run('mockRoadmap.revision'), 1);
  await send('Page.reload');
  await wait("document.body.innerText.includes('추가 학습을 검토할 기술')");
+ assert.ok(await run("[...document.querySelectorAll('.skill-card')].find(e=>e.querySelector('h3')?.textContent.startsWith('CAD'))?.innerText.includes('생성 입력에 미포함 · 실제 제안 활동 0단계')"));
+ assert.ok(await run("[...document.querySelectorAll('.skill-card')].find(e=>e.querySelector('h3')?.textContent.startsWith('SQL'))?.innerText.includes('로드맵 생성 입력에 포함 · 실제 제안 활동 3단계')"));
  await tab(2);
  await wait("document.body.innerText.includes('작업 완료 1 / 3개')");
  assert.equal(await run("document.querySelector('input[type=checkbox]').checked"), true);
