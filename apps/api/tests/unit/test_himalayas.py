@@ -79,7 +79,13 @@ class HimalayasTest(unittest.TestCase):
         with patch.object(h, '_request_page') as request:
             self.assertEqual(h.fetch_jobs('모르는 목표')['errors'][0]['code'], 'unmapped_goal')
             request.assert_not_called()
-        with patch.object(h, '_request_page', side_effect=[{'jobs': [job()]}, h.SearchError('timeout'), {'jobs': []}]):
+        def page_error(keyword, page):
+            if keyword == 'Backend Engineer' and page == 1:
+                return {'jobs': [job(title='Backend Engineer')]}
+            if keyword == 'Backend Engineer' and page == 2:
+                raise h.SearchError('timeout')
+            return {'jobs': []}
+        with patch.object(h, '_request_page', side_effect=page_error):
             result = h.fetch_jobs('백엔드')
             self.assertEqual(result['status'], 'partial')
             self.assertEqual(result['searches'][0]['status'], 'partial')
