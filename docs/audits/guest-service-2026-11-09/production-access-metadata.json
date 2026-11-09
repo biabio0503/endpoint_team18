@@ -1,0 +1,115 @@
+{
+  "project_id": "htuttclopxaiyhgcakkj",
+  "checked_at": "2026-11-09",
+  "mode": "read-only metadata; no user rows",
+  "tables": [
+    {
+      "rls": true,
+      "name": "session_owners",
+      "anon_access": false,
+      "authenticated_access": false
+    },
+    {
+      "rls": true,
+      "name": "universities",
+      "anon_access": false,
+      "authenticated_access": false
+    },
+    {
+      "rls": true,
+      "name": "departments",
+      "anon_access": false,
+      "authenticated_access": false
+    },
+    {
+      "rls": true,
+      "name": "course_catalogs",
+      "anon_access": false,
+      "authenticated_access": false
+    },
+    {
+      "rls": true,
+      "name": "roadmap_inputs",
+      "anon_access": false,
+      "authenticated_access": false
+    },
+    {
+      "rls": true,
+      "name": "courses",
+      "anon_access": false,
+      "authenticated_access": false
+    },
+    {
+      "rls": true,
+      "name": "input_course_states",
+      "anon_access": false,
+      "authenticated_access": false
+    },
+    {
+      "rls": true,
+      "name": "catalog_courses",
+      "anon_access": false,
+      "authenticated_access": false
+    },
+    {
+      "rls": true,
+      "name": "project_documents",
+      "anon_access": false,
+      "authenticated_access": false
+    },
+    {
+      "rls": true,
+      "name": "document_extractions",
+      "anon_access": false,
+      "authenticated_access": false
+    },
+    {
+      "rls": true,
+      "name": "document_upload_reservations",
+      "anon_access": false,
+      "authenticated_access": false
+    },
+    {
+      "rls": true,
+      "name": "job_skill_snapshots",
+      "anon_access": false,
+      "authenticated_access": false
+    },
+    {
+      "rls": true,
+      "name": "project_experience_analyses",
+      "anon_access": false,
+      "authenticated_access": false
+    },
+    {
+      "rls": true,
+      "name": "project_experience_answers",
+      "anon_access": false,
+      "authenticated_access": false
+    },
+    {
+      "rls": true,
+      "name": "skill_experience_answers",
+      "anon_access": false,
+      "authenticated_access": false
+    },
+    {
+      "rls": true,
+      "name": "roadmap_runs",
+      "anon_access": false,
+      "authenticated_access": false
+    },
+    {
+      "rls": true,
+      "name": "roadmap_task_progress",
+      "anon_access": false,
+      "authenticated_access": false
+    }
+  ],
+  "storage_policies": null,
+  "bucket": {
+    "id": "roadmap-documents",
+    "public": false,
+    "file_size_limit": 10485760
+  }
+}

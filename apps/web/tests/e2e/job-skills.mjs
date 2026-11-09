@@ -53,12 +53,13 @@ try {
    const m=window.mockAnalysis;
    const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json'}});
    if(url.endsWith('/course-recommendations')) {m.courses++;return json({career_goal:'보안 개발',input_revision:m.revision,courses:[{course_id:'course-1',course_name:'기존 수강 추천'}],status:'ok'});}
+   if(url.endsWith('/skill-comparison')) return json({input_revision:m.revision,job_analysis:m.saved||{status:'not_started',skills:[]}});
    if(!url.endsWith('/job-skill-analysis')) return json({input_revision:m.revision});
    m.posts++;
    await new Promise(resolve=>setTimeout(resolve,250));
    if(m.status==='conflict') return json({error:'revision_conflict',message:'분석 중 입력이 변경되었습니다. 다시 시도해 주세요.'},409);
    const skill={name:'Python',category:'programming_language',mentioned_job_count:1,mention_frequency:1,required_job_count:1,preferred_job_count:0,mentioned_only_job_count:0,unknown_job_count:0,direct_job_count:1,related_job_count:0,seniority_distribution:{entry:1,mid:0,senior:0,unknown:0},evidence:[{job_id:'job-1',title:'Security Engineer',source_url:'https://himalayas.app/companies/example/jobs/security',requirement_type:'required',evidence_text:'Python is required.'}]};
-   return json({status:m.status,career_goal:'보안 개발',target_role:'보안 엔지니어',canonical_role:'Security Engineer',input_revision:m.revision,keyword_details:[{keyword:'Security Engineer',relation:'direct'}],collection_summary:{selected_jobs:1},analysis_summary:{analyzed_jobs:1,failed_jobs:m.status==='partial'?1:0,skipped_jobs:0},skills:['success','partial'].includes(m.status)?[skill]:[],retrieved_at:'2026-11-09T04:00:00Z',clarification_message:'관심 업무를 구체화해 주세요.',errors:m.status==='error'?[{message:'Gemini 요청 시간이 초과되었습니다.'}]:[]});
+   return json(m.saved={snapshot_id:'job-snapshot',status:m.status,career_goal:'보안 개발',target_role:'보안 엔지니어',canonical_role:'Security Engineer',input_revision:m.revision,keyword_details:[{keyword:'Security Engineer',relation:'direct'}],collection_summary:{selected_jobs:1},analysis_summary:{analyzed_jobs:1,failed_jobs:m.status==='partial'?1:0,skipped_jobs:0},skills:['success','partial'].includes(m.status)?[skill]:[],retrieved_at:'2026-11-09T04:00:00Z',clarification_message:'관심 업무를 구체화해 주세요.',errors:m.status==='error'?[{message:'Gemini 요청 시간이 초과되었습니다.'}]:[]});
   };
  ` });
  await send('Page.navigate', { url: `${origin}/result` });
@@ -66,7 +67,9 @@ try {
  await delay(800);
  assert.equal(await run('window.mockAnalysis.posts'), 0);
  await tab(1);
- await wait("document.querySelector('.job-skills').getAttribute('aria-busy')==='true'");
+ await wait("document.querySelector('.job-skills').getAttribute('aria-busy')==='false'");
+ assert.equal(await run('window.mockAnalysis.posts'),0);
+ await run("[...document.querySelectorAll('button')].find(b=>b.textContent==='직무 분석 실행').click()");
  await wait("document.querySelector('.skill-card')?.innerText.includes('Python')");
  assert.equal(await run('window.mockAnalysis.posts'), 1);
  await run("document.querySelector('.skill-card summary').click()");
@@ -86,6 +89,9 @@ try {
   await run(`window.mockAnalysis.revision++;window.mockAnalysis.status=${JSON.stringify(status)}`);
   await tab(1);
   await wait("document.querySelector('.job-skills').getAttribute('aria-busy')==='false'");
+  await run("[...document.querySelectorAll('button')].find(b=>b.textContent==='직무 분석 다시 실행').click()");
+  await wait("document.querySelector('.job-skills').getAttribute('aria-busy')==='true'");
+  await wait("document.querySelector('.job-skills').getAttribute('aria-busy')==='false'");
  };
  await change('partial');
  assert.ok(await run("document.querySelector('.job-skills').innerText.includes('확인된 결과만')"));
@@ -98,7 +104,7 @@ try {
  assert.ok(await run("document.querySelector('.job-skills').innerText.includes('시간이 초과')"));
  await change('conflict');
  assert.ok(await run("document.querySelector('.job-skills').innerText.includes('입력이 변경')"));
- assert.equal(await run("document.querySelectorAll('.skill-card').length"), 0);
+ assert.ok(await run("document.querySelector('.job-skills').innerText.includes('입력이 변경')"));
  await change('success');
  await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
  assert.ok(await run('document.documentElement.scrollWidth<=window.innerWidth'));

@@ -1,0 +1,82 @@
+{
+  "origin": "https://web-seven-xi-rblasxflsf.vercel.app",
+  "method": "read-only; no account, plan, document or AI generation",
+  "endpoints": {
+    "/": {
+      "status": 200,
+      "server": "Vercel"
+    },
+    "/result": {
+      "status": 200,
+      "server": "Vercel"
+    },
+    "/input/courses": {
+      "status": 200,
+      "server": "Vercel"
+    },
+    "/api/health": {
+      "status": 200,
+      "server": "Vercel",
+      "body": "{\"status\":\"ok\"}"
+    },
+    "/api/health/db": {
+      "status": 200,
+      "server": "Vercel",
+      "body": "{\"status\":\"ok\"}"
+    },
+    "/api/roadmap-inputs/resume": {
+      "status": 401,
+      "server": null,
+      "body": "{\"error\":\"unauthorized\",\"message\":\"세션이 만료되었거나 유효하지 않습니다.\"}"
+    },
+    "/api/universities": {
+      "status": 200,
+      "server": "Vercel"
+    }
+  },
+  "deployed_code_markers": {
+    "misleading_activities": false,
+    "fixed_course_page_five": true,
+    "guardrails_new_ui": false,
+    "job_analysis_endpoint_present": true
+  },
+  "auth_settings": {
+    "disable_signup": false,
+    "autoconfirm": null,
+    "external": {
+      "anonymous_users": true,
+      "apple": false,
+      "azure": false,
+      "bitbucket": false,
+      "discord": false,
+      "facebook": false,
+      "snapchat": false,
+      "figma": false,
+      "fly": false,
+      "github": false,
+      "gitlab": false,
+      "google": true,
+      "keycloak": false,
+      "kakao": false,
+      "linkedin": false,
+      "linkedin_oidc": false,
+      "notion": false,
+      "spotify": false,
+      "slack": false,
+      "slack_oidc": false,
+      "workos": false,
+      "twitch": false,
+      "twitter": false,
+      "email": true,
+      "phone": false,
+      "zoom": false
+    }
+  },
+  "google_authorize": {
+    "status": 302,
+    "redirect_host": "accounts.google.com"
+  },
+  "private_ui_authenticated_flows": "not executed: requires isolated real auth/test account or Google interactive login",
+  "checked_at": "2026-11-09 Asia/Seoul",
+  "source_main": "bc56a1582a057044f4f7e603cbdfa71c53148776"
+}

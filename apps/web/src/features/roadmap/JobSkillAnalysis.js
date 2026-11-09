@@ -17,7 +17,8 @@ export default function JobSkillAnalysis({ active, onResult }) {
  const [state, setState] = useState({ phase: 'idle', data: null, message: '' });
  const [retry, setRetry] = useState(0);
  const [saving, setSaving] = useState(false);
- const forceNext = useRef(false);
+ const nextAction = useRef({});
+ const [analyzing, setAnalyzing] = useState(false);
  useEffect(() => {
   if (!active) return;
   let disposed = false;
@@ -26,19 +27,23 @@ export default function JobSkillAnalysis({ active, onResult }) {
    if (disposed || busy || document.visibilityState === 'hidden') return;
    busy = true;
    const attempt = ++sequence.current;
-   setState({ phase: 'loading', data: null, message: '' });
-   onResult(null);
-   const force = forceNext.current;
-   forceNext.current = false;
+   setState(previous => ({ ...previous, phase: 'loading', message: '' }));
+   const action = nextAction.current;
+   nextAction.current = {};
+   setAnalyzing(Boolean(action.run));
    try {
-    const data = await loader.current({ force });
+    const data = await loader.current(action);
     if (!disposed && sequence.current === attempt) {
      setState({ phase: 'ready', data, message: '' });
      onResult(data);
     }
    } catch (error) {
-    if (!disposed && sequence.current === attempt) setState({ phase: 'error', data: null, message: error.message });
-   } finally { busy = false; }
+    if (!disposed && sequence.current === attempt) {
+     const invalid = [401, 404, 409].includes(error.status);
+     setState(previous => ({ ...previous, data: invalid ? null : previous.data, phase: 'error', message: error.message }));
+     if (invalid) onResult(null);
+    }
+   } finally { busy = false; if (!disposed) setAnalyzing(false); }
   }
   load();
   window.addEventListener('focus', load);
@@ -57,13 +62,16 @@ export default function JobSkillAnalysis({ active, onResult }) {
    if (await resolvePlanId() !== data.request_id) throw new Error('계획이 변경되었습니다. 최신 내용을 불러와 주세요.');
    await apiRequest(`/roadmap-inputs/${encodeURIComponent(data.request_id)}/skill-comparison/answers`, { method: 'POST', body: JSON.stringify({ expected_input_revision: data.input_revision, snapshot_id: data.comparison.job_analysis.snapshot_id, skill_name: skill.name, status }) });
    setRetry(v => v + 1);
-  } catch (error) { setState({ phase: 'error', data: null, message: error.message }); onResult(null); }
+  } catch (error) { setState(previous => ({ ...previous, phase: 'error', message: error.message })); onResult(null); }
   finally { setSaving(false); }
  }
  return <div hidden={!active} className="job-skills" aria-busy={phase === 'loading'}>
   <strong>채용공고 기술 스택 분석</strong>
   <p>저장된 목표와 희망 직무를 바탕으로 해외 원격근무 공고의 기술을 살펴봅니다.</p>
-  {phase === 'loading' && <p role="status">직무 검색어 생성 → 채용공고 수집 → 기술 및 원문 근거 분석 중입니다. 잠시 기다려 주세요…</p>}
+  <p className="field-help">실행하면 저장한 목표·희망 직무를 Gemini에 전달하고 Himalayas 공고를 분석합니다. 탭 이동은 저장 결과만 조회합니다.</p>
+  <button className="primary" disabled={phase === 'loading' || saving} onClick={() => { nextAction.current = { run: true, force: Boolean(data?.snapshot_id) }; setRetry(v => v + 1); }}>{data?.snapshot_id ? '직무 분석 다시 실행' : '직무 분석 실행'}</button>
+  {phase === 'loading' && <p role="status">{analyzing ? '직무 검색어 생성 → 채용공고 수집 → 기술 및 원문 근거 분석 중입니다…' : '저장된 직무 분석을 불러오고 있습니다…'}</p>}
+  {data?.status === 'not_started' && <p className="notice">직무 분석을 실행한 뒤 경험을 비교하고 로드맵을 생성할 수 있습니다. 외부 분석이 어려우면 제한 안내 로드맵을 이용해 주세요.</p>}
   {phase === 'error' && <p role="alert">{message}</p>}
   {data && <>
    <dl className="skill-summary">
@@ -102,6 +110,6 @@ export default function JobSkillAnalysis({ active, onResult }) {
    <p className="field-help">빈도는 수집한 해외 원격근무 공고 중 분석에 성공한 표본의 언급 비율입니다. 국내 취업시장 전체의 요구 비율이나 학생의 필수 역량·학습 우선순위를 뜻하지 않습니다. 필수·우대는 명시된 원문 표현을 기준으로 구분합니다.</p>
   </>}
   <p className="field-help">공고 출처: <a href="https://himalayas.app" target="_blank" rel="noopener noreferrer">Himalayas</a></p>
-  {(phase === 'error' || (data && ['error', 'partial'].includes(data.status))) && <button className="primary" onClick={() => { forceNext.current = true; setRetry(v => v + 1); }}>다시 분석</button>}
+  {phase === 'error' && <button onClick={() => setRetry(v => v + 1)}>저장 결과 다시 조회</button>}
  </div>;
 }

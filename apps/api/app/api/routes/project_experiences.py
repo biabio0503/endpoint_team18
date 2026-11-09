@@ -9,6 +9,7 @@ from repositories.experience_analysis import AnalysisRepository, decode
 from services.project_experience import (analyze_document, current_project, current_comparison,
     documents_for_analysis, job_basis, project_version, skill_key)
 from services.project_experience_schemas import ExperienceAnswer, SkillAnswer
+from services.ai_guard import guarded_call
 
 router = APIRouter(prefix='/api/roadmap-inputs/{rid:roadmap_id}', tags=['project-experiences'])
 
@@ -44,13 +45,15 @@ def run_analysis(rid: str, ctx=Depends(owned_context), body=Depends(parse_body))
     pending = [d for d in documents if (d['document_id'], d['extraction_revision']) not in saved or
                decode(saved[(d['document_id'], d['extraction_revision'])]['result_json'])['status'] not in ('success', 'partial')]
     db.commit()  # External calls never hold database locks.
-    results, limited = [], False
-    for document in pending:
-        if limited:
-            break
-        result = analyze_document(document)
-        limited = any(e['code'] == 'gemini_rate_limited' for e in result['errors'])
-        results.append((document, result))
+    def analyze_pending():
+        results = []
+        for document in pending:
+            result = analyze_document(document)
+            results.append((document, result))
+            if any(e['code'] == 'gemini_rate_limited' for e in result['errors']):
+                break
+        return results
+    results = guarded_call(ctx, 'project_analysis', basis, analyze_pending, units=2 * len(pending)) if pending else []
     row = locked_plan(ctx, rid, request.expected_input_revision)
     if documents_for_analysis(db, rid)[2] != basis:
         raise Problem(409, 'revision_conflict', '분석 중 문서가 변경되었습니다. 다시 시도해 주세요.')

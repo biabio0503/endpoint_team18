@@ -12,6 +12,8 @@ from services.gemini_roadmap import generate_roadmap
 from services.project_experience import digest
 from services.roadmap_generation import capture_basis, model_input, validate_result
 from services.roadmap_schemas import GenerationRequest, ProgressRequest
+from services.ai_guard import guarded_call
+from services.limited_roadmap import limited_roadmap
 
 router = APIRouter(prefix='/api/roadmap-inputs/{rid:roadmap_id}', tags=['roadmaps'])
 
@@ -47,12 +49,11 @@ def generate(rid: str, ctx=Depends(owned_context), body=Depends(parse_body)):
     request = validate_body(GenerationRequest, body)
     db = ctx[0]
     basis = read_basis(ctx, rid, request.expected_input_revision, serialize=True)
-    if not basis['job_snapshot_id']:
-        raise Problem(422, 'needs_job_analysis', '직무 역량 비교 탭에서 직무 분석을 먼저 실행해 주세요.')
-    if not basis['skills']:
-        raise Problem(422, 'insufficient_job_evidence', '검증된 직무 기술이 없어 로드맵을 생성할 수 없습니다. 직무 분석을 확인해 주세요.')
+    if not (basis['profile']['career_goal'] or '').strip():
+        raise Problem(422, 'goal_required', '진로 목표를 먼저 입력해 주세요.')
+    limited = basis['generation_mode'] == 'limited_guidance'
     store = RoadmapRepository(db)
-    if not request.refresh:
+    if not request.refresh or limited:
         cached = store.reusable(rid, digest(basis))
         if cached:
             result = run_payload(store, cached, basis)
@@ -69,16 +70,16 @@ def generate(rid: str, ctx=Depends(owned_context), body=Depends(parse_body)):
     run = store.create(rid, basis)
     db.commit()  # No DB transaction/lock while Gemini runs. The unique lease survives across processes.
     try:
-        generated = generate_roadmap(model_input(basis))
-        result = validate_result(generated, basis)
+        result = limited_roadmap(basis) if limited else guarded_call(ctx, 'roadmap', digest(basis),
+            lambda: validate_result(generate_roadmap(model_input(basis)), basis))
     except Exception as error:
         # Do not erase any previous successful run or retain unvalidated provider output.
         current = read_basis(ctx, rid, serialize=True)
-        store.fail(rid, run['run_id'], error.code if isinstance(error, GeminiError) else 'generation_failed')
+        store.fail(rid, run['run_id'], error.code if isinstance(error, (GeminiError, Problem)) else 'generation_failed')
         db.commit()
         if digest(current) != run['basis_hash']:
             raise Problem(409, 'revision_conflict', '생성 중 입력 또는 분석 근거가 변경되었습니다.') from None
-        if isinstance(error, GeminiError):
+        if isinstance(error, (GeminiError, Problem)):
             raise
         raise GeminiError('generation_failed', '로드맵을 생성하지 못했습니다. 이전 저장 결과는 유지됩니다.') from None
     current = read_basis(ctx, rid, serialize=True)
@@ -105,7 +106,7 @@ def latest(rid: str, ctx=Depends(owned_context)):
     history = store.history(rid)
     run = run or next((r for r in history if r['status'] in ('success', 'partial')), None) or next(iter(history), None)
     result = run_payload(store, run, current) if run else {
-        'status': 'not_started' if current['job_snapshot_id'] else 'needs_job_analysis',
+        'status': 'not_started', 'limited_guidance_available': current['generation_mode'] == 'limited_guidance',
         'input_revision': current['input_revision'], 'current_input_revision': current['input_revision']}
     ctx[0].commit()
     return respond(200, result)

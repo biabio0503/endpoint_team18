@@ -110,7 +110,17 @@ class RoadmapAPI(ProjectExperienceAPI):
 
     def test_roadmap_unknown_and_unavailable(self):
         with patch('api.routes.roadmaps.generate_roadmap') as ai:
-            self.assertEqual(self.make().json()['error'], 'needs_job_analysis'); ai.assert_not_called()
+            limited = self.make().json()
+            self.assertEqual(limited['generation_mode'], 'limited_guidance'); ai.assert_not_called()
+            self.assertEqual(limited['status'], 'partial')
+            self.assertEqual(limited['recommended_courses'], [])
+            self.assertEqual(limited['preparation_items'], [])
+            self.assertTrue(self.make(refresh=True).json()['reused'])
+            task = limited['roadmap'][0]['tasks'][0]['task_id']
+            response = self.client.patch(f'{self.base}/roadmaps/{limited["run_id"]}/tasks/{task}',
+                json={'is_completed': True, 'expected_progress_version': 0})
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertEqual(self.client.get(self.base + '/roadmap').json()['progress']['completed'], 1)
         self.jobs()
         self.client.patch(self.base, json={'expected_input_revision': self.revision(), 'changes': {'catalog_id': None}})
         run, _ = self.generated()

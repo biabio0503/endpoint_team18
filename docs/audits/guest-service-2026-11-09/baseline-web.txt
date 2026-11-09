@@ -1,0 +1,21 @@
+✔ same plan and revision reuses result across tab visits (1.084125ms)
+✔ concurrent renders deduplicate expensive POST requests (0.109416ms)
+✔ changed input or selected plan while analysis runs rejects stale results (1.745375ms)
+✔ failed request can retry and absence of a plan never starts analysis (0.130084ms)
+✔ same input revision still reads newly completed project analysis from server (0.096041ms)
+✔ only explicit force requests a paid job refresh (0.104333ms)
+(node:97605) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ selected plan remains selected even when another plan is the latest (3.043583ms)
+✔ selection is scoped to the authenticated user and the tab (1.007ms)
+✔ session change while selecting cannot retain a previous user plan (1.093042ms)
+✔ missing, failed, and malformed resume responses stay distinct (0.70325ms)
+✔ authenticated requests use the intended user token and reject account changes (9.602875ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 48.831042

@@ -1,0 +1,1 @@
+PASS: explicit consent, review, confirm/correct/defer, source text, experience comparison, no-experience distinction, reuse, invalidation, mobile

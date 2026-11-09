@@ -76,6 +76,6 @@ export default function ProjectExperienceReview() {
    {data.status === 'success' && !data.experiences.length && <p>현재 문서에서 검증 가능한 기술 활동을 찾지 못했습니다. 경험 부재로 판단하지 않습니다.</p>}
    <ul className="skill-list">{data.experiences.map(item => <ExperienceCard key={item.experience_id} item={item} requestId={id} busy={busy} save={save}/>)}</ul>
   </>}
-  <div className="result-link"><Link href="/result">직무 역량 비교 결과 보기 →</Link></div>
+  <div className="result-link"><Link href="/result">다음: 결과 화면에서 직무 분석·로드맵 생성 →</Link></div>
  </section>;
 }
