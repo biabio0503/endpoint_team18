@@ -1,5 +1,7 @@
 """Persisted, owner-scoped roadmap generation; GET and progress never call AI."""
 from datetime import datetime, timezone
+import json
+import logging
 from fastapi import APIRouter, Depends
 
 from api.dependencies import owned_context, parse_body, require_origin, respond
@@ -14,6 +16,9 @@ from services.roadmap_generation import capture_basis, model_input, validate_res
 from services.roadmap_schemas import GenerationRequest, ProgressRequest
 from services.ai_guard import guarded_call
 from services.limited_roadmap import limited_roadmap
+from services.roadmap_validation import RoadmapValidationError, stored_error_code
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix='/api/roadmap-inputs/{rid:roadmap_id}', tags=['roadmaps'])
 
@@ -76,8 +81,13 @@ def generate(rid: str, ctx=Depends(owned_context), body=Depends(parse_body)):
             lambda: validate_result(generate_roadmap(model_input(basis)), basis))
     except Exception as error:
         # Do not erase any previous successful run or retain unvalidated provider output.
+        if isinstance(error, RoadmapValidationError):
+            error.run_id = run['run_id']
+            # No exc_info, provider values, project text, prompts, keys or tokens.
+            logger.warning('roadmap_validation_failed %s', json.dumps({
+                'run_id': run['run_id'], 'rules_version': basis['rules_version'], **error.diagnostic}))
         current = read_basis(ctx, rid, serialize=True)
-        store.fail(rid, run['run_id'], error.code if isinstance(error, (GeminiError, Problem)) else 'generation_failed')
+        store.fail(rid, run['run_id'], stored_error_code(error) if isinstance(error, (GeminiError, Problem)) else 'generation_failed')
         db.commit()
         if digest(current) != run['basis_hash']:
             raise Problem(409, 'revision_conflict', '생성 중 입력 또는 분석 근거가 변경되었습니다.') from None

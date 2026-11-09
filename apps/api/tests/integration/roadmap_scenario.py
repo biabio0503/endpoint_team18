@@ -104,7 +104,7 @@ class RoadmapAPI(ProjectExperienceAPI):
             self.assertIn(original_snapshot, AnalysisRepository(db).job_history(self.rid))
         new, _ = self.generated()
         self.assertNotEqual(new['run_id'], old['run_id'])
-        self.assertEqual(new['rules_version'], 'personalized-roadmap-v3')
+        self.assertEqual(new['rules_version'], 'personalized-roadmap-v5')
         self.assertEqual(new['progress']['completed'], 0)
         self.assertEqual(self.client.get(f'{self.base}/roadmaps/{old["run_id"]}').json()['progress']['completed'], 1)
 
@@ -373,8 +373,60 @@ class RoadmapAPI(ProjectExperienceAPI):
             row = db.execute('SELECT status,result_json FROM roadmap_runs WHERE request_id=?', (self.rid,)).fetchone()
             self.assertEqual(row['status'], 'failed'); self.assertIsNone(row['result_json'])
 
+    def test_roadmap_diagnostics_preserve_v2_progress_then_create_new_success(self):
+        from copy import deepcopy
+        self.jobs()
+        def four_tasks(data):
+            raw = fake_roadmap(data).model_dump()
+            step = deepcopy(raw['roadmap'][-1])
+            step.update(step_id='step-4', order=4, depends_on=['step-3'])
+            step['tasks'][0].update(task_id='task-4', action='SQL 경험 확인 자료 4를 정리한다.')
+            raw['roadmap'].append(step)
+            return raw
+        with patch('services.roadmap_generation.RULES_VERSION', 'personalized-roadmap-v2'), \
+             patch('api.routes.roadmaps.generate_roadmap', side_effect=four_tasks):
+            old = self.make().json()
+        checked = self.client.patch(f'{self.base}/roadmaps/{old["run_id"]}/tasks/task-1', json={
+            'is_completed': True, 'expected_progress_version': 0}).json()
+        self.assertEqual(checked['progress'], {'completed': 1, 'total': 4})
+
+        def invalid(data):
+            raw = four_tasks(data)
+            raw['roadmap'][0]['skill_targets'][0]['student_status'] = 'confirmed_experience'
+            raw['roadmap'][0]['reason'] = 'PRIVATE_PROJECT_TEXT_DO_NOT_LOG'
+            return raw
+        with patch('api.routes.roadmaps.generate_roadmap', side_effect=invalid) as ai, \
+             self.assertLogs('api.routes.roadmaps', level='WARNING') as logs:
+            response = self.make(True)
+        self.assertEqual(ai.call_count, 1)
+        self.assertEqual(response.status_code, 502)
+        failure = response.json()
+        self.assertEqual(failure['error'], 'gemini_invalid_response')
+        self.assertEqual(failure['detail_code'], 'experience_status_mismatch')
+        self.assertEqual(failure['field_path'], '$.roadmap[0].skill_targets[0].student_status')
+        self.assertIn(failure['run_id'], ''.join(logs.output))
+        self.assertIn(failure['field_path'], ''.join(logs.output))
+        self.assertNotIn('PRIVATE_PROJECT_TEXT_DO_NOT_LOG', ''.join(logs.output))
+        restored = self.client.get(self.base + '/roadmap').json()
+        self.assertEqual(restored['run_id'], old['run_id'])
+        self.assertEqual(restored['progress'], checked['progress'])
+        detail = self.client.get(f'{self.base}/roadmaps/{failure["run_id"]}').json()
+        self.assertEqual(detail['error_code'], 'gemini_invalid_response')
+        self.assertEqual(detail['error_detail_code'], failure['detail_code'])
+        with closing(connect()) as db:
+            row = db.execute('SELECT result_json,error_code FROM roadmap_runs WHERE run_id=?', (failure['run_id'],)).fetchone()
+            self.assertIsNone(row['result_json'])
+            self.assertEqual(row['error_code'], 'gemini_invalid_response:experience_status_mismatch')
+        new, calls = self.generated(True)
+        self.assertEqual(calls, 1)
+        self.assertNotEqual(new['run_id'], old['run_id'])
+        self.assertEqual(new['rules_version'], 'personalized-roadmap-v5')
+        self.assertEqual(new['progress']['completed'], 0)
+        self.assertEqual(self.client.get(f'{self.base}/roadmaps/{old["run_id"]}').json()['progress'], checked['progress'])
+        self.assertEqual(len(self.client.get(self.base + '/roadmaps').json()['runs']), 3)
+
 
 if __name__ == '__main__':
-    suite = unittest.TestSuite(RoadmapAPI(name) for name in unittest.defaultTestLoader.getTestCaseNames(RoadmapAPI) if name.startswith('test_roadmap_'))
+    suite = unittest.TestSuite(RoadmapAPI(name) for name in unittest.defaultTestLoader.getTestCaseNames(RoadmapAPI) if name.startswith('test_roadmap_') or name in ('test_context_only_evidence_never_calls_paid_roadmap_generation', 'test_previous_rules_preserve_reads_evidence_progress_and_explicit_upgrade'))
     result = unittest.TextTestRunner(verbosity=2).run(suite)
     raise SystemExit(not result.wasSuccessful())

@@ -8,6 +8,7 @@ from services.gemini_roadmap import generate_roadmap
 from services.gemini_jobs import _response_schema
 from services.roadmap_schemas import GeneratedRoadmap
 from services.roadmap_generation import model_input, validate_result
+from services.roadmap_validation import parse_response
 
 
 def basis(status='no_experience', review='confirmed'):
@@ -115,7 +116,7 @@ def test_minimal_input_no_reanalysis_or_completed_candidate():
     with patch('services.gemini_roadmap._generate', return_value=output()) as provider:
         generate_roadmap(data)
     assert provider.call_count == 1
-    assert provider.call_args.kwargs == {'max_attempts': 1}
+    assert provider.call_args.kwargs == {'max_attempts': 1, 'response_parser': parse_response}
 
 
 def test_actual_transport_429_no_retry():

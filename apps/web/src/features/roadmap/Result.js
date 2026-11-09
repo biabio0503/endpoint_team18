@@ -6,6 +6,7 @@ import { Preparation, RoadmapSteps, CourseCandidates } from './RoadmapPanels';
 import { Heading } from '../../components/layout/Shell';
 import { apiRequest } from '../../lib/api/client';
 import { resolvePlanId } from '../../lib/api/session';
+import { roadmapErrorMessage } from './roadmapErrors.mjs';
 
 const tabs = ['준비 상태', '직무 역량 비교', '실행 로드맵', '수강 후보', '공모전·대외활동'];
 export default function Result() {
@@ -62,7 +63,7 @@ export default function Result() {
    });
    selectedRun.current = ''; setResult(data); setSelected(2);
    await load('');
-  } catch (error) { setMessage(error.message); setErrorCode(error.code); await load(); }
+  } catch (error) { setMessage(roadmapErrorMessage(error)); setErrorCode(error.code); await load(); }
   finally { generating.current = false; }
  }
  async function toggle(task) {
@@ -104,7 +105,7 @@ export default function Result() {
     {result?.run_id && <p className="field-help">{result.finished_at ? '생성 처리 완료' : '생성 요청'} 시각 {new Date(result.finished_at || result.created_at).toLocaleString('ko-KR')} · 입력 버전 {result.input_revision} · 현재 입력 버전 {result.current_input_revision} · {result.generation_mode === 'limited_guidance' ? 'AI 호출 없는 제한 안내' : result.model_name}</p>}
     {result?.is_stale && <p className="notice" role="status">이 결과는 이전 입력·분석 기준입니다. 현재 입력으로 다시 분석하면 새 이력이 생성되며 완료 체크는 옮겨지지 않습니다.</p>}
     {result?.details_restricted && <p className="notice">문서 삭제·재추출 등으로 근거가 변경되어 과거 결과의 상세 내용과 완료 체크 접근을 제한했습니다.</p>}
-    {result?.status === 'failed' && <p role="status">이 실행은 결과를 생성하지 못했습니다. 오류: {result.error_code}. 이전 저장 결과는 이력에서 확인할 수 있습니다.</p>}
+    {result?.status === 'failed' && <p role="status">{roadmapErrorMessage(result)}</p>}
     {usable ? selected === 0 ? <Preparation result={result}/> : selected === 2 ? <RoadmapSteps result={result} saving={busy} onToggle={toggle}/> : <CourseCandidates result={result}/> : !result?.details_restricted && <p>아직 표시할 로드맵 결과가 없습니다. 분석 근거를 확인한 후 로드맵을 생성해 주세요.</p>}
    </>}
    {selected === 4 && <><strong>공모전·대외활동 · 준비 중</strong><p>현재 공모전·대외활동 수집과 개인화 추천은 제공하지 않습니다. 로드맵을 생성해도 이 탭의 결과는 추가되지 않습니다.</p></>}

@@ -73,7 +73,7 @@ def _retry_wait(exc, attempt):
     return 0.5 * (2 ** attempt)
 
 
-def _generate(schema, instruction, data, *, max_attempts=MAX_ATTEMPTS):
+def _generate(schema, instruction, data, *, max_attempts=MAX_ATTEMPTS, response_parser=None):
     key = os.environ.get('GEMINI_API_KEY', '').strip()
     if not key:
         raise GeminiError('gemini_not_configured', 'Gemini API 키가 설정되지 않았습니다.', 503)
@@ -97,6 +97,8 @@ def _generate(schema, instruction, data, *, max_attempts=MAX_ATTEMPTS):
                         system_instruction=instruction, response_mime_type='application/json',
                         response_json_schema=_response_schema(schema.model_json_schema()), max_output_tokens=16384),
                 )
+                if response_parser is not None:
+                    return response_parser(response.text)
                 try:
                     return schema.model_validate_json(response.text)
                 except (ValidationError, ValueError, TypeError):

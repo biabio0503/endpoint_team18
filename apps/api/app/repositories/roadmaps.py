@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from api.domain import now
 from repositories.experience_analysis import AnalysisRepository, decode
 from services.project_experience import digest
+from services.roadmap_validation import error_metadata
 
 
 class RoadmapRepository(AnalysisRepository):
@@ -64,6 +65,7 @@ def metadata(run, current):
     lease = run['lease_until'] if isinstance(run['lease_until'], datetime) else datetime.fromisoformat(run['lease_until'])
     return {k: run[k] for k in ('run_id', 'request_id', 'input_revision', 'catalog_id', 'basis_hash', 'status', 'model_name',
                                 'rules_version', 'created_at', 'finished_at', 'error_code')} | {
+        **error_metadata(run['error_code']),
         'is_stale': run['basis_hash'] != digest(current), 'current_input_revision': current['input_revision'],
         'details_restricted': restricted,
         'limited_guidance_available': current.get('generation_mode') == 'limited_guidance',
