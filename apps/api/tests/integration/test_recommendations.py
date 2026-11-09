@@ -6,6 +6,7 @@ import sys
 import tempfile
 import threading
 import unittest
+import uuid
 from unittest.mock import patch
 
 TEMP = tempfile.TemporaryDirectory()
@@ -70,8 +71,16 @@ class RecommendationAPI(unittest.TestCase):
         with patch.dict(os.environ, {'GEMINI_API_KEY':''}):
             code,result,_=self.request('POST',path,{},cookie)
             self.assertEqual((code,result['error']),(503,'gemini_not_configured'))
+        # An isolated empty catalog avoids deleting shared fixture courses that
+        # other integration scenarios have referenced through course selections.
+        empty_id = str(uuid.uuid4())
         with api.closing(api.connect()) as db:
-            db.execute('DELETE FROM catalog_courses WHERE catalog_id=?',(seed_dev.C1,))
+            db.execute('INSERT INTO course_catalogs VALUES(?,?,NULL,?,?,?,?,?,?,NULL,1)',
+                       (empty_id, seed_dev.D, 'empty-test', 'empty test catalog', 'unknown', 'test', None, '2026-11-07T00:00:00+00:00'))
+            db.commit()
+        current = self.request('GET','/roadmap-inputs/'+rid,cookie=cookie)[1]
+        self.assertEqual(self.request('PATCH','/roadmap-inputs/'+rid,
+                         {'expected_input_revision':current['input_revision'], 'changes':{'catalog_id':empty_id}},cookie)[0],200)
         code,result,_=self.request('POST',path,{},cookie)
         self.assertEqual((code,result['status'],result['courses']),(200,'empty_catalog',[]))
 
