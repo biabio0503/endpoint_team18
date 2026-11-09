@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from services import himalayas as h, job_skill_analysis as a
 from services.job_skill_schemas import ExtractedSkill
+from services.job_relevance import source_segments
 from services.roadmap_generation import focused_skills, validate_result
 from services.gemini import GeminiError
 
@@ -68,6 +69,77 @@ def test_quote_cannot_borrow_mandatory_label_and_known_tool_cannot_bypass_name_c
     assert verified('Python is required.','CAD','Python is required.',category='technical_competency')[1][0]['reason']=='skill_not_in_evidence'
     result,_=verified('No CAD is required.','CAD','No CAD is required.')
     assert not result[0]['recommendation_eligible']
+
+
+@pytest.mark.parametrize('heading', [
+    'What you’ll do', "What you'll do", 'WHAT YOU’LL DO:',
+    '## What You’ll Do', '**What you’ll do**', 'What you\u00a0will do',
+    'What you‘ll do', 'What youʼll do', 'What you’ll be doing',
+])
+def test_typographic_duty_heading_ends_company_context_without_changing_source(heading):
+    quote = 'Build SQL dashboards from sales data.'
+    text = f'About us\nWe are a retailer.\n{heading}\n{quote}\nPreferred\nCAD is a plus.'
+    segments = list(source_segments(text))
+    assert [s['section'] for s in segments] == ['context', 'context', 'duty', 'duty', 'preferred', 'preferred']
+    assert all(text[s['start']:s['end']].strip() == s['text'] for s in segments)
+    result, rejected = verified(text, 'SQL', quote, kind='mentioned')
+    assert not rejected
+    assert result[0]['evidence_section'] == 'duty'
+    assert result[0]['recommendation_eligible'] is True
+    assert result[0]['requirement_type'] == 'mentioned'
+    assert text[result[0]['evidence_start']:result[0]['evidence_end']] == quote
+    keywords = [{'keyword': 'Data Analyst', 'relation': 'direct'}]
+    job = h.normalize_job({'guid': 'fixture', 'title': 'Data Analyst', 'description': text}, 'Data Analyst', keywords)
+    assert job['relevance']['core_families'] == ['data']
+
+
+@pytest.mark.parametrize('quote', [
+    'No CAD experience is required, but SQL proficiency is required.',
+    'SQL proficiency is required, but no CAD experience is required.',
+    'CAD experience is not required, but SQL proficiency is required.',
+    'We do not require CAD experience; SQL proficiency is required.',
+    'We don’t require CAD experience, whereas SQL proficiency is required.',
+    'No CAD experience is required, SQL proficiency is required.',
+    'SQL proficiency is required and CAD experience is not required.',
+    'CAD and CATIA experience are not required; SQL proficiency is required.',
+])
+def test_requirement_negation_applies_only_to_the_named_skill_and_clause(quote):
+    text = 'Requirements\n' + quote
+    results = {}
+    for name in ('CAD', 'SQL'):
+        items, rejected = verified(text, name, quote)
+        assert not rejected
+        results[name] = items[0]
+        assert text[items[0]['evidence_start']:items[0]['evidence_end']] == quote
+    assert results['CAD']['recommendation_eligible'] is False
+    assert results['CAD']['requirement_type'] == 'mentioned'
+    assert results['SQL']['recommendation_eligible'] is True
+    assert results['SQL']['requirement_type'] == 'required'
+
+
+def test_shared_negative_skill_list_and_positive_alias_keep_their_own_requirement():
+    quote = 'No CAD or CATIA experience is required, but PowerBI proficiency is required.'
+    text = 'Requirements\n' + quote
+    for name in ('CAD', 'CATIA'):
+        items, _ = verified(text, name, quote)
+        assert items[0]['recommendation_eligible'] is False
+    items, _ = verified(text, 'Power BI', quote)
+    assert items[0]['recommendation_eligible'] is True
+    assert items[0]['requirement_type'] == 'required'
+
+
+def test_short_quote_cannot_drop_source_negation_or_borrow_another_occurrence():
+    text = 'Requirements\nNo CAD experience is required, but SQL proficiency is required. CAD is required for a separate task.'
+    for name, quote, eligible, kind in (
+        ('CAD', 'CAD experience', False, 'mentioned'),
+        ('SQL', 'SQL proficiency', True, 'required'),
+        ('CAD', 'CAD is required for a separate task.', True, 'required'),
+    ):
+        items, rejected = verified(text, name, quote)
+        assert not rejected
+        assert items[0]['recommendation_eligible'] is eligible
+        assert items[0]['requirement_type'] == kind
+        assert text[items[0]['evidence_start']:items[0]['evidence_end']] == quote
 
 
 def test_aliases_identity_requirement_counts_and_distinct_products():
