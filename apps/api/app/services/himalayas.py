@@ -121,13 +121,24 @@ def _match(job, keywords):
     title = job.get('title') if isinstance(job.get('title'), str) else ''
     # Prefer related over a shorter, overlapping direct phrase when both occur.
     matches = [entry for entry in keywords if _contains(title, entry['keyword'])]
+    # Dynamic roles also cover titles such as "Engineer, Machine Learning" and
+    # "Back-end Engineer". Require every whole role token in the title, never
+    # infer relevance merely because the search API returned a job.
+    def tokens(value):
+        value = re.sub(r'\b(back|front)[ -]+end\b', r'\1end', value.casefold())
+        return set(re.findall(r'[a-z0-9]+', value))
+    title_tokens = tokens(title)
+    matches += [entry for entry in keywords if entry not in matches and len(tokens(entry['keyword'])) >= 2
+                and tokens(entry['keyword']) <= title_tokens]
     if not matches:
         return 'unverified', 'no_title_role_match'
     longest = max(matches, key=lambda entry: len(entry['keyword']))
+    token_match = not _contains(title, longest['keyword'])
     categories = list(job.get('categories')) if isinstance(job.get('categories'), list) else []
     categories += (job.get('parent_categories') if isinstance(job.get('parent_categories'), list) else [])
     corroborated = any(isinstance(value, str) and _contains(value, longest['keyword']) for value in categories)
-    return longest['relation'], 'title_and_category_role_match' if corroborated else 'title_role_match'
+    return longest['relation'], ('title_role_tokens_match' if token_match else
+                                 'title_and_category_role_match' if corroborated else 'title_role_match')
 
 
 def _seniority_signals(text):
@@ -338,11 +349,31 @@ def _request_page(keyword, page):
 
 def fetch_jobs(career_goal: str, target_role: str | None = None, limit: int = 20) -> dict:
     """Return a JSON-serializable search result, including per-keyword outcomes."""
+    _validate_inputs(career_goal, target_role, limit)
+    keywords, reason = generate_search_keywords(career_goal, target_role)
+    return _fetch_jobs(career_goal, target_role, limit, keywords, reason)
+
+
+def fetch_jobs_with_keywords(career_goal, target_role, keywords, limit=20):
+    """Collect using validated model keywords, without invoking the legacy dictionary."""
+    from services.job_skill_schemas import RoleInterpretation
+    _validate_inputs(career_goal, target_role, limit)
+    # Apply the same relation, length, dedup and direct-keyword invariants at this boundary.
+    checked = RoleInterpretation.model_validate({
+        'status': 'success', 'canonical_role': next((k['keyword'] for k in keywords if k.get('relation') == 'direct'), None),
+        'search_keywords': keywords, 'clarification_message': None})
+    return _fetch_jobs(career_goal, target_role, limit,
+                       [entry.model_dump() for entry in checked.search_keywords], None)
+
+
+def _validate_inputs(career_goal, target_role, limit):
     if not isinstance(career_goal, str) or (target_role is not None and not isinstance(target_role, str)):
         raise ValueError('career_goal and target_role must be strings')
     if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= MAX_LIMIT:
         raise ValueError(f'limit must be an integer between 1 and {MAX_LIMIT}')
-    keywords, reason = generate_search_keywords(career_goal, target_role)
+
+
+def _fetch_jobs(career_goal, target_role, limit, keywords, reason):
     now = datetime.now(timezone.utc)
     result = {'source': 'Himalayas', 'source_url': 'https://himalayas.app', 'market_scope': 'global_remote',
               'career_goal': career_goal, 'target_role': target_role, 'search_keywords': [k['keyword'] for k in keywords],

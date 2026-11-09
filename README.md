@@ -2,7 +2,7 @@
 
 > 인증 통합 작업이 진행 중입니다. 현재 변경은 마이그레이션 및 실제 인증 검증이 완료되지 않아 배포할 수 없습니다. 설정과 제한은 [인증 작업 상태](docs/auth-stage1-status.md)를 확인하세요. 아래의 기존 쿠키 기반 실행 설명은 이전 구현 기준입니다.
 
-대학생이 진로 목표와 학업 정보를 저장하고, 문서와 이수 과목을 확인한 뒤 Gemini 기반 수강 후보를 조회하는 서비스입니다. 계획은 세션 쿠키로 소유자를 구분합니다. 수강 후보를 제외한 로드맵·역량 분석은 준비 중입니다.
+대학생이 진로 목표와 학업 정보를 저장하고, 문서와 이수 과목을 확인한 뒤 Gemini 기반 수강 후보를 조회하는 서비스입니다. 계획은 세션 쿠키로 소유자를 구분합니다. 기존 직무 역량 비교 탭에서는 Gemini가 생성한 검색어로 Himalayas 공고를 수집하고 근거가 검증된 기술 스택을 표시합니다. 개인 역량 비교와 로드맵 생성은 준비 중입니다.
 
 ## 구성과 주요 기능
 
@@ -68,3 +68,9 @@ npm run dev
 백엔드 테스트는 임시 SQLite와 모킹을 기본으로 사용합니다. 선택적 PostgreSQL 문서 테스트는 명시적인 로컬 전용 DB와 초기화 보호 조건을 요구합니다. 운영 DB나 Storage를 초기화하지 마세요. 브라우저 E2E 스크립트 `apps/web/tests/e2e/p5-flow.mjs`는 별도로 실행한 격리 API·웹 서버와 Brave가 필요합니다.
 
 Render Root Directory는 `apps/api`, Build는 `pip install -r requirements.txt`, Start는 `uvicorn app.main:app --host 0.0.0.0 --port $PORT`입니다. Vercel Root Directory는 `apps/web`이며 기존 Next.js `/api/*` rewrite를 사용합니다. 현재 PostgreSQL TLS `sslmode=require`는 암호화하지만 서버 인증서를 검증하지 않는 임시 기술 부채입니다. 연결 정책은 별도 검토가 필요합니다. 실제 운영 이력과 저장소 마이그레이션 버전 차이는 [배포 안내](docs/render-deployment.md)에 기록되어 있으며 자동 수정하지 않습니다.
+
+## Gemini 채용공고 기술 스택 분석
+
+저장된 목표·희망 직무 → Gemini 검색어 → Himalayas 최대 20개 공고 → Gemini 배치 추출 → 서버 근거 검증·고유 공고 빈도 집계가 연결되어 있습니다. `POST /api/roadmap-inputs/{request_id}/job-skill-analysis`에 `{}`를 보내며, 기존 결과 화면의 직무 역량 비교 탭에서 자동 호출합니다. 기존 수강 추천과 GET 공고 조회는 유지됩니다.
+
+설정, 응답 계약, 실제 세 직무 검증 명령과 제한은 [기술 스택 분석 문서](docs/job-skill-analysis.md)를 참고하세요. 추가 환경변수나 DB 변경은 없습니다.
