@@ -4,11 +4,12 @@ Recognized occupational conflicts are checked against core duties, never a compa
 technology list. Unrecognized occupations retain the existing title matcher.
 """
 import re
+import unicodedata
 
 HEADINGS = (
     ('preferred', r'preferred(?: qualifications| requirements)?|nice[ -]to[ -]haves?|bonus(?: points)?|우대(?:사항| 요건)?'),
     ('required', r'requirements?|(?:minimum |required |basic )?qualifications|what you bring|필수(?: 요건)?|자격요건'),
-    ('duty', r'responsibilities|(?:key |core )?duties|what you(?: will|\x27ll) do|the role|업무|주요 업무'),
+    ('duty', r'responsibilities|(?:key |core )?duties|what you(?: will|\x27ll) (?:do|be doing)|the role|업무|주요 업무'),
     ('context', r'about (?:us|the company)|company(?: overview)?|our (?:customers|clients|partners)|benefits|회사 소개|복리후생'),
 )
 FAMILIES = {
@@ -24,12 +25,17 @@ DUTIES = {
 MANUFACTURING = r'\bmanufactur\w*|\bfactory\b|\bproduction (?:data|quality|metrics)\b|제조|생산|불량'
 
 
+def _matching_text(text):
+    """Normalize typography for matching only; source offsets/quotes stay original."""
+    return ' '.join(unicodedata.normalize('NFKC', text).translate(str.maketrans('’‘ʼ', "'''")).split())
+
+
 def source_segments(text):
     """Yield exact source offsets with a local section; headings never enter quotes."""
     kind = 'unknown'
     offset = 0
     for line in text.splitlines(keepends=True):
-        stripped = line.strip().strip('#').strip()
+        stripped = _matching_text(line).strip('#* ')
         for candidate, pattern in HEADINGS:
             match = re.match(r'^(?:' + pattern + r')\s*(?::\s*|$)', stripped, re.I)
             if match:
@@ -76,20 +82,62 @@ def classify_job(job, target):
             'reason': 'specialized_analysis_sample' if relation != job['match_type'] else 'title_and_duties_consistent' if family in families else 'title_match_duties_unclassified'}
 
 
+def _evidence_clauses(text):
+    """Separate independent requirements, preserving lists with a shared predicate."""
+    predicate = r'\b(?:required|needed|necessary|mandatory|essential|preferred|require[sd]?|needs?)\b'
+    # Sentence boundaries leave tool names such as React.js intact.
+    for sentence in re.split(r'(?<=[.!?])\s+|;\s*', text):
+        chunks = re.split(r'(,\s*(?:(?:and|but|whereas|while|however)\s+)?|\s+(?:and|but|whereas|while|however)\s+)', sentence, flags=re.I)
+        clause = chunks[0]
+        for index in range(1, len(chunks), 2):
+            separator, following = chunks[index:index + 2]
+            contrasting = re.search(r'\b(?:but|whereas|while|however)\b', separator, re.I)
+            independent = (re.search(predicate, clause, re.I)
+                           and re.search(predicate, ''.join(chunks[index + 1:]), re.I))
+            if contrasting or independent:
+                yield clause
+                clause = following
+            else:
+                clause += separator + following
+        yield clause
+
+
+def _negates_skill(clause, matches_skill):
+    """A negative requirement must name this skill in its subject/object scope."""
+    clause = _matching_text(clause)
+    requirement = r'(?:required|needed|necessary|mandatory|essential)\b'
+    patterns = (
+        r'\bno\s+(.+?)\s+(?:(?:is|are)\s+)?' + requirement,
+        r'(.+?)\s+(?:(?:is|are)\s+)?not\s+' + requirement,
+        r"(.+?)\s+(?:isn't|aren't)\s+" + requirement,
+        r"\b(?:do not|does not|don't|doesn't)\s+(?:need|require)\s+(.+)",
+    )
+    return any(matches_skill(match[1]) for pattern in patterns
+               for match in re.finditer(pattern, clause, re.I))
+
+
 def evidence_context(text, start, end, matches_skill):
     """Inspect skill-bearing clauses, so a quote cannot borrow another line's heading."""
     parts = []
     for segment in source_segments(text):
         if segment['start'] >= end or segment['end'] <= start:
             continue
-        local = text[max(start, segment['start']):min(end, segment['end'])]
-        # Sentence splits do not split tool names (e.g. React.js).
-        for clause in re.split(r'(?<=[.!?])\s+', local):
+        # Inspect the overlapping source clause, not just the quoted substring:
+        # a short quote such as "CAD experience" must not drop its preceding "No".
+        local = text[segment['start']:segment['end']]
+        cursor = 0
+        for clause in _evidence_clauses(local):
+            clause_start = local.index(clause, cursor)
+            cursor = clause_start + len(clause)
+            if not clause.strip():
+                continue
+            if segment['start'] + clause_start >= end or segment['start'] + cursor <= start:
+                continue
             if matches_skill(clause):
                 section = segment['section']
                 if re.search(r'\b(?:our (?:customers|clients|partners)|other teams?|the (?:design|security) team)\b', clause, re.I):
                     section = 'context'
-                negated = bool(re.search(r'\b(?:not required|no .{0,100} required|do not (?:need|require))\b', clause, re.I))
+                negated = _negates_skill(clause, matches_skill)
                 parts.append((section, clause, negated))
     if not parts:
         return 'unknown', '', False

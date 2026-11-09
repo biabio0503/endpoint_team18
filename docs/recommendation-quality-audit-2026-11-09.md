@@ -169,3 +169,33 @@ git diff --check
 - 작은 표본을 유지하므로 제조 사례는 2개다. 한 공고의 우대 기술을 시장 전체 요구로 일반화하지 않는다.
 - 테스트 2개는 격리 PostgreSQL 미설정과 실제 Gemini API 키/`GEMINI_LIVE_TEST=1` 미설정으로 건너뛰었다. 실제 PostgreSQL/배포 환경 검증은 하지 않았다. 새 SQL은 기존 테이블의 소유 계획 범위 조회뿐이며 스키마/운영 설정 변경은 없다.
 - E2E의 인증과 유료 API는 합성이며, 실제 운영 인증 제공자에 접속하지 않았다. 기존 예산·소유권·동시성 테스트는 통과했다.
+
+## 추가 회귀 수정 — main ab98413
+
+원격과 로컬 `main`이 `ab98413cf2f0775174cac7f8cb6992634b28689c`로 일치하고 작업 트리가 깨끗한 상태에서 시작했다. `job_relevance.py`의 두 재현 사례를 수정했다.
+
+- `source_segments`: 판정용 문자열에만 Unicode/공백/아포스트로피 정규화를 적용한다. 직선·곡선·modifier apostrophe, 대소문자, Markdown 제목/강조, `What you'll do`/`What you will do`/`What you'll be doing`을 처리한다. `About us` 다음 업무 제목에서 `context → duty`로 전환하며 원문과 인용 위치는 바꾸지 않는다.
+- `evidence_context`: 독립 절을 분리하고 부정된 요건의 주어·목적어 범위에 해당 기술이 있을 때만 부정을 적용한다. 같은 요건을 공유하는 `CAD and CATIA` 목록은 유지한다. `No CAD experience is required, but SQL proficiency is required.`는 CAD `mentioned`/추천 불가, SQL `required`/추천 가능으로 검증된다. 짧은 인용이 `No`를 빠뜨려도 인용과 겹치는 원문 절을 확인하며, 다른 문장의 같은 기술 근거를 빌리지 않는다.
+
+새 회귀는 제목 변형 9개, 부정/긍정 절 변형 8개, 공유 기술 목록·Power BI 별칭 1개, 짧은 인용·별도 문장 경계 1개로 총 19개다. 첫 18개를 수정 전 실행했을 때 **17 failed, 1 passed**로 재현했다. 수정 후 추천 품질 테스트는 기존 16개를 포함해 **35 passed**다.
+
+실제 실행 명령:
+
+```sh
+PYTHONPATH=apps/api/app ROADMAP_TEST_POSTGRES_URL='' ROADMAP_DB_BACKEND=sqlite \
+  ROADMAP_DATABASE_URL='' GEMINI_API_KEY='' RENDER=false \
+  apps/api/.venv/bin/python -m pytest apps/api/tests/unit \
+  apps/api/tests/integration/test_job_skill_analysis_api.py \
+  apps/api/tests/integration/test_project_experience_api.py \
+  apps/api/tests/integration/test_roadmap_api.py \
+  apps/api/tests/integration/test_guest_guardrails.py -q
+node --experimental-vm-modules --test apps/web/tests/unit/*.test.mjs
+PYTHONPATH=apps/api/app apps/api/.venv/bin/python \
+  apps/api/tests/fixtures/recommendation-quality/evaluate.py /tmp/team18-quality-ab98413-followup.json
+cmp docs/audits/recommendation-quality-2026-11-09/after.json /tmp/team18-quality-ab98413-followup.json
+git diff --check
+```
+
+결과는 백엔드 **186 passed, 1 skipped, 30 subtests passed**(5.93초), 프런트 단위 **12 passed**, `cmp`와 `git diff --check` exit 0이다. skip은 실제 Gemini API 키와 `GEMINI_LIVE_TEST=1`이 필요한 선택적 테스트이며, 경고는 기존 SDK deprecation이다. 로드맵 통합 테스트에는 이전 규칙의 저장 결과·원문 근거·완료 기록 조회, 명시적 업그레이드, 실패 시 이전 결과 보존, 조회 시 유료 호출 없음이 포함된다. 기존 4개 직무 fixture 지표는 그대로다.
+
+이 추가 수정에서는 모델·저장 버전·프런트 코드·운영 데이터·배포 설정을 변경하지 않았다. 기존 저장 결과를 재작성하지 않으며 명시적 직무 분석 재실행에 수정된 검증 코드가 적용된다. 부정 판정은 지원하는 영어 절/요건 표현에 대한 규칙이며 임의 자연어의 완전한 의미 분석을 보장하지 않는다. 위의 최초 작업 당시 전체 테스트/E2E/빌드 결과와 이번 추가 회귀 실행 범위를 구분한다.
