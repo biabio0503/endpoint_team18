@@ -1,4 +1,4 @@
-// Page-local cache only. Every reuse checks the server's complete input revision.
+// Jobs persist on the server. Answers and newly completed analysis are read fresh.
 export function createJobSkillLoader({ apiRequest, resolvePlanId }) {
  let cached = null;
  const pending = new Map();
@@ -9,15 +9,23 @@ export function createJobSkillLoader({ apiRequest, resolvePlanId }) {
   const path = `/roadmap-inputs/${encodeURIComponent(id)}`;
   const plan = await apiRequest(path);
   const key = `${id}:${plan.input_revision}`;
-  if (!force && cached?.key === key) return cached.data;
+  if (!force && cached?.key === key) {
+   const comparison = await apiRequest(`${path}/skill-comparison`);
+   if (await resolvePlanId() !== id || comparison.input_revision !== plan.input_revision) { cached = null; throw conflict(); }
+   const jobs = comparison.job_analysis?.snapshot_id ? comparison.job_analysis : cached.data;
+   cached = { key, data: { ...jobs, comparison, request_id: id } };
+   return cached.data;
+  }
   cached = null;
   if (!pending.has(key)) {
    const request = (async () => {
-    const data = await apiRequest(`${path}/job-skill-analysis`, { method: 'POST', body: '{}' });
+    const data = await apiRequest(`${path}/job-skill-analysis`, { method: 'POST', body: force ? '{"refresh":true}' : '{}' });
+    const comparison = await apiRequest(`${path}/skill-comparison`);
     const current = await apiRequest(path);
-    if (await resolvePlanId() !== id || current.input_revision !== plan.input_revision || data.input_revision !== current.input_revision) throw conflict();
-    cached = { key, data };
-    return data;
+    if (await resolvePlanId() !== id || current.input_revision !== plan.input_revision || data.input_revision !== current.input_revision || comparison.input_revision !== current.input_revision) throw conflict();
+    const combined = { ...data, comparison, request_id: id };
+    cached = { key, data: combined };
+    return combined;
    })().finally(() => pending.delete(key));
    pending.set(key, request);
   }

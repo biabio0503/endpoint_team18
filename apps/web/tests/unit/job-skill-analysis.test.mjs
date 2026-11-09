@@ -24,7 +24,7 @@ function setup() {
 test('same plan and revision reuses result across tab visits', async () => {
  const s = setup();
  const first = await s.load();
- assert.equal(await s.load(), first);
+ assert.deepEqual(await s.load(), first);
  assert.equal(s.posts(), 1);
  s.setRevision(2);
  assert.equal((await s.load()).input_revision, 2);
@@ -68,4 +68,27 @@ test('failed request can retry and absence of a plan never starts analysis', asy
  s.setId(null);
  await assert.rejects(s.load(), /계획이 없습니다/);
  assert.equal(s.posts(), 2);
+});
+
+test('same input revision still reads newly completed project analysis from server', async () => {
+ let complete = false, posts = 0;
+ const load = createJobSkillLoader({ resolvePlanId: async () => 'plan', apiRequest: async (path, options) => {
+  if (options?.method === 'POST') { posts++; return { input_revision: 1, skills: [] }; }
+  if (path.endsWith('/skill-comparison')) return { input_revision: 1, project_analysis: { status: complete ? 'success' : 'not_started' } };
+  return { input_revision: 1 };
+ } });
+ assert.equal((await load()).comparison.project_analysis.status, 'not_started');
+ complete = true;
+ assert.equal((await load()).comparison.project_analysis.status, 'success');
+ assert.equal(posts, 1);
+});
+
+test('only explicit force requests a paid job refresh', async () => {
+ const bodies = [];
+ const load = createJobSkillLoader({ resolvePlanId: async () => 'plan', apiRequest: async (path, options) => {
+  if (options?.body) bodies.push(JSON.parse(options.body));
+  return { input_revision: 1, skills: [] };
+ } });
+ await load(); await load(); await load({ force: true });
+ assert.deepEqual(bodies, [{}, { refresh: true }]);
 });

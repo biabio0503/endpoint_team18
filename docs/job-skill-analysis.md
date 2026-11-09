@@ -2,7 +2,7 @@
 
 ## API와 처리 흐름
 
-`POST /api/roadmap-inputs/{request_id}/job-skill-analysis`에 `{}`를 보낸다. 기존 인증·세션, Origin 및 계획 소유권 검사를 사용한다. 클라이언트의 사용자 ID·목표 재정의는 거부한다. DB에서 `career_goal`, 선택 `target_role`, 전체 `input_revision`을 읽고 트랜잭션을 종료한 뒤 외부 API를 호출한다. 완료 직전에 버전을 재확인하며, 과목·문서 등 전체 입력이 변경되거나 계획이 삭제되었다면 409를 반환한다. 분석 결과는 DB에 저장하지 않는다.
+`POST /api/roadmap-inputs/{request_id}/job-skill-analysis`에 `{}`를 보낸다. 기존 인증·세션, Origin 및 계획 소유권 검사를 사용한다. 클라이언트의 사용자 ID·목표 재정의는 거부한다. DB에서 `career_goal`, 선택 `target_role`, 전체 `input_revision`을 읽고 트랜잭션을 종료한 뒤 외부 API를 호출한다. 완료 직전에 버전을 재확인하며, 과목·문서 등 전체 입력이 변경되거나 계획이 삭제되었다면 409를 반환한다. 4단계부터 성공·부분 성공 결과를 서버 `job_skill_snapshots`에 저장한다. 목표·직무·모델·분석 규칙 기준이 같으면 재사용하며, `{ "refresh": true }`로 명시적으로 새 분석을 요청할 수 있다. 새 분석이 실패하면 이전 검증 결과를 보존하고 `refresh_error`를 반환한다.
 
 1. `gemini_jobs.generate_job_keywords`가 두 입력을 함께 Gemini에 전달한다. 희망 직무를 우선하되 목표의 구체적인 활동·분야를 반영한다. 희망 직무가 없어도 목표가 충분하면 해석하며, 부족하면 `needs_clarification`을 반환한다.
 2. `RoleInterpretation`이 상태·영어 대표 직무·최대 3개 짧은 영어 검색어·`direct`/`related`를 검증한다. 중복은 제거하고 상충하는 관계는 거부한다. 잘못된 응답을 규칙 사전으로 대체하지 않는다.
@@ -42,9 +42,9 @@
 
 ## 화면과 설정
 
-기존 결과 화면의 **직무 역량 비교** 탭에서 처음 열 때 분석한다. 같은 계획·입력 버전의 결과 및 진행 중 요청은 컴포넌트 메모리에서 재사용한다. 탭 재진입·창 포커스·가시성 복귀 및 분석 완료 뒤에 최신 버전을 확인한다. 새로고침·페이지 이탈 시 캐시는 사라진다. 오류·부분 성공에는 다시 분석을 제공한다. 수강 후보 상태는 독립적으로 유지한다.
+기존 결과 화면의 **직무 역량 비교** 탭에서 처음 열 때 분석한다. 진행 중 요청은 컴포넌트에서 중복을 방지하고, 새로고침·페이지 이탈 후에도 서버 스냅샷을 재사용한다. 탭 재진입·창 포커스·가시성 복귀 시 현재 입력 버전과 최신 비교를 조회한다. 프로젝트 경험·답변은 별도 원문 근거와 함께 표시한다. 오류·부분 성공에는 명시적 다시 분석을 제공한다. 수강 후보 상태는 독립적으로 유지한다.
 
-추가 환경변수·패키지·DB 마이그레이션은 없다. 기존 서버 전용 `GEMINI_API_KEY`, `GEMINI_MODEL`을 사용하며 미설정 모델은 기존과 같은 `gemini-3.5-flash`다. 선택적 `HIMALAYAS_API_KEY`도 유지한다.
+추가 환경변수·패키지는 없다. 4단계 DB 마이그레이션은 [프로젝트 경험 비교 문서](project-experience-comparison.md)를 따른다. 기존 서버 전용 `GEMINI_API_KEY`, `GEMINI_MODEL`을 사용하며 미설정 모델은 기존과 같은 `gemini-3.5-flash`다. 선택적 `HIMALAYAS_API_KEY`도 유지한다.
 
 | 설정 | 값 |
 | --- | --- |
@@ -108,6 +108,28 @@ Mac 호스트 네트워크와 기존 서버 키·모델(`gemini-3.6-flash`)을 �
 
 자동 검증: 백엔드 전체 회귀 **101 passed, 2 skipped**(기존 Himalayas·수강 추천 포함), 프런트엔드 단위 테스트 **9 passed**, Next.js 운영 빌드 및 브라우저 화면 테스트 통과. 기술명 별칭 보완 후 관련 단위 테스트 20개도 재확인했다. 브라우저 테스트는 자동 호출·같은 버전 캐시·새 버전 재분석·409·성공/부분/실패/공고 없음/정보 부족·근거 링크·수강 추천 유지·390px 모바일 레이아웃을 확인한다. 선택적 PostgreSQL 실DB 테스트와 기존 수강 추천 실API 테스트는 기본 실행에서 제외된다.
 
+## 재검증 기록 — 2026-11-09, gemini-3.5-flash-lite
+
+사용자의 재검증 요청으로 현재 서버 설정의 `GEMINI_MODEL=gemini-3.5-flash-lite`를 사용해 세 직무를 다시 실행했다. 환경변수나 애플리케이션 코드는 변경하지 않았다. 아래 결과가 위 최초 검증 기록보다 최신이다.
+
+| 입력 | 고유 후보 / 선정 | 분석 성공 | 정규화 기술 수 | 검증에서 제외한 항목 | 상태 |
+| --- | --- | --- | --- | --- | --- |
+| 데이터 분석가 | 115 / 20 | 20 | 49 | 1 | partial |
+| 백엔드 개발자 | 59 / 20 | 20 | 79 | 1 | partial |
+| 머신러닝 엔지니어 | 60 / 20 | 20 | 57 | 3 | partial |
+
+세 직무 모두 5개 공고씩 4개 배치 분석을 완료했다. 총 15회 Gemini 요청(검색어 3회 + 추출 12회)이 모두 응답했으며 429, 타임아웃, 실패·건너뛴 공고가 없었다. 원문 또는 기술명 대조를 통과하지 못한 항목 총 5개가 집계에서 제외되어 응답은 `partial`이다. 분석 성공 공고 수와 기술별 고유 공고 수·빈도·요구 수준 합계·직접/연관·경력별 합계를 실제 응답으로 다시 대조했다.
+
+실제 생성 검색어:
+
+- 데이터 분석가: Data Analyst (direct), Business Analyst (related), Data Scientist (related)
+- 백엔드 개발자: Backend Developer (direct), Back-end Engineer (direct), Software Engineer (related)
+- 머신러닝 엔지니어: Machine Learning Engineer (direct), AI Engineer (direct), Data Scientist (related)
+
+대표 확인 기술: 데이터 분석가는 SQL·Python·Power BI, 백엔드는 AWS·Docker·Kubernetes, 머신러닝은 Python·AWS 및 공고에 명시된 AI 개발 도구다. 기술별 원문 인용, 공고 URL, 검증 결과는 전체 JSON에 보존했다. 전체 실제 응답: `/tmp/team18-job-skills-retest-20261109-0504.json`.
+
+동시에 백엔드 **101 passed, 2 skipped**, 프런트엔드 단위 테스트 **9 passed**, Next.js 운영 빌드, 모의 API 기반 브라우저 E2E를 재실행해 모두 통과했다. 브라우저 E2E는 실제 API 연결 테스트와 구분되며, 이번에도 기존 수강 추천·버전별 캐시·409·근거 링크·모바일 레이아웃을 확인했다.
+
 ## 변경 파일
 
 - 백엔드 추가: `services/job_skill_schemas.py`, `services/gemini_jobs.py`, `services/job_skill_analysis.py`, `api/routes/job_skill_analysis.py`, `scripts/job_skill_analysis_live.py`.
@@ -122,4 +144,4 @@ Mac 호스트 네트워크와 기존 서버 키·모델(`gemini-3.6-flash`)을 �
 
 해외 원격 공고 표본이며 국내 전체 시장이나 학생의 필수 역량을 대표하지 않는다. 제목의 완전한 구절 또는 모든 직무 단어를 요구하므로 다른 표현의 관련 공고를 놓칠 수 있다. 사전에 없는 직무도 같은 기준을 쓰며, 검색 결과라는 이유만으로 direct로 인정하지 않는다.
 
-개인 역량 비교·부족 역량·학습 우선순위·로드맵·기술 기반 수강 추천·영구 저장은 범위 밖이다. 향후 모듈은 `analyze_job_skills` 응답의 버전 및 검증된 `skills[].evidence`를 경계로 연결할 수 있다. 동기 HTTP 요청이므로 운영 프록시의 요청 제한 시간과 공급자 할당량은 별도로 고려해야 한다.
+4단계는 `analyze_job_skills` 응답의 검증된 `skills[].evidence`를 재사용하여 프로젝트 경험을 비교한다. 숙련도 점수·학습 우선순위·로드맵·기술 기반 수강 추천은 여전히 범위 밖이다. 동기 HTTP 요청이므로 운영 프록시의 요청 제한 시간과 공급자 할당량은 별도로 고려해야 한다.
