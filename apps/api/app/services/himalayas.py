@@ -117,12 +117,145 @@ def _source_url(guid):
 
 
 def _match(job, keywords):
+    """A specific title role is required; broad categories cannot override it."""
     title = job.get('title') if isinstance(job.get('title'), str) else ''
-    categories = job.get('categories') if isinstance(job.get('categories'), list) else []
-    parents = job.get('parent_categories') if isinstance(job.get('parent_categories'), list) else []
-    text = ' '.join([title] + [c for c in categories + parents if isinstance(c, str)])
-    matches = [k['relation'] for k in keywords if _contains(text, k['keyword'])]
-    return 'direct' if 'direct' in matches else 'related' if 'related' in matches else 'unverified'
+    # Prefer related over a shorter, overlapping direct phrase when both occur.
+    matches = [entry for entry in keywords if _contains(title, entry['keyword'])]
+    if not matches:
+        return 'unverified', 'no_title_role_match'
+    longest = max(matches, key=lambda entry: len(entry['keyword']))
+    categories = list(job.get('categories')) if isinstance(job.get('categories'), list) else []
+    categories += (job.get('parent_categories') if isinstance(job.get('parent_categories'), list) else [])
+    corroborated = any(isinstance(value, str) and _contains(value, longest['keyword']) for value in categories)
+    return longest['relation'], 'title_and_category_role_match' if corroborated else 'title_role_match'
+
+
+def _seniority_signals(text):
+    signals = set()
+    for group, terms in (
+        ('entry', ('intern', 'internship', 'junior', 'entry level', 'graduate')),
+        ('mid', ('mid level', 'mid', 'intermediate')),
+        ('senior', ('senior', 'staff', 'principal', 'lead', 'director', 'manager', 'executive')),
+    ):
+        if any(_contains(text, term) for term in terms):
+            signals.add(group)
+    return signals
+
+
+def seniority_group(seniority, title):
+    """Conflicting, mixed or unknown explicit levels are not guessed."""
+    values = [seniority] if isinstance(seniority, str) else seniority if isinstance(seniority, list) else []
+    values = [value for value in values if isinstance(value, str) and value.strip()]
+    explicit = set()
+    for value in values:
+        signals = _seniority_signals(value)
+        if not signals:
+            return 'unknown'
+        explicit.update(signals)
+    title_signals = _seniority_signals(title if isinstance(title, str) else '')
+    if len(explicit) > 1 or len(title_signals) > 1:
+        return 'unknown'
+    if explicit and title_signals and explicit != title_signals:
+        return 'unknown'
+    return next(iter(explicit or title_signals), 'unknown')
+
+
+def _exclusion_reasons(job, now):
+    reasons = []
+    if job['match_type'] == 'unverified':
+        reasons.append('unverified')
+    if not isinstance(job.get('description_text'), str) or not job['description_text'].strip():
+        reasons.append('missing_description')
+    if job.get('expires_at'):
+        try:
+            if datetime.fromisoformat(job['expires_at'].replace('Z', '+00:00')) < now:
+                reasons.append('expired')
+        except (TypeError, ValueError):
+            pass
+    return reasons
+
+
+def select_jobs(candidates, keywords, limit, now):
+    """Select deterministically from unique normalized jobs, returning audit counts."""
+    eligible = []
+    excluded = {'unverified': 0, 'missing_description': 0, 'expired': 0}
+    excluded_count = 0
+    for job in candidates:
+        reasons = _exclusion_reasons(job, now)
+        job['analysis_eligible'] = not reasons
+        job['analysis_reasons'] = reasons or ['eligible']
+        job['source_verified'] = bool(job.get('source_url'))
+        if reasons:
+            excluded_count += 1
+            for reason in reasons:
+                excluded[reason] += 1
+        else:
+            eligible.append(job)
+    direct = [j for j in eligible if j['match_type'] == 'direct']
+    related = [j for j in eligible if j['match_type'] == 'related']
+    # Reserve up to 20% for related jobs when direct candidates are abundant.
+    related_target = min(len(related), limit // 5)
+    direct_target = min(len(direct), limit - related_target)
+    related_target = min(len(related), limit - direct_target)
+    selected = []
+    keyword_counts = {entry['keyword']: 0 for entry in keywords}
+    company_counts = {}
+    senior_count = 0
+
+    def take(pool, amount):
+        nonlocal senior_count
+        pool = list(pool)
+        for _ in range(amount):
+            if not pool:
+                break
+            # Use the same global soft senior cap across both role categories.
+            if any(j['seniority_group'] == 'entry' for j in pool):
+                group = 'entry'
+            elif any(j['seniority_group'] == 'mid' for j in pool):
+                group = 'mid'
+            elif senior_count < limit // 4 and any(j['seniority_group'] == 'senior' for j in pool):
+                group = 'senior'
+            elif any(j['seniority_group'] == 'unknown' for j in pool):
+                group = 'unknown'
+            else:
+                group = 'senior'
+            group_jobs = [j for j in pool if j['seniority_group'] == group]
+            def choices(job):
+                return [k for k in job['matched_keywords'] if k in keyword_counts]
+            def key(job):
+                hits = choices(job)
+                least_used = min((keyword_counts[k] for k in hits), default=0)
+                company = job.get('company_slug') or job.get('company')
+                company_key = company.casefold().strip() if isinstance(company, str) and company.strip() else None
+                return least_used, company_counts.get(company_key, 0) if company_key else 0
+            chosen = min(group_jobs, key=key)  # input order is the final tie-breaker
+            hits = choices(chosen)
+            if hits:
+                chosen_keyword = min(hits, key=lambda k: (keyword_counts[k], list(keyword_counts).index(k)))
+                keyword_counts[chosen_keyword] += 1
+            company = chosen.get('company_slug') or chosen.get('company')
+            if isinstance(company, str) and company.strip():
+                company_key = company.casefold().strip()
+                company_counts[company_key] = company_counts.get(company_key, 0) + 1
+            if chosen['seniority_group'] == 'senior':
+                senior_count += 1
+            selected.append(chosen)
+            pool.remove(chosen)
+
+    take(direct, direct_target)
+    take(related, related_target)
+    distribution = {group: sum(job['seniority_group'] == group for job in selected)
+                    for group in ('entry', 'mid', 'senior', 'unknown')}
+    summary = {'unique_candidates': len(candidates), 'eligible_candidates': len(eligible),
+               'excluded_count': excluded_count, 'excluded_by_reason': excluded,
+               'unverified_excluded': excluded['unverified'],
+               'source_unverified_candidates': sum(not job['source_verified'] for job in candidates),
+               'eligible_not_selected': len(eligible) - len(selected),
+               'selected_count': len(selected),
+               'direct_count': sum(job['match_type'] == 'direct' for job in selected),
+               'related_count': sum(job['match_type'] == 'related' for job in selected),
+               'seniority_distribution': distribution}
+    return selected, summary
 
 
 def normalize_job(raw, keyword, keywords):
@@ -136,7 +269,8 @@ def normalize_job(raw, keyword, keywords):
            'published_at': _timestamp(raw.get('pubDate')), 'expires_at': _timestamp(raw.get('expiryDate')),
            'location_restrictions': raw.get('locationRestrictions'), 'timezone_restrictions': raw.get('timezoneRestrictions'),
            'application_link': raw.get('applicationLink'), 'matched_keywords': [keyword]}
-    job['match_type'] = _match(job, keywords)
+    job['match_type'], job['match_reason'] = _match(job, keywords)
+    job['seniority_group'] = seniority_group(job['seniority'], job['title'])
     return job
 
 
@@ -209,55 +343,67 @@ def fetch_jobs(career_goal: str, target_role: str | None = None, limit: int = 20
     if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= MAX_LIMIT:
         raise ValueError(f'limit must be an integer between 1 and {MAX_LIMIT}')
     keywords, reason = generate_search_keywords(career_goal, target_role)
+    now = datetime.now(timezone.utc)
     result = {'source': 'Himalayas', 'source_url': 'https://himalayas.app', 'market_scope': 'global_remote',
               'career_goal': career_goal, 'target_role': target_role, 'search_keywords': [k['keyword'] for k in keywords],
               'keyword_details': keywords, 'status': 'error' if reason else 'success', 'total_collected': 0,
-              'retrieved_at': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
+              'retrieved_at': now.isoformat().replace('+00:00', 'Z'),
               'jobs': [], 'searches': [], 'errors': []}
-    if reason:
-        result['errors'].append({'code': reason})
-        return result
     jobs = {}
     success_pages = 0
     blocked = False
-    for entry in keywords:
-        keyword = entry['keyword']
-        search = {'keyword': keyword, 'relation': entry['relation'], 'status': 'success', 'pages_succeeded': 0, 'received_count': 0}
-        result['searches'].append(search)
-        if blocked:
-            search['status'] = 'skipped'
-            result['errors'].append({'keyword': keyword, 'code': 'rate_limit_active'})
-            continue
+    if reason:
+        result['errors'].append({'code': reason})
+    else:
+        for entry in keywords:
+            result['searches'].append({'keyword': entry['keyword'], 'relation': entry['relation'], 'status': 'success',
+                                       'pages_succeeded': 0, 'received_count': 0})
+        # First gather all first pages; only fetch page two if eligible candidates are insufficient.
         for page in (1, 2):
-            if page > 1 and len(jobs) >= limit:
-                break
-            try:
-                data = _request_page(keyword, page)
-            except SearchError as exc:
-                search['status'] = 'partial' if search['pages_succeeded'] else 'error'
-                error = {'keyword': keyword, 'page': page, 'code': exc.code}
-                if exc.status is not None:
-                    error['http_status'] = exc.status
-                if exc.retry_after is not None:
-                    error['retry_after'] = exc.retry_after
-                result['errors'].append(error)
-                if exc.status == 429:
-                    blocked = True
-                break
-            success_pages += 1
-            search['pages_succeeded'] += 1
-            search['received_count'] += len(data['jobs'])
-            for raw in data['jobs']:
-                guid = raw['guid']
-                if guid in jobs:
-                    if keyword not in jobs[guid]['matched_keywords']:
-                        jobs[guid]['matched_keywords'].append(keyword)
-                elif len(jobs) < limit:
-                    jobs[guid] = normalize_job(raw, keyword, keywords)
-            if not data['jobs']:
-                break
-    result['jobs'] = list(jobs.values())
-    result['total_collected'] = len(jobs)
+            if page == 2:
+                eligible = [j for j in jobs.values() if not _exclusion_reasons(j, now)]
+                direct_count = sum(j['match_type'] == 'direct' for j in eligible)
+                related_count = sum(j['match_type'] == 'related' for j in eligible)
+                direct_target = limit - min(related_count, limit // 5)
+                if len(eligible) >= limit and direct_count >= direct_target:
+                    break
+            for entry, search in zip(keywords, result['searches']):
+                keyword = entry['keyword']
+                if page == 2 and (search['status'] != 'success' or not search['received_count']):
+                    continue
+                if blocked:
+                    if page == 1:
+                        search['status'] = 'skipped'
+                        result['errors'].append({'keyword': keyword, 'code': 'rate_limit_active'})
+                    continue
+                try:
+                    data = _request_page(keyword, page)
+                except SearchError as exc:
+                    search['status'] = 'partial' if search['pages_succeeded'] else 'error'
+                    error = {'keyword': keyword, 'page': page, 'code': exc.code}
+                    if exc.status is not None:
+                        error['http_status'] = exc.status
+                    if exc.retry_after is not None:
+                        error['retry_after'] = exc.retry_after
+                    result['errors'].append(error)
+                    if exc.status == 429:
+                        blocked = True
+                    continue
+                success_pages += 1
+                search['pages_succeeded'] += 1
+                search['received_count'] += len(data['jobs'])
+                for raw in data['jobs']:
+                    guid = raw['guid']
+                    if guid in jobs:
+                        if keyword not in jobs[guid]['matched_keywords']:
+                            jobs[guid]['matched_keywords'].append(keyword)
+                    else:
+                        jobs[guid] = normalize_job(raw, keyword, keywords)
+    result['jobs'], summary = select_jobs(list(jobs.values()), keywords, limit, now)
+    summary['total_candidates'] = sum(search['received_count'] for search in result['searches'])
+    summary['duplicate_occurrences'] = summary['total_candidates'] - summary['unique_candidates']
+    result['selection_summary'] = summary
+    result['total_collected'] = len(result['jobs'])
     if result['errors']:
         result['status'] = 'partial' if success_pages else 'error'
     return result

@@ -26,6 +26,24 @@ class JobsAPITest(unittest.TestCase):
         cls.client_context.__exit__(None, None, None)
         TEMP.cleanup()
 
+    def test_quality_fields_in_real_service_response(self):
+        client = self.client
+        created = client.post('/api/roadmap-inputs').json()
+        rid = created['request_id']
+        client.patch(f'/api/roadmap-inputs/{rid}', json={'expected_input_revision': 0, 'changes': {'career_goal': '데이터 분석'}})
+        posting = {'guid': 'https://himalayas.app/companies/test/jobs/analyst', 'title': 'Junior Data Analyst',
+                   'description': '<p>SQL</p>', 'seniority': ['Entry-level']}
+        def response(keyword, page):
+            return {'jobs': [posting] if keyword == 'Data Analyst' and page == 1 else []}
+        with patch('services.himalayas._request_page', side_effect=response):
+            result = client.get(f'/api/roadmap-inputs/{rid}/jobs').json()
+        self.assertEqual(result['status'], 'success')
+        self.assertEqual(result['total_collected'], 1)
+        self.assertEqual(result['selection_summary']['direct_count'], 1)
+        self.assertEqual(result['jobs'][0]['description_text'], 'SQL')
+        self.assertEqual(result['jobs'][0]['seniority_group'], 'entry')
+        self.assertTrue(result['jobs'][0]['analysis_eligible'])
+
     def test_ownership_saved_input_and_revision(self):
         client = self.client
         created = client.post('/api/roadmap-inputs').json()
