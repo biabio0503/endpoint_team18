@@ -4,6 +4,7 @@ import hashlib
 import os
 from pathlib import Path
 import secrets
+import subprocess
 import sys
 import uuid
 from postgres_test_safety import validate_reset_target
@@ -17,6 +18,8 @@ with psycopg.connect(url, hostaddr='127.0.0.1', autocommit=True) as db:
     if db.info.dbname != 'team18_document_test' or db.execute("SELECT to_regnamespace('supabase_migrations')").fetchone()[0] is not None:
         raise SystemExit('Refusing to reset a non-test or Supabase database.')
     db.execute('DROP SCHEMA public CASCADE; CREATE SCHEMA public')
+    # Minimal Supabase Auth FK target in this disposable vanilla PostgreSQL only.
+    db.execute('CREATE SCHEMA IF NOT EXISTS auth; CREATE TABLE IF NOT EXISTS auth.users(id uuid PRIMARY KEY)')
     db.execute("""DO $$ BEGIN
       IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='anon') THEN CREATE ROLE anon; END IF;
       IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='authenticated') THEN CREATE ROLE authenticated; END IF;
@@ -48,6 +51,11 @@ from fastapi.testclient import TestClient
 from app.main import app
 from api.routes import documents as routes
 from worker import documents as worker
+from postgres_auth_fixture import PostgresTestAuth
+
+auth = PostgresTestAuth().start()
+auth_headers = auth.headers()
+auth_user = auth_headers['Authorization'].removeprefix('Bearer ')
 
 class FakeStorage:
     def __init__(self): self.files = {}; self.fail = False
@@ -66,7 +74,7 @@ routes.request_work = lambda: None
 token = secrets.token_urlsafe(32)
 owner = str(uuid.uuid4()); rid = str(uuid.uuid4())
 with psycopg.connect(url, autocommit=True) as db:
-    db.execute("INSERT INTO session_owners(owner_id,token_digest,expires_at,created_at) VALUES (%s,%s,now()+interval '1 day',now())", (owner, hashlib.sha256(token.encode()).hexdigest()))
+    db.execute("INSERT INTO session_owners(owner_id,token_digest,expires_at,created_at,auth_user_id) VALUES (%s,%s,now()+interval '1 day',now(),%s)", (owner, hashlib.sha256(token.encode()).hexdigest(), auth_user))
     db.execute('INSERT INTO roadmap_inputs(request_id,owner_id,input_revision,created_at,updated_at) VALUES (%s,%s,0,now(),now())', (rid, owner))
 
 origin = {'Origin': 'http://localhost:3000'}
@@ -74,10 +82,10 @@ path = '/api/roadmap-inputs/' + rid + '/documents'
 def upload(client, revision, content=b'hello'):
     return client.post(path, headers=origin, data={'expected_input_revision':str(revision)}, files={'file':('test.txt', content, 'text/plain')})
 
-with TestClient(app, raise_server_exceptions=False) as client:
-    client.cookies.set('roadmap_session', token)
+with TestClient(app, headers=auth_headers, raise_server_exceptions=False) as client:
     assert client.post(path, files={'file':('x.txt',b'x')}, data={'expected_input_revision':'0'}).status_code == 403
-    assert client.get(path.replace(rid, str(uuid.uuid4()))).status_code == 404
+    missing = client.get(path.replace(rid, str(uuid.uuid4())))
+    assert missing.status_code == 404, (missing.status_code, missing.text)
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
         responses = list(pool.map(lambda _: upload(client, 0), range(2)))
     assert sorted(r.status_code for r in responses) == [201, 409], [(r.status_code,r.text) for r in responses]
@@ -169,6 +177,16 @@ with TestClient(app) as stranger:
     other_token = secrets.token_urlsafe(32)
     with psycopg.connect(url, autocommit=True) as db:
         db.execute("INSERT INTO session_owners(owner_id,token_digest,expires_at,created_at) VALUES (%s,%s,now()+interval '1 day',now())", (str(uuid.uuid4()), hashlib.sha256(other_token.encode()).hexdigest()))
-    stranger.cookies.set('roadmap_session', other_token)
+    stranger.headers.update(auth.headers())
     assert stranger.get(path).status_code == 404
     assert stranger.get(f'{path}/{did}/extractions/1').status_code == 404
+
+# Run the same analysis/answer/cache API cases against native JSONB and FK cascades.
+with psycopg.connect(url, autocommit=True) as db:
+    for table in ('job_skill_snapshots', 'project_experience_analyses', 'project_experience_answers', 'skill_experience_answers'):
+        assert db.execute('SELECT relrowsecurity FROM pg_class WHERE oid=%s::regclass', ('public.' + table,)).fetchone()[0]
+        for role in ('anon', 'authenticated'):
+            assert not db.execute('SELECT has_table_privilege(%s,%s,\'select,insert,update,delete\')', (role, 'public.' + table)).fetchone()[0]
+scenario = Path(__file__).with_name('project_experience_scenario.py')
+result = subprocess.run([sys.executable, str(scenario)], env=os.environ.copy(), capture_output=True, text=True, timeout=60)
+assert result.returncode == 0, result.stdout + result.stderr

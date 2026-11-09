@@ -49,6 +49,9 @@ with TestClient(app, headers=origin) as client:
     assert result['skills'][0]['required_job_count'] == 1
     assert sdk.models.generate_content.call_count == 2
     assert result['skills'][0]['evidence'][0]['source_url'] == posting['guid']
+    with patch('api.routes.job_skill_analysis.analyze_job_skills') as model:
+        assert client.post(path, json={}).json()['reused'] is True
+        model.assert_not_called()
 
     # Mutate during both phases. The successful concurrent write also proves the
     # network call does not retain the original read transaction/lock.
@@ -63,7 +66,7 @@ with TestClient(app, headers=origin) as client:
         with patch('services.job_skill_analysis.generate_job_keywords', side_effect=change_input if stage == 'keywords' else lambda *args: role), \
              patch('services.himalayas._request_page', side_effect=lambda keyword, page: {'jobs': [posting] if stage == 'extraction' and page == 1 else []}), \
              patch('services.job_skill_analysis.extract_job_skills', side_effect=change_input):
-            response = client.post(path, json={})
+            response = client.post(path, json={'refresh': True})
         assert response.status_code == 409 and response.json()['error'] == 'revision_conflict', response.text
 
     # No API key is an analysis failure even when the HTTP request itself succeeds.
