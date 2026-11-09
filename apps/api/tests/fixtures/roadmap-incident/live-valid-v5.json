@@ -1,0 +1,234 @@
+{
+  "provenance": {
+    "kind": "actual_gemini_synthetic_student_response",
+    "model": "gemini-3.5-flash-lite",
+    "captured": "2026-11-09",
+    "original_incident_response_available": false,
+    "observation": "Actual Gemini response from final v5 prompt, strict validation and durable production guard; accepted as partial because 19 of 20 job analyses succeeded. No response content was repaired.",
+    "sanitization": "Only returned course IDs replaced. Source quotes and production identifiers omitted; reduced context retains statuses and selected course metadata."
+  },
+  "skills": [
+    {
+      "skill_name": "Python",
+      "student_status": "confirmed_experience",
+      "comparison_ref": "comparison:python",
+      "category": "programming_language"
+    },
+    {
+      "skill_name": "SQL",
+      "student_status": "document_supported",
+      "comparison_ref": "comparison:sql",
+      "category": "database_query_language"
+    },
+    {
+      "skill_name": "Tableau",
+      "student_status": "not_verified",
+      "comparison_ref": "comparison:tableau",
+      "category": "data_ai"
+    },
+    {
+      "skill_name": "Power BI",
+      "student_status": "not_verified",
+      "comparison_ref": "comparison:power bi",
+      "category": "data_ai"
+    },
+    {
+      "skill_name": "Excel",
+      "student_status": "not_verified",
+      "comparison_ref": "comparison:excel",
+      "category": "development_tool"
+    },
+    {
+      "skill_name": "pandas",
+      "student_status": "document_supported",
+      "comparison_ref": "comparison:pandas",
+      "category": "framework"
+    }
+  ],
+  "courses": [
+    {
+      "course_id": "fixture-course-2",
+      "course_name": "데이터베이스",
+      "description_text": null,
+      "is_completed": false
+    },
+    {
+      "course_id": "fixture-course-1",
+      "course_name": "데이터분석",
+      "description_text": null,
+      "is_completed": false
+    }
+  ],
+  "response": {
+    "recommended_courses": [
+      {
+        "course_id": "fixture-course-1",
+        "related_skills": [
+          "Python"
+        ],
+        "evidence_refs": [
+          "comparison:python"
+        ],
+        "course_evidence": "데이터분석",
+        "reason": "데이터 분석가 목표와 직접 관련된 Python 활용 역량을 심화하는 데 도움을 줄 수 있습니다.",
+        "personalization_reason": "Python 사용 경험이 확인된 학생이 데이터 분석 역량을 더 발전시키기 위한 과정입니다.",
+        "course_role": "application",
+        "recommendation_confidence": "supported"
+      },
+      {
+        "course_id": "fixture-course-2",
+        "related_skills": [
+          "SQL"
+        ],
+        "evidence_refs": [
+          "comparison:sql"
+        ],
+        "course_evidence": "데이터베이스",
+        "reason": "문서에 언급된 SQL 경험 및 데이터베이스 활용 역량의 이수 및 사용 여부를 검토하기 위한 잠정 후보입니다.",
+        "personalization_reason": "SQL 관련 경험이 문서에 있으나 사용자 확인 전이므로 이수 여부 확인 후 검토할 수 있습니다.",
+        "course_role": "foundation",
+        "recommendation_confidence": "supported"
+      }
+    ],
+    "roadmap": [
+      {
+        "step_id": "step-python-deepen",
+        "order": 1,
+        "title": "Python 경험 심화 및 적용",
+        "purpose": "Python 활용 경험을 바탕으로 데이터 정리 및 분석 작업을 확장합니다.",
+        "reason": "Python 사용 경험이 확인되어 심화 활동을 진행할 수 있습니다.",
+        "skill_targets": [
+          {
+            "skill_name": "Python",
+            "student_status": "confirmed_experience",
+            "action_type": "deepen"
+          }
+        ],
+        "related_course_ids": [
+          "fixture-course-1"
+        ],
+        "depends_on": [],
+        "evidence_refs": [
+          "comparison:python"
+        ],
+        "limitations": "숙련도를 보증하지 않으며 독립적인 실습으로 진행합니다.",
+        "tasks": [
+          {
+            "task_id": "task-python-apply",
+            "task_type": "apply",
+            "title": "Python 데이터 정제 및 변환 적용",
+            "action": "기존에 수행한 Python 경험을 바탕으로 데이터 정제 스크립트를 작성하고 변환 과정을 확장한다.",
+            "completion_criteria": "데이터 변환 스크립트가 오류 없이 실행되고 결과가 정상 출력되는지 확인한다.",
+            "deliverable": "데이터 정제 및 변환 파이썬 스크립트 파일"
+          },
+          {
+            "task_id": "task-python-validate",
+            "task_type": "validate",
+            "title": "Python 분석 결과 검증",
+            "action": "작성한 파이썬 코드를 이용해 데이터 집계 결과의 정확성을 교차 검증한다.",
+            "completion_criteria": "출력된 집계 수치가 원본 데이터와 대조하여 일치하는지 확인한다.",
+            "deliverable": "결과 검증 리포트 문서"
+          }
+        ]
+      },
+      {
+        "step_id": "step-sql-verify",
+        "order": 2,
+        "title": "SQL 경험 확인 및 검토",
+        "purpose": "문서에 언급된 SQL 관련 활동 내역과 경험을 점검합니다.",
+        "reason": "문서 기반으로 확인된 SQL 기술에 대해 실제 경험 여부를 확인하기 위함입니다.",
+        "skill_targets": [
+          {
+            "skill_name": "SQL",
+            "student_status": "document_supported",
+            "action_type": "verify_experience"
+          }
+        ],
+        "related_course_ids": [
+          "fixture-course-2"
+        ],
+        "depends_on": [
+          "step-python-deepen"
+        ],
+        "evidence_refs": [
+          "comparison:sql"
+        ],
+        "limitations": "미확인 기술에 대해 경험 유무와 근거를 확인하는 단계입니다.",
+        "tasks": [
+          {
+            "task_id": "task-sql-verify",
+            "task_type": "verify_experience",
+            "title": "SQL 사용 경험 확인",
+            "action": "기존 프로젝트에서 SQL을 직접 사용한 경험이 있는지 확인하고 근거를 정리한다.",
+            "completion_criteria": "SQL 사용 여부와 관련 쿼리 작성 근거가 기록되었는지를 확인한다.",
+            "deliverable": "SQL 사용 경험 확인 및 근거 기록 문서"
+          }
+        ]
+      },
+      {
+        "step_id": "step-tableau-verify",
+        "order": 3,
+        "title": "Tableau 경험 확인 및 검토",
+        "purpose": "Tableau 도구 사용 경험과 활용 가능 여부를 확인합니다.",
+        "reason": "현재 자료에서 수행 근거가 확인되지 않아 경험과 이수 여부를 확인하기 위함입니다.",
+        "skill_targets": [
+          {
+            "skill_name": "Tableau",
+            "student_status": "not_verified",
+            "action_type": "verify_experience"
+          }
+        ],
+        "related_course_ids": [],
+        "depends_on": [
+          "step-sql-verify"
+        ],
+        "evidence_refs": [
+          "comparison:tableau"
+        ],
+        "limitations": "미확인 기술에 관한 수강 후보는 경험 및 이수 여부 확인 뒤 검토할 잠정 후보입니다.",
+        "tasks": [
+          {
+            "task_id": "task-tableau-verify",
+            "task_type": "verify_experience",
+            "title": "Tableau 경험 확인",
+            "action": "기존 프로젝트에서 Tableau를 직접 사용한 경험이 있는지 확인하고 근거를 정리한다.",
+            "completion_criteria": "Tableau 사용 여부와 관련 시각화 근거가 기록되었는지를 확인한다.",
+            "deliverable": "Tableau 사용 경험 확인 및 근거 기록 문서"
+          }
+        ]
+      },
+      {
+        "step_id": "step-powerbi-verify",
+        "order": 4,
+        "title": "Power BI 경험 확인 및 검토",
+        "purpose": "Power BI 도구 사용 경험과 활용 가능 여부를 확인합니다.",
+        "reason": "현재 자료에서 수행 근거가 확인되지 않아 경험과 이수 여부를 확인하기 위함입니다.",
+        "skill_targets": [
+          {
+            "skill_name": "Power BI",
+            "student_status": "not_verified",
+            "action_type": "verify_experience"
+          }
+        ],
+        "related_course_ids": [],
+        "depends_on": [
+          "step-tableau-verify"
+        ],
+        "evidence_refs": [
+          "comparison:power bi"
+        ],
+        "limitations": "미확인 기술에 관한 수강 후보는 경험 및 이수 여부 확인 뒤 검토할 잠정 후보입니다.",
+        "tasks": [
+          {
+            "task_id": "task-powerbi-verify",
+            "task_type": "verify_experience",
+            "title": "Power BI 경험 확인",
+            "action": "기존 프로젝트에서 Power BI를 직접 사용한 경험이 있는지 확인하고 근거를 정리한다.",
+            "completion_criteria": "Power BI 사용 여부와 관련 대시보드 근거가 기록되었는지를 확인한다.",
+            "deliverable": "Power BI 사용 경험 확인 및 근거 기록 문서"
+          }
+        ]
+      }
+    ]
+  }
+}

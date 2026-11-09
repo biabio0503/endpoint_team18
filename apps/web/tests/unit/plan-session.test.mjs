@@ -77,3 +77,22 @@ test('authenticated requests use the intended user token and reject account chan
  await assert.rejects(module.namespace.apiRequest('/roadmap-inputs', { method: 'POST', expectedUserId: 'user-a' }));
  assert.equal(calls.length, 1);
 });
+
+test('roadmap API failures retain safe diagnostic metadata for the result screen', async () => {
+ const context = vm.createContext({ FormData, fetch: async () => ({ ok: false, status: 502, json: async () => ({
+  error: 'gemini_invalid_response', message: '이전 결과는 유지됩니다.',
+  run_id: 'failed-run', detail_code: 'course_evidence_mismatch', field_path: '$.recommended_courses[0].course_evidence',
+ }) }) });
+ const module = new vm.SourceTextModule(await readFile(new URL('../../src/lib/api/client.js', import.meta.url), 'utf8'), { context });
+ const auth = new vm.SyntheticModule(['authClient'], function () {
+  this.setExport('authClient', () => ({ auth: { getSession: async () => ({ data: { session: null }, error: null }) } }));
+ }, { context });
+ await module.link(() => auth); await module.evaluate();
+ await assert.rejects(module.namespace.apiRequest('/roadmap-inputs/plan/roadmap'), error => {
+  assert.equal(error.code, 'gemini_invalid_response');
+  assert.equal(error.runId, 'failed-run');
+  assert.equal(error.detailCode, 'course_evidence_mismatch');
+  assert.equal(error.fieldPath, '$.recommended_courses[0].course_evidence');
+  return true;
+ });
+});
