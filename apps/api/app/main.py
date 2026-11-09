@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from api.dependencies import respond
 from api.domain import Problem
-from api.routes import courses, health, plans, recommendations, reference
+from api.routes import courses, health, jobs, plans, recommendations, reference
 from api.routes.documents import router as documents_router
 from config import APP_ORIGIN, DB_BACKEND, validate_deployment
 from repositories.plans import connect, migrate, StorageUnavailable
@@ -46,6 +46,7 @@ async def lifespan(application):
 app = FastAPI(title='Career Roadmap API', version='1.0.0', lifespan=lifespan, redirect_slashes=False)
 app.include_router(reference.router)
 app.include_router(plans.router)
+app.include_router(jobs.router)
 app.include_router(recommendations.router)
 app.include_router(courses.router)
 app.include_router(documents_router)
