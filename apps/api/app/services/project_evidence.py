@@ -20,6 +20,8 @@ PERSONAL_HEADING = re.compile(r'^(?:\d+[.)]\s*)?본인이\s*직접\s*수행한\s
 CONTRIBUTION_HEADER = re.compile(r'^본인\s*기여\s*여부$')
 TECH_HEADER = re.compile(r'^기술\s*스택$')
 ROW_LABEL = re.compile(r'^(?:직접\s*(?:사용|구현|설계)|일부\s*설정|팀원\s*담당|미수행)$')
+ROLE_DESCRIPTION = re.compile(r'^담당\s*역할\s*[:：]\s*\S')
+NUMBERED = re.compile(r'^\s*(\d+)[.)]\s+')
 
 
 def names_skill(name, text):
@@ -27,7 +29,7 @@ def names_skill(name, text):
 
 
 def clean(text):
-    return re.sub(r'^(?:\s*[-*•●▪]\s*|\s*#+\s*|\s*\d+[.)]\s+)', '', text).strip()
+    return re.sub(r'^(?:\s*[-*•●▪①-⑳]\s*|\s*#+\s*|\s*\d+[.)]\s+)', '', text).strip()
 
 
 def performed(text):
@@ -76,6 +78,7 @@ class EvidenceIndex:
                                    'box': box, 'space': space(segment)})
         self.lines = [{'start': m.start(), 'end': m.end(), 'text': m.group()}
                       for m in re.finditer(r'[^\n]+', self.text)]
+        self._table_membership = {}
 
     def span(self, unit, kind):
         start, end = unit['start'], unit['end']
@@ -113,7 +116,7 @@ class EvidenceIndex:
                 continue
             labels = [c for c in self.cells if c['space'] == header['space']
                       and abs(c['box'][0] - header['box'][0]) <= height
-                      and ROW_LABEL.fullmatch(clean(c['text'])) and same_row(c, cell)]
+                      and clean(c['text']) and same_row(c, cell)]
             if len(labels) != 1:
                 continue
             label = labels[0]
@@ -126,7 +129,7 @@ class EvidenceIndex:
             connected = True
             for row in rows:
                 if (row['box'][1] - previous['box'][3] > 3 * height
-                        or not any(ROW_LABEL.fullmatch(clean(c['text'])) and same_row(row, c)
+                        or not any(clean(c['text']) and same_row(row, c)
                                    and abs(c['box'][0] - header['box'][0]) <= height for c in self.cells)):
                     connected = False
                     break
@@ -137,24 +140,28 @@ class EvidenceIndex:
                     self.span(label, 'contribution_cell')], 'table_bbox'))
         return matches[0] if len(matches) == 1 else None
 
-    def table_text(self, start, end):
-        # Delimited rows only. Column-major OCR and bare adjacent words are ambiguous.
+    def text_cells(self, line):
+        separators = list(re.finditer(r'\||\t| {2,}', line['text']))
+        ranges = zip([0] + [m.end() for m in separators],
+                     [m.start() for m in separators] + [len(line['text'])]) if separators else []
+        cells = []
+        for left, right in ranges:
+            part = line['text'][left:right]
+            if part.strip():
+                a = line['start'] + left + len(part) - len(part.lstrip())
+                b = line['start'] + right - (len(part) - len(part.rstrip()))
+                cells.append({'start': a, 'end': b, 'text': self.text[a:b]})
+        return cells
+
+    def text_table_rows(self):
+        """Yield only rows inside an uninterrupted, explicitly delimited table."""
         headers = None
         previous_end = 0
         for line in self.lines:
             if re.search(r'\n\s*\n', self.text[previous_end:line['start']]):
                 headers = None
             previous_end = line['end']
-            separators = list(re.finditer(r'\||\t| {2,}', line['text']))
-            ranges = zip([0] + [m.end() for m in separators],
-                         [m.start() for m in separators] + [len(line['text'])]) if separators else []
-            cells = []
-            for left, right in ranges:
-                part = line['text'][left:right]
-                if part.strip():
-                    a = line['start'] + left + len(part) - len(part.lstrip())
-                    b = line['start'] + right - (len(part) - len(part.rstrip()))
-                    cells.append({'start': a, 'end': b, 'text': self.text[a:b]})
+            cells = self.text_cells(line)
             if not cells:
                 headers = None
                 continue
@@ -167,30 +174,110 @@ class EvidenceIndex:
             if not headers or len(cells) != len(headers[0]):
                 headers = None
                 continue
+            yield headers, cells
+
+    def table_text(self, start, end):
+        # Column-major OCR and bare adjacent words never establish a specific row.
+        for headers, cells in self.text_table_rows():
             hs, ti, ci = headers
             tech, label = cells[ti], cells[ci]
-            if not ROW_LABEL.fullmatch(clean(label['text'])):
-                headers = None
-                continue
             if start < tech['end'] and end > tech['start']:
                 return clean(label['text']), [self.span(hs[ti], 'technology_header'),
                     self.span(hs[ci], 'contribution_header'), self.span(tech, 'technology_cell'),
                     self.span(label, 'contribution_cell')], 'table_row'
         return None
 
+    def in_table(self, unit, positioned):
+        """Table membership is distinct from proving a particular row's actor."""
+        key = (unit['start'], unit['end'], positioned)
+        if key not in self._table_membership:
+            self._table_membership[key] = self._in_table(unit, positioned)
+        return self._table_membership[key]
+
+    def _in_table(self, unit, positioned):
+        if positioned:
+            peers = [c for c in self.cells if c['space'] == unit['space']]
+            for header in peers:
+                if not TECH_HEADER.fullmatch(clean(header['text'])):
+                    continue
+                x, y, right, bottom = header['box']
+                height = bottom - y
+                if unit['box'][1] <= bottom or unit['box'][0] < x - height:
+                    continue
+                contribution_headers = [c for c in peers if CONTRIBUTION_HEADER.fullmatch(clean(c['text']))
+                                        and same_row(c, header) and c['box'][0] > right]
+                labels = [c for c in peers if c['box'][0] > right and c['box'][1] > bottom and (
+                    abs(c['box'][0] - contribution_headers[0]['box'][0]) <= height
+                    if len(contribution_headers) == 1 else ROW_LABEL.fullmatch(clean(c['text'])))]
+                # Actual aligned cells delimit the table. A heading elsewhere in
+                # the document does not turn free-standing prose into a table row.
+                rows = sorted([c for c in peers if c['box'][0] >= x - height
+                               and c['box'][1] > bottom and any(
+                                   c['box'][2] < label['box'][0] and same_row(c, label) for label in labels)],
+                              key=lambda c: c['box'][1])
+                last = bottom
+                for row in rows:
+                    if row['box'][1] - last > 3 * height or any(
+                        last <= c['box'][1] < row['box'][1] and c['box'][0] <= x
+                        and (PERSONAL_HEADING.fullmatch(clean(c['text'])) or NUMBERED.match(c['text'])
+                             or clean(c['text']).startswith('팀 전체')) for c in peers):
+                        break
+                    last = row['box'][3]
+                if labels and unit['box'][3] <= last and unit['box'][2] < min(c['box'][0] for c in labels):
+                    return True
+            return False
+        if any(cells[0]['start'] < unit['end'] and cells[-1]['end'] > unit['start']
+               for _, cells in self.text_table_rows()):
+            return True
+        # Recognize a bounded column-major OCR block without assigning its rows.
+        # Stop at prose, a new heading, or a blank line, even if more tables follow.
+        for i, header in enumerate(self.lines):
+            if ('기술 스택' in header['text'] and '본인 기여 여부' in header['text']
+                    and header['start'] == unit['start']):
+                return bool(re.search(r'직접\s*(?:사용|구현|설계)|일부\s*설정|팀원\s*담당|미수행', header['text']))
+            if not TECH_HEADER.fullmatch(clean(header['text'])) or i + 1 == len(self.lines):
+                continue
+            contribution = self.lines[i + 1]
+            if not CONTRIBUTION_HEADER.fullmatch(clean(contribution['text'])):
+                continue
+            block, last = [], header['end']
+            for entry in self.lines[i + 1:]:
+                text = clean(entry['text'])
+                if re.search(r'\n\s*\n', self.text[last:entry['start']]) or not (
+                    CONTRIBUTION_HEADER.fullmatch(text) or ROW_LABEL.fullmatch(text)
+                    or re.fullmatch(r'[A-Za-z][A-Za-z0-9 .+#/\-]*', text)):
+                    break
+                block.append(entry)
+                last = entry['end']
+            if unit in block and any(ROW_LABEL.fullmatch(clean(c['text'])) for c in block):
+                return True
+        return False
+
     def section(self, unit, positioned):
         units = (sorted([c for c in self.cells if c['space'] == unit['space']],
                         key=lambda c: (c['box'][1], c['box'][0])) if positioned else self.lines)
         heading = None
+        description = None
+        circled_list = False
         previous = None
         for entry in units:
             text = clean(entry['text'])
             if PERSONAL_HEADING.fullmatch(text):
                 heading = entry
+                description, circled_list = None, False
             elif heading:
-                # A new title, table, team section, or non-list paragraph ends the section.
-                boundary = (not performed(text) and not NEGATIVE.search(text)) or bool(
-                    re.search(r'[:：]|^#{1,6}\s|^팀\s*전체', entry['text']))
+                # Only the role description immediately under this heading may
+                # contain a colon without ending the personal-work section.
+                role_description = previous == heading and bool(ROLE_DESCRIPTION.match(text))
+                number, heading_number = NUMBERED.match(entry['text']), NUMBERED.match(heading['text'])
+                numbered_heading = bool(number and (circled_list or (
+                    entry['box'][0] <= heading['box'][0] + 5 if positioned else
+                    heading_number and int(number[1]) >= int(heading_number[1]))))
+                boundary = not role_description and (
+                    (not performed(text) and not NEGATIVE.search(text)) or numbered_heading or bool(
+                        re.search(r'[:：]|^#{1,6}\s|^팀\s*전체', entry['text']))
+                    or TECH_HEADER.fullmatch(text) or CONTRIBUTION_HEADER.fullmatch(text)
+                    or self.in_table(entry, positioned))
                 if positioned:
                     h = heading['box']
                     boundary |= (not h[0] - 5 <= entry['box'][0] <= h[0] + 3 * (h[3] - h[1])
@@ -200,8 +287,15 @@ class EvidenceIndex:
                     boundary = True
                 if boundary:
                     heading = None
+                elif role_description:
+                    description = entry
+                elif re.match(r'^\s*[①-⑳]', entry['text']):
+                    circled_list = True
             if entry['start'] == unit['start'] and entry['end'] == unit['end']:
-                return ([self.span(heading, 'personal_section')] if heading and heading != entry else [])
+                if not heading or heading == entry:
+                    return []
+                return [self.span(heading, 'personal_section')] + (
+                    [self.span(description, 'section_description')] if description and description != entry else [])
             previous = entry
         return []
 
@@ -228,12 +322,10 @@ class EvidenceIndex:
                 method = 'section_bbox' if has_geometry else 'section_list'
         # Only source language can become an activity. Never preserve a fluent but
         # unverifiable model paraphrase (quantities, leadership, or inflated scope).
-        ambiguous_table = not table and not context and any(
-            re.search(r'본인\s*기여\s*여부', c['text']) for c in (self.cells if has_geometry else self.lines))
-        flattened_rows = not table and not has_geometry and (
+        ambiguous_table = not table and not context and self.in_table(unit, has_geometry)
+        flattened_rows = ambiguous_table and not has_geometry and (
             '본인 기여 여부' in local or len(re.findall(
                 r'직접\s*(?:사용|구현|설계)|일부\s*설정|팀원\s*담당|미수행', local)) > 1)
-        ambiguous_table |= flattened_rows
         if flattened_rows:
             activity = name + ' · 수행 내용 미확인'
         elif performed(local) or NEGATIVE.search(local) or TEAM.search(local):
@@ -250,7 +342,8 @@ class EvidenceIndex:
             scope, reason = 'unknown', 'not_performed'
         elif TEAM.search(actor_text):
             scope, reason = 'team', 'explicit_team'
-        elif not flattened_rows and (table or context or PERSONAL.search(local)):
+        elif not flattened_rows and ((table and ROW_LABEL.fullmatch(label))
+                                     or (context and not table) or PERSONAL.search(local)):
             scope, reason = 'personal', 'document_personal'
         else:
             scope, reason = 'unknown', 'ambiguous_table_row' if ambiguous_table else 'actor_unspecified'

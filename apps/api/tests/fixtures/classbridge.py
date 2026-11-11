@@ -20,6 +20,7 @@ ROWS = [
     ('Docker / GitHub Actions', '일부 설정', ['Docker', 'GitHub Actions']),
     ('Next.js / TypeScript', '팀원 담당', ['Next.js', 'TypeScript']),
 ]
+ROLE_DESCRIPTION = '담당 역할: 백엔드 API 개발 및 OCR 작업 큐 설계'
 
 
 def ocr_document(cells, coordinate='page'):
@@ -45,6 +46,20 @@ def classbridge_document(coordinate='page'):
     cells += [('팀 전체 성과', 2, 50, 310, 300),
               ('팀 전체 서비스 테스트: 사용자 48명', 2, 70, 350, 450),
               ('Playwright 서비스 테스트 48개 작성', 2, 70, 390, 450)]
+    return ocr_document(cells, coordinate)
+
+
+def classbridge_original_order_document(coordinate='page'):
+    """Reported source order: heading, role description, ①–⑤, then the table."""
+    cells = [('본인이 직접 수행한 작업', 1, 50, 50, 300),
+             (ROLE_DESCRIPTION, 1, 70, 90, 500)]
+    cells += [(marker + ' ' + detail, 1, 70, 130 + i * 40, 450)
+              for i, (marker, detail) in enumerate(zip('①②③④⑤', DETAILS.values()))]
+    cells += [('구분', 1, 20, 330, 70), ('기술 스택', 1, 150, 330, 100),
+              ('본인 기여 여부', 1, 450, 330, 130)]
+    cells += [(tech, 1, 150, 370 + i * 40, 260) for i, (tech, _, _) in enumerate(ROWS)]
+    cells += [(ROWS[i][1], 1, 450, 370 + i * 40, 100) for i in (4, 0, 3, 1, 2)]
+    cells += [('Playwright 서비스 테스트 48개 작성', 1, 70, 570, 450)]
     return ocr_document(cells, coordinate)
 
 
