@@ -104,7 +104,7 @@ try {
  await tab(1); await wait("document.querySelector('.job-skills').getAttribute('aria-busy')==='false'");
  assert.equal(await run("auditRequests.filter(r=>r.method==='POST'&&/job-skill-analysis|project-experience-analysis/.test(r.url)).length"),0);
  await tab(3); await wait("document.body.innerText.includes('수강 후보 추천을 보류')");
- await tab(4); await wait("document.body.innerText.includes('공모전·대외활동 · 준비 중')");
+ await tab(4); await wait("document.querySelector('.activity-recommendations')?.getAttribute('aria-busy')==='false' && document.body.innerText.includes('공급자 연결이 아직 설정되지 않았습니다.')");
  await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
  assert.ok(await run('document.documentElement.scrollWidth<=window.innerWidth'));
  const screenshot=await send('Page.captureScreenshot',{format:'png',captureBeyondViewport:true});

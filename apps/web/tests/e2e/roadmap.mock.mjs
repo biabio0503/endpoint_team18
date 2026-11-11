@@ -28,6 +28,11 @@ export function installRoadmapMock() {
   if (!url.includes('/api/')) return nativeFetch(input, options);
   const json = (data, status = 200) => { persist(); return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } }); };
   const body = options.body ? JSON.parse(options.body) : {};
+  if (url.endsWith('/activities')) return json({ request_id: 'test-plan', input_revision: m.revision,
+   activity_basis: 'goal-only', status: 'success', activities: [],
+   sources: ['competition', 'extracurricular'].map(kind => ({ kind, status: 'success' })),
+   evaluated_at: new Date().toISOString(), valid_until: new Date(Date.now() + 300000).toISOString(),
+   sample_notice: '합성 브라우저 테스트 공고 목록' });
   if (url.endsWith('/roadmap')) {
    if (options.method === 'POST') {
     if (!m.jobAvailable) return json({ error: 'needs_job_analysis', message: '직무 분석을 먼저 실행해 주세요.' }, 422);
@@ -51,6 +56,6 @@ export function installRoadmapMock() {
    }
    return json(view(record));
   }
-  return json({ request_id: 'test-plan', input_revision: m.revision, input: { career_goal: '데이터 분석' } });
+  return json({ request_id: 'test-plan', input_revision: m.revision, activity_basis: 'goal-only', input: { career_goal: '데이터 분석' } });
  };
 }

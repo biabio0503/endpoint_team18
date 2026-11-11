@@ -23,4 +23,5 @@ def activities(rid: str, ctx=Depends(owned_context)):
     current = repo.plan(rid, owner['owner_id'])
     if not current or current['input_revision'] != revision or capture_profile(db, current)[1] != basis:
         raise Problem(409, 'revision_conflict', '조회 중 입력이나 경험 근거가 변경되었습니다. 다시 조회해 주세요.')
-    return respond(200, {**recommend(profile, items, sources), 'request_id': rid, 'input_revision': revision})
+    return respond(200, {**recommend(profile, items, sources), 'request_id': rid, 'input_revision': revision,
+                         'activity_basis': basis})

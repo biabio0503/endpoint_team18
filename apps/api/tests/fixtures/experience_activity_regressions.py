@@ -31,6 +31,16 @@ NEGATION_CASES = [
      {'사용자 인터뷰': 'personal', 'Figma': 'unknown'}),
 ]
 
+# Minimal reproductions from the 884c761 review. Quotes deliberately omit the
+# predicate/subject, or include a different activity's subject and future plan.
+CLAUSE_CASES = [
+    ('clipped_sql_negation', '제가 SQL을 사용하지 않았습니다.', 'SQL', '제가 SQL을 사용', 'unknown'),
+    ('never_tried', '저는 사용자 인터뷰를 진행해 보지 않았습니다.', '사용자 인터뷰', '사용자 인터뷰를 진행', 'unknown'),
+    ('other_personal_clause', '민수는 Docker를 배포했고 저는 Python 코드를 작성했습니다.', 'Docker', 'Docker를 배포', 'unknown'),
+    ('other_team_clause', '팀원 민수는 Docker를 배포했고 저는 Python 코드를 작성했습니다.', 'Python', 'Python 코드', 'personal'),
+    ('other_future_clause', '저는 Python으로 데이터를 분석했고 Docker는 향후 사용할 계획입니다.', 'Python', 'Python으로 데이터를 분석', 'personal'),
+]
+
 
 def negation_extraction(document):
     text = document['extracted_text']
