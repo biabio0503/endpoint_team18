@@ -4,6 +4,8 @@
 
 추천 품질 개선의 공고별 고정 fixture, 수정 전후 지표, 저장 결과 호환과 회귀 검증은 [추천 품질 진단 보고서](docs/recommendation-quality-audit-2026-11-09.md)에 정리했습니다. 이 개선은 별도 마이그레이션이나 운영 데이터 변경 없이 검토할 수 있습니다.
 
+공모전·대외활동 탭은 저장한 진로 목표로 콘테스트코리아 실제 공고를 추천합니다. 문서·직무 분석·로드맵 생성 없이 이용하며, 기간·참가 대상과 원문 근거를 확인한 공고만 표시합니다. [구현·실제 API·배포 검증 기록](docs/activity-recommendations.md)을 참고하세요.
+
 대학생이 진로 목표와 학업 정보를 저장하고, 문서와 이수 과목을 확인한 뒤 Gemini 기반 수강 후보와 실행 로드맵을 생성하는 서비스입니다. 운영은 Supabase Auth, SQLite 개발 환경은 세션 쿠키로 소유자를 구분합니다. 기존 분석 확인 화면에서 프로젝트 경험을 분석·확인·수정하고, 직무 역량 비교 탭에서 Himalayas 요구 기술과 원문 근거를 비교합니다. 로드맵 실행 이력과 작업 완료 체크를 저장하며 입력·근거 변경 시 이전 기준임을 표시합니다. [5단계 구현·검증·운영 적용 안내](docs/personalized-roadmaps.md)를 참고하세요. 새 PostgreSQL 마이그레이션과 배포는 별도 적용이 필요합니다.
 
 ## 구성과 주요 기능
@@ -55,6 +57,7 @@ npm run dev
 | `ROADMAP_OCR_MONTHLY_UNIT_LIMIT`, `ROADMAP_OCR_MAX_PAGES_PER_DOCUMENT` | 미국 태평양 시간 월 최대 900단위(DST 반영), 문서 최대 50단위 |
 | `GOOGLE_APPLICATION_CREDENTIALS` | 백엔드 전용 서비스 계정/ADC 파일 경로 |
 | `GEMINI_API_KEY`, `GEMINI_MODEL` | 서버 전용 Gemini 키와 모델 (기본 모델 `gemini-3.5-flash`) |
+| `CONTESTKOREA_API_KEY` | 서버 전용 콘테스트코리아 Basic DEMO v1.1 키 |
 | `ROADMAP_API_ORIGIN` | Next.js 서버 rewrite 대상. 운영 빌드에는 HTTPS 출처 필요 |
 | `ROADMAP_DB_PATH`, `ROADMAP_FILE_STORAGE_PATH` | 로컬 SQLite와 문서 경로 |
 | `ROADMAP_AUTO_SEED_DEV` | SQLite 가상 개발 자료 자동 seed; 운영에서는 `0` |
@@ -88,6 +91,6 @@ Render Root Directory는 `apps/api`, Build는 `pip install -r requirements.txt`,
 
 ## 게스트 통합 검수 수정 (2026-11-09)
 
-외부 직무 근거가 없으면 AI 호출 없이 제한 안내 로드맵을 저장합니다. 기술 요구와 수강 후보를 만들어 채우지 않습니다. 공모전·대외활동은 준비 중으로 표시합니다. AI 요청의 동시 실행·재실행 간격·사용자별 및 전역 사용량은 DB에 저장해 제한합니다. 과목 중복 제외는 동일 ID와 명시적으로 검증된 동일·대체 관계만 사용합니다. 페이지 크기는 기본 20개, 10/20/50개 선택이며 검색은 300ms 지연 처리합니다.
+외부 직무 근거가 없으면 AI 호출 없이 제한 안내 로드맵을 저장합니다. 기술 요구와 수강 후보를 만들어 채우지 않습니다. 당시 준비 중이던 공모전·대외활동은 위 실데이터 추천으로 연결했습니다. AI 요청의 동시 실행·재실행 간격·사용자별 및 전역 사용량은 DB에 저장해 제한합니다. 과목 중복 제외는 동일 ID와 명시적으로 검증된 동일·대체 관계만 사용합니다. 페이지 크기는 기본 20개, 10/20/50개 선택이며 검색은 300ms 지연 처리합니다.
 
 추가 PostgreSQL 마이그레이션 `20261109073304_guest_service_guardrails.sql`을 먼저 적용해야 합니다. 자세한 검증 범위, 한도, 근거 관계 등록 조건, 운영 미검증 항목은 위 검수 보고서를 확인하세요.

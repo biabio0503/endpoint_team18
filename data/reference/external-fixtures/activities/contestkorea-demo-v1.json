@@ -1,0 +1,10 @@
+{
+  "description": "Synthetic contract fixture, not a captured live API response. Never served in production.",
+  "menus": [{"STR_BCODE": "0301", "STR_MENU": "분석"}, {"STR_BCODE": "0302", "STR_MENU": "마케팅"}],
+  "meetings": [
+    {"STR_MEETCODE": "data", "STR_MEETING": "공공데이터 분석 경진대회", "STR_MENU": "데이터·통계", "STR_HOST": "테스트 공공기관", "STR_TARGET": "대학생, 일반인", "STR_DATE1": "2026.11.01 ~ 2026.11.30", "STR_URL": "https://www.contestkorea.com/sub/view.php?str_no=data"},
+    {"STR_MEETCODE": "marketing", "STR_MEETING": "브랜드 마케팅 기획 공모전", "STR_MENU": "광고·마케팅", "STR_HOST": "테스트 브랜드", "STR_TARGET": "누구나", "STR_DATE1": "2026.11.01 ~ 2026.11.30", "STR_URL": "https://www.contestkorea.com/sub/view.php?str_no=marketing"},
+    {"STR_MEETCODE": "both", "STR_MEETING": "소비자 데이터 분석과 마케팅 아이디어 공모전", "STR_MENU": "아이디어", "STR_HOST": "테스트 기관", "STR_TARGET": "대학생", "STR_DATE1": "2026.11.01 ~ 2026.12.31", "STR_URL": "https://www.contestkorea.com/sub/view.php?str_no=both"},
+    {"STR_MEETCODE": "supporter", "STR_MEETING": "대학생 SNS 홍보 서포터즈", "STR_MENU": "마케팅", "STR_HOST": "테스트 기관", "STR_TARGET": "대학생", "STR_DATE1": "상시 접수", "STR_URL": "https://www.contestkorea.com/sub/view.php?str_no=supporter"}
+  ]
+}
