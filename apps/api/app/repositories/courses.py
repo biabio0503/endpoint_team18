@@ -1,4 +1,8 @@
 """Reference catalogs and request-scoped course selections."""
+
+from course_groups import equivalent_pairs, grouped_courses
+
+
 class CourseRepository:
     def __init__(self, db): self.db=db
     def universities(self): return [dict(r) for r in self.db.execute('SELECT university_id, university_name, is_supported FROM universities ORDER BY university_name, university_id')]
@@ -19,14 +23,18 @@ class CourseRepository:
           FROM catalog_courses cc LEFT JOIN input_course_states s ON s.request_id=? AND s.course_id=cc.course_id WHERE cc.catalog_id=? ORDER BY cc.course_name,cc.course_id''',(rid,cid))]
     def outside(self, rid, cid):
         return [dict(r) for r in self.db.execute('''SELECT s.course_id, s.source_catalog_id, cc.course_name, cc.course_code, cc.credits FROM input_course_states s JOIN catalog_courses cc ON cc.catalog_id=s.source_catalog_id AND cc.course_id=s.course_id WHERE s.request_id=? AND s.is_completed=TRUE AND NOT EXISTS (SELECT 1 FROM catalog_courses current WHERE current.catalog_id=? AND current.course_id=s.course_id) ORDER BY cc.course_name,s.course_id''',(rid,cid))]
+    def selection_courses(self, rid, cid):
+        return sorted(grouped_courses(self.courses(rid, cid), cid), key=lambda c: (c['course_name'], c['course_id']))
     def recommendation_courses(self, rid, cid):
         courses = self.courses(rid, cid, include_description=True)
         completed = {r['course_id'] for r in self.db.execute('SELECT course_id FROM input_course_states WHERE request_id=? AND is_completed=TRUE', (rid,))}
-        pairs = {}
+        verified_pairs = equivalent_pairs(cid)
         for row in self.db.execute('''SELECT e.course_id,e.equivalent_course_id FROM verified_course_equivalences e
             JOIN courses a ON a.course_id=e.course_id JOIN courses b ON b.course_id=e.equivalent_course_id
             WHERE a.university_id=b.university_id'''):
-            a, b = row['course_id'], row['equivalent_course_id']
+            verified_pairs.append((row['course_id'], row['equivalent_course_id']))
+        pairs = {}
+        for a, b in verified_pairs:
             pairs.setdefault(a, set()).add(b)
             pairs.setdefault(b, set()).add(a)
         for course in courses:
@@ -34,7 +42,7 @@ class CourseRepository:
             equivalents = pairs.get(course['course_id'], set())
             course['verified_equivalent_ids'] = sorted(equivalents)
             course['equivalent_completed'] = bool(equivalents & completed)
-        return courses
+        return grouped_courses(courses, cid)
     def membership(self,cid,course): return self.db.execute('SELECT 1 FROM catalog_courses WHERE catalog_id=? AND course_id=?',(cid,course)).fetchone() is not None
     def state(self,rid,course): return self.db.execute('SELECT * FROM input_course_states WHERE request_id=? AND course_id=?',(rid,course)).fetchone()
     def save_state(self,rid,course,cid,completed,at):
