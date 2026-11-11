@@ -77,3 +77,61 @@ jobs:
         run: npm run check
       - name: Production build with inert API endpoint
         run: npm run build
+
+  isolated-postgres:
+    name: PostgreSQL 16 / document OCR invariants
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: local-test-only
+          POSTGRES_DB: team18_document_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d team18_document_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    defaults:
+      run:
+        working-directory: apps/api
+    env:
+      PYTHONPATH: app
+      ROADMAP_DB_BACKEND: sqlite
+      ROADMAP_AUTO_SEED_DEV: "0"
+      ROADMAP_OCR_PROVIDER: none
+      GEMINI_LIVE_TEST: "0"
+      GEMINI_API_KEY: ""
+      ROADMAP_DATABASE_URL: ""
+      ROADMAP_TEST_POSTGRES_URL: postgresql://postgres:local-test-only@127.0.0.1:5432/team18_document_test
+      ROADMAP_ALLOW_TEST_DB_RESET: "1"
+      ROADMAP_OCR_TEST_BACKEND: postgres
+      ROADMAP_INSECURE_LOCAL_COOKIE: "1"
+      ROADMAP_APP_ORIGIN: http://localhost:3000
+      GOOGLE_APPLICATION_CREDENTIALS: /nonexistent/team18-test-credentials.json
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v4
+      - name: Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: apps/api/requirements*.txt
+      - name: Install pinned test dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Verify disposable DB target
+        run: |
+          python -c "from tests.integration.postgres_test_safety import validate_reset_target; import os; print('Verified disposable DB:', validate_reset_target(os.environ['ROADMAP_TEST_POSTGRES_URL'], os.environ).split('@')[1])"
+      - name: PostgreSQL document and OCR isolation tests
+        run: |
+          python -m pytest -q -rs \
+            tests/unit/test_document_ocr.py \
+            tests/unit/test_ocr_budget_boundaries.py \
+            tests/unit/test_ocr_billing_period.py \
+            tests/unit/test_ocr_preflight.py \
+            tests/integration/test_documents_postgres.py
