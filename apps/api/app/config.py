@@ -40,3 +40,16 @@ def validate_deployment():
 
 MAX_DOCUMENT_BYTES = int(os.environ.get('ROADMAP_MAX_DOCUMENT_BYTES', str(10 * 1024 * 1024)))
 MAX_DOCUMENTS = int(os.environ.get('ROADMAP_MAX_DOCUMENTS', '10'))
+
+def ocr_settings():
+    """Fail closed on invalid limits; environment only, never request parameters."""
+    def bounded(name, default, ceiling):
+        try:
+            return min(ceiling, max(0, int(os.environ.get(name, default))))
+        except (TypeError, ValueError):
+            return 0
+    return {
+        'provider': os.environ.get('ROADMAP_OCR_PROVIDER', 'none').strip().lower(),
+        'monthly_limit': bounded('ROADMAP_OCR_MONTHLY_UNIT_LIMIT', '900', 900),
+        'document_limit': bounded('ROADMAP_OCR_MAX_PAGES_PER_DOCUMENT', '50', 50),
+    }

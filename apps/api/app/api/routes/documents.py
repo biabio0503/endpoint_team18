@@ -13,6 +13,8 @@ from config import DB_BACKEND, MAX_DOCUMENT_BYTES, MAX_DOCUMENTS
 from providers.document_storage import get_storage
 from providers.document_parser import validate_file, InvalidDocument
 from repositories.documents import DocumentRepository
+from services.document_ocr import policy as ocr_policy, retry_policy
+from providers.google_vision_ocr import MESSAGES as OCR_MESSAGES
 from worker.documents import timestamp, later, request_work
 
 router = APIRouter(prefix='/api/roadmap-inputs/{rid:roadmap_id}/documents', tags=['documents'])
@@ -94,10 +96,14 @@ def list_documents(rid: str, background: BackgroundTasks, ctx=Depends(document_c
     db, repo, owner = ctx
     plan(repo, owner, rid)
     db.execute('BEGIN ISOLATION LEVEL REPEATABLE READ' if DB_BACKEND == 'postgres' else 'BEGIN'); row = plan(repo, owner, rid)
-    docs = [summary(d) for d in DocumentRepository(db).list_active(rid)]
+    ocr = ocr_policy(db)
+    docs = []
+    for d in DocumentRepository(db).list_active(rid):
+        retry = retry_policy(d, ocr, db)
+        docs.append(summary(d) | retry | {'retry_message': OCR_MESSAGES.get(retry['retry_reason'])})
     db.commit()
     if DB_BACKEND == 'postgres': background.add_task(request_work)
-    return respond(200, {'documents': docs, 'input_revision': row['input_revision'], 'analysis_eligible': any(d['analysis_eligible'] for d in docs), 'upload_policy': {'max_files': MAX_DOCUMENTS, 'max_file_bytes': MAX_DOCUMENT_BYTES, 'extensions': ['pdf','docx','txt']}})
+    return respond(200, {'documents': docs, 'input_revision': row['input_revision'], 'analysis_eligible': any(d['analysis_eligible'] for d in docs), 'ocr': ocr | {'message': OCR_MESSAGES.get(ocr['reason'])}, 'upload_policy': {'max_files': MAX_DOCUMENTS, 'max_file_bytes': MAX_DOCUMENT_BYTES, 'extensions': ['pdf','docx','txt']}})
 
 
 @router.post('', dependencies=[Depends(require_origin)], status_code=201, openapi_extra={'requestBody': {'required': True, 'content': {'multipart/form-data': {'schema': {'type': 'object', 'required': ['file', 'expected_input_revision'], 'properties': {'file': {'type': 'string', 'format': 'binary'}, 'expected_input_revision': {'type': 'integer', 'minimum': 0}}}}}}})
@@ -162,7 +168,11 @@ def mutate(rid, did, action, revision, body, ctx):
         return respond(200, {'document_id': did, 'cleanup_status': 'queued', 'input_revision': row['input_revision'] + 1})
     if action == 'retry':
         if doc['extraction_status'] == 'pending': raise Problem(409, 'already_pending', '이미 문서를 읽고 있습니다.')
-        if doc['extraction_status'] == 'needs_ocr': raise Problem(422, 'needs_ocr', 'OCR이 필요한 문서는 다시 등록해 주세요.')
+        retry = retry_policy(doc, ocr_policy(db), db)
+        if not retry['retry_available']:
+            code = retry['retry_reason']
+            raise Problem(429 if code == 'ocr_budget_exceeded' else 422, code,
+                          OCR_MESSAGES.get(code, '현재 다시 읽을 수 없습니다.'))
         new_rev = doc['extraction_revision'] + 1
         documents.retry(did, new_rev, t); documents.bump_input(rid, t); db.commit()
         return respond(202, {'document_id': did, 'extraction_revision': new_rev, 'extraction_status': 'pending', 'input_revision': row['input_revision'] + 1})

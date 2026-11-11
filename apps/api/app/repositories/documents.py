@@ -55,11 +55,17 @@ class DocumentRepository:
     def lease(self,did,token,until,cleanup):
         if cleanup: self.db.execute("UPDATE project_documents SET cleanup_status='running',cleanup_lease_token=?,cleanup_lease_until=?,cleanup_attempts=cleanup_attempts+1 WHERE document_id=?",(token,until,did))
         else: self.db.execute('UPDATE project_documents SET extraction_lease_token=?,extraction_lease_until=?,extraction_attempts=extraction_attempts+1 WHERE document_id=?',(token,until,did))
+    def renew(self,row,token,at,until):
+        return self.db.execute("""UPDATE project_documents SET extraction_lease_until=?
+            WHERE document_id=? AND removed_at IS NULL AND extraction_status='pending'
+            AND extraction_revision=? AND extraction_lease_token=? AND extraction_lease_until>?""",
+            (until,row['document_id'],row['extraction_revision'],token,at)).rowcount == 1
     def finish_cleanup(self,did,token):
         if getattr(self.db, 'backend', 'sqlite') == 'postgres':
             self.db.execute('SELECT document_id FROM project_documents WHERE document_id=? FOR UPDATE',(did,)).fetchone()
         row=self.get_any(did)
         if row and row['cleanup_lease_token']==token:
+            self.db.execute('UPDATE document_ocr_units SET result_json=NULL WHERE document_id=?',(did,))
             self.db.execute('DELETE FROM document_extractions WHERE document_id=?',(did,))
             self.db.execute("UPDATE project_documents SET cleanup_status='succeeded',cleanup_lease_token=NULL,cleanup_lease_until=NULL,cleanup_error_code=NULL WHERE document_id=?",(did,))
     def fail_cleanup(self,did,token,retry_at):

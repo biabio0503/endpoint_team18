@@ -35,3 +35,7 @@ PostgreSQL 문서 API는 `ROADMAP_POSTGRES_DOCUMENTS_ENABLED=1`일 때만 활성
 비밀값은 Render 서버 환경에만 저장한다. 빌드 명령은 `pip install -r requirements.txt`, 시작 명령은 `uvicorn app.main:app --host 0.0.0.0 --port $PORT`, 헬스 경로는 `/api/health`다. 기존 `sslmode=require` 동작을 유지하며 TLS 서버 인증서 검증 복구와 SQLite 제거는 후속 작업이다.
 
 운영 사전 검사 결과와 승인할 변경 범위는 [운영 적용 검증 기록](phase3-production-preflight.md)을 참고한다.
+
+## 선택적 Google Cloud Vision OCR
+
+기존 원본 Storage를 유지하는 OCR이 추가되었습니다. 기본값은 `ROADMAP_OCR_PROVIDER=none`이며 운영 설정은 자동 변경하지 않습니다. 새 SQL `20261110091129_document_ocr_units.sql` 적용 전 백업·격리 검증·별도 승인이 필요합니다. 인증, 월 최대 900단위 예약, Render Secret File, 재시작 보호 및 한계는 [OCR 배포 안내](google-vision-ocr.md)를 따릅니다. 사용량 ledger는 기능 비활성화/롤백 시에도 삭제하지 않습니다.

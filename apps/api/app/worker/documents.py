@@ -9,6 +9,7 @@ from repositories.plans import connect
 from repositories.documents import DocumentRepository
 from providers.document_storage import get_storage
 from providers.document_parser import extract
+from services.document_ocr import DocumentOCR, LeaseLost
 
 log=logging.getLogger(__name__)
 LEASE_SECONDS=120
@@ -16,6 +17,35 @@ _request_worker_lock = threading.Lock()
 
 def timestamp(): return datetime.now(timezone.utc).isoformat(timespec='microseconds')
 def later(seconds): return (datetime.now(timezone.utc)+timedelta(seconds=seconds)).isoformat(timespec='microseconds')
+
+class ExtractionLease:
+    """Renew during parsing, Storage I/O and RPCs; fail closed on lost ownership."""
+    def __init__(self, row, token):
+        self.row=row; self.token=token
+        self.stop=threading.Event(); self.lost=threading.Event()
+        self.lock=threading.Lock(); self.checked_at=0
+    def check(self, force=False):
+        with self.lock:
+            if self.lost.is_set(): raise LeaseLost()
+            # Native DOCX parsing can visit thousands of paragraphs per second.
+            if not force and time.monotonic()-self.checked_at < min(5,LEASE_SECONDS/3): return
+            try:
+                with closing(connect()) as db:
+                    valid=DocumentRepository(db).renew(self.row,self.token,timestamp(),later(LEASE_SECONDS))
+                if not valid: raise LeaseLost()
+                self.checked_at=time.monotonic()
+            except Exception:
+                self.lost.set(); raise LeaseLost() from None
+    def _loop(self):
+        while not self.stop.wait(min(20, LEASE_SECONDS / 3)):
+            try: self.check(force=True)
+            except LeaseLost: return
+    def __enter__(self):
+        self.check()
+        self.thread=threading.Thread(target=self._loop,daemon=True,name='document-lease')
+        self.thread.start(); return self
+    def __exit__(self, *_):
+        self.stop.set(); self.thread.join(timeout=1)
 
 def claim():
     with closing(connect()) as db:
@@ -26,7 +56,7 @@ def claim():
         repo.lease(row['document_id'],token,later(LEASE_SECONDS),cleanup)
         db.commit(); return dict(row),token,cleanup
 
-def run_once(storage=None):
+def run_once(storage=None, ocr_provider=None):
     job=claim()
     if not job:return False
     row,token,cleanup=job; storage=storage or get_storage(); did=row['document_id']
@@ -44,7 +74,12 @@ def run_once(storage=None):
         return True
     try:
         extension={'application/pdf':'pdf','application/vnd.openxmlformats-officedocument.wordprocessingml.document':'docx','text/plain; charset=utf-8':'txt'}[row['mime_type']]
-        result=extract(extension,storage.read(row['storage_key']))
+        with ExtractionLease(row,token) as lease:
+            ocr=DocumentOCR(row,token,lambda:lease.check(force=True),provider=ocr_provider)
+            result=extract(extension,storage.read(row['storage_key']),ocr=ocr.read,check=lease.check)
+            lease.check(force=True)
+    except LeaseLost:
+        return True
     except Exception:
         log.warning('document extraction failed')
         result={'text':'','segments':[],'limitations':['파일을 읽는 중 오류가 발생했습니다.'],'status':'failed','error_code':'extraction_failed'}
@@ -62,7 +97,7 @@ def cleanup_orphans(storage=None):
         try:
             with closing(connect()) as db:
                 if not DocumentRepository(db).has_storage_key(key): storage.delete(key)
-        except OSError: log.exception('orphan cleanup failed')
+        except OSError: log.warning('orphan cleanup failed')
 
 def cleanup_reservation(storage=None):
     """Only inspect expired keys that were reserved before an upload."""
@@ -104,7 +139,7 @@ def loop(stop):
             if time.monotonic() >= next_orphan_scan:
                 cleanup_orphans(); next_orphan_scan=time.monotonic()+3600
             if run_once():continue
-        except Exception:log.exception('document worker error')
+        except Exception:log.warning('document worker error')
         stop.wait(1)
 
 def start_worker():
