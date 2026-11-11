@@ -7,13 +7,15 @@ an uninterrupted list under a personal-work heading establish context.
 import math
 import re
 
-from services.job_skill_analysis import _skill_in_quote
+from services.job_skill_analysis import _key, _skill_in_quote
 
 
 PERSONAL = re.compile(r'\bI\s|\bmy\s|나는|내가|제가|저는|본인은|본인이', re.I)
-TEAM = re.compile(r'팀원\s*담당|팀\s*(?:전체|담당|수행|에서는|은|이)|\b(?:we|our team)\b', re.I)
-NEGATIVE = re.compile(r'미수행|미사용|미구현|미참여|수행하지\s*않|사용하지\s*않|구현하지\s*않')
+TEAM = re.compile(r'팀원\s*담당|팀원\s+[가-힣A-Za-z]+(?:은|는|이|가)(?=\s)|'
+                  r'팀\s*(?:전체|담당|수행|에서는|은|이)|\b(?:we|our team)\b', re.I)
+NEGATIVE = re.compile(r'미수행|미사용|미구현|미참여|(?:수행|사용|구현|제작|진행|기록|정리)하지\s*않|만들지\s*않')
 ACTION = re.compile(r'설계|구현|작성|파싱|연동|사용(?:했|하|하여|한|함|해|$|[\s.,])|구성|설정|개발|배포|운영|구축|처리|분석|전처리|'
+                    r'만들(?:었|어|고|기|지)|제작|진행|기록|정리|'
                     r'\b(?:used?|built|implemented|designed|wrote|created|developed|configured|deployed|analy[sz]ed)\b', re.I)
 NON_WORK = re.compile(r'예정|계획|튜토리얼|요구\s*사항|사용\s*목록|기술\s*목록|라이브러리\s*목록|\b(?:planned|tutorial|requirements?)\b', re.I)
 PERSONAL_HEADING = re.compile(r'^(?:\d+[.)]\s*)?본인이\s*직접\s*수행한\s*작업\s*[:：]?$')
@@ -25,7 +27,14 @@ NUMBERED = re.compile(r'^\s*(\d+)[.)]\s+')
 
 
 def names_skill(name, text):
-    return _skill_in_quote(name, re.sub(r'(?<=[A-Za-z0-9])(?=[가-힣])', ' ', text))
+    if _skill_in_quote(name, re.sub(r'(?<=[A-Za-z0-9])(?=[가-힣])', ' ', text)):
+        return True
+    # Korean activity names take attached particles too. Keep both word boundaries
+    # so 사용자 인터뷰를 matches, but 사용자 인터뷰어 / 비사용자 인터뷰 do not.
+    if re.search(r'[가-힣]$', name.strip()):
+        return bool(re.search(r'(?<!\w)' + re.escape(_key(name)) +
+            r'(?:으로부터|에서|으로|에게|에는|은|는|이|가|을|를|과|와|로|도|만)?(?!\w)', _key(text)))
+    return False
 
 
 def clean(text):
@@ -338,7 +347,7 @@ class EvidenceIndex:
         else:
             return None
         actor_text = '' if flattened_rows else local + ' ' + label
-        if NEGATIVE.search(actor_text):
+        if NEGATIVE.search(actor_text) or NON_WORK.search(actor_text):
             scope, reason = 'unknown', 'not_performed'
         elif TEAM.search(actor_text):
             scope, reason = 'team', 'explicit_team'

@@ -15,6 +15,7 @@ from services import project_experience as service
 from services.gemini import GeminiError
 from services.gemini_projects import extract_project_experiences
 from services.project_experience_schemas import DocumentExperience, ExperienceAnswer
+from experience_activity_regressions import EXPERIENCES, PROJECT_TEXT, fixed_extraction
 
 
 def document(text='제가 Python으로 전처리 코드를 작성했습니다.'):
@@ -26,6 +27,68 @@ def extraction(doc, scope='personal', **changes):
     item = {'skill_name': 'Python 3', 'category': 'programming_language', 'activity': '전처리 코드 작성',
             'contribution_scope': scope, 'evidence_text': doc['extracted_text'], **changes}
     return DocumentExperience(document_id=doc['document_id'], extraction_revision=doc['extraction_revision'], experiences=[item])
+
+
+def test_incident_fixed_candidates_survive_real_analysis_pipeline():
+    doc = document(PROJECT_TEXT)
+    with patch('services.gemini_projects._generate', return_value=fixed_extraction(doc)) as model:
+        result = service.analyze_document(doc)
+    model.assert_called_once()
+    assert result['status'] == 'success' and not result['errors']
+    items = {item['skill_name']: item for item in result['experiences']}
+    assert set(items) == {name for name, _ in EXPERIENCES}
+    for name, quote in EXPERIENCES[:4]:
+        item = items[name]
+        assert item['contribution_scope'] == 'personal'
+        assert item['activity'] == item['evidence_text'] == quote
+        assert PROJECT_TEXT[item['evidence_start']:item['evidence_end']] == quote
+        assert service.compare_skill([{**item, 'user_answer': None}])[0] == 'document_supported'
+    assert items['React']['contribution_scope'] != 'personal'
+    assert items['Framer']['contribution_scope'] == 'unknown'
+    assert items['Framer']['contribution_basis']['reason'] == 'not_performed'
+
+
+def test_missing_model_candidates_are_distinct_from_server_rejection():
+    doc = document(PROJECT_TEXT)
+    model = fixed_extraction(doc)
+    model.experiences = []
+    with patch('services.gemini_projects._generate', return_value=model):
+        result = service.analyze_document(doc)
+    assert result['status'] == 'success'
+    assert result['experiences'] == result['errors'] == []
+
+
+@pytest.mark.parametrize('text,scope', [
+    ('저는 Figma로 프로토타입을 만들었습니다.', 'personal'),
+    ('저는 Figma로 프로토타입을 제작했습니다.', 'personal'),
+    ('저는 Figma로 테스트를 진행했습니다.', 'personal'),
+    ('Figma로 프로토타입을 만들었습니다.', 'unknown'),
+    ('담당자 김학생은 Figma로 프로토타입을 제작했습니다.', 'unknown'),
+    ('팀원 정우는 Figma로 테스트를 진행했습니다.', 'team'),
+    ('저는 Figma로 프로토타입을 만들 예정입니다.', None),
+    ('저는 Figma로 프로토타입을 제작하지 않았습니다.', 'unknown'),
+    ('저는 Figma로 테스트를 진행하지 않았습니다.', 'unknown'),
+])
+def test_natural_actions_still_require_actor_and_performance(text, scope):
+    doc = document(text)
+    items, errors = service.verify_experiences(doc, extraction(doc, skill_name='Figma'), 'a')
+    if scope is None:
+        assert not items and errors[0]['code'] == 'activity_not_in_evidence'
+    else:
+        assert not errors and items[0]['contribution_scope'] == scope
+
+
+@pytest.mark.parametrize('name,text,expected', [
+    ('사용성 테스트', '사용성 테스트를 진행했습니다.', True),
+    ('사용자 인터뷰', '사용자 인터뷰로 요구를 파악했습니다.', True),
+    ('사용자 인터뷰', '사용자 인터뷰어를 모집했습니다.', False),
+    ('사용성 테스트', '비사용성 테스트를 진행했습니다.', False),
+    ('Java', 'JavaScript로 만들었습니다.', False),
+    ('SQL', 'PostgreSQL로 만들었습니다.', False),
+])
+def test_skill_particles_do_not_allow_other_skill_substrings(name, text, expected):
+    from services.project_evidence import names_skill
+    assert names_skill(name, text) is expected
 
 
 @pytest.mark.parametrize('scope,text,expected', [

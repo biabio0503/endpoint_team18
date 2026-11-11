@@ -11,14 +11,19 @@ TOPICS = {
     '데이터 분석': ('데이터', 'data', '분석', 'analytics', '통계', '시각화'),
     '마케팅': ('마케팅', 'marketing', '마케터', '광고', '브랜딩', '브랜드', '홍보', 'sns'),
     '인공지능': ('인공지능', 'ai', '머신러닝', '딥러닝', 'machine learning'),
-    '소프트웨어 개발': ('소프트웨어', '개발', '프로그래밍', '코딩', '해커톤', '앱', 'software', 'developer', '백엔드', '프론트엔드'),
-    '디자인': ('디자인', 'design', 'ux', 'ui', '웹툰', '일러스트'),
+    '소프트웨어 개발': ('소프트웨어', '개발', '프로그래밍', '코딩', '해커톤', '앱', 'software', 'developer', '백엔드', '프론트엔드',
+                      '웹 개발', '웹 접근성', 'react', 'javascript', 'typescript', 'html', 'css'),
+    '디자인': ('디자인', 'design', 'ux', 'ui', '웹툰', '일러스트', 'figma', '프로토타입', '사용성 테스트', '사용자 인터뷰'),
     '영상': ('영상', '영상제작', '영화', 'video', '사진', '콘텐츠', 'content'),
     '창업': ('창업', '사업', '스타트업', 'startup', 'entrepreneur'),
     '보안': ('보안', 'security', '해킹', 'ctf'),
     '환경': ('환경', '기후', '에너지', 'environment', '지속가능'),
     '건축': ('건축', '건설', 'architecture'),
 }
+# A domain can be the subject of another occupation's work. For an analyst
+# studying the environment, an environmental event alone is not analysis practice.
+DOMAINS = {'환경', '건축'}
+POSTING_FIELDS = (('title', '제목'), ('category', '분야'), ('description_text', '본문'))
 DATE = r'(?:(?P<year>20\d{2})\s*[.\-/년]\s*)?(?P<month>\d{1,2})\s*[.\-/월]\s*(?P<day>\d{1,2})(?:\s*[.일])?'
 POINT = re.compile(r'^' + DATE + r'(?:\s*\([월화수목금토일](?:요일)?\))?(?:\s+(?P<hour>\d{1,2})(?::(?P<minute>\d{2})|시(?:\s*(?P<kminute>\d{1,2})분)?))?\s*$')
 ALWAYS = {'상시', '상시접수', '상시모집', '연중상시', '연중상시접수', '연중접수'}
@@ -88,43 +93,37 @@ def capture_profile(db, row):
 
 def match(profile, item):
     reasons, evidence, score = [], [], 0
+    topics_by_field = {field: {topic for topic, words in TOPICS.items()
+                              if any(contains(profile.get(field) or '', w) for w in words)}
+                       for field in ('career_goal', 'target_role')}
+    practice_topics = set.union(*topics_by_field.values()) - DOMAINS
     for field, label, weight in (('career_goal', '진로 목표', 8), ('target_role', '희망 직무', 4)):
         value = profile.get(field) or ''
-        matches = []
         for topic, words in TOPICS.items():
-            student_word = next((w for w in words if contains(value, w)), None)
-            if not student_word:
+            if topic not in topics_by_field[field]:
+                continue
+            if (field == 'career_goal' and topic in DOMAINS and practice_topics
+                    and topic not in topics_by_field['target_role']):
                 continue
             # '개발' alone also means developing cultural content; it is not
             # evidence of software. Broad goal vocabulary must not create matches.
             source_words = [w for w in words if w not in {'개발', '사업', '콘텐츠', 'content'}]
-            for source_field, source_label in (('title', '제목'), ('category', '분야')):
-                source_word = next((w for w in source_words if contains(item[source_field], w)), None)
+            for source_field, source_label in POSTING_FIELDS:
+                quote = item.get(source_field) or ''
+                source_word = next((w for w in source_words if contains(quote, w)), None)
                 if source_word:
-                    matches.append((topic, source_field, source_label, source_word))
+                    # Selection, score and displayed explanation share this exact
+                    # witness. Never fall back to arbitrary shared goal tokens.
                     score += weight + (2 if source_field == 'title' else 0)
+                    reasons.append(f'{label} “{value}”에 맞춰, 공고 {source_label} “{quote}”의 “{source_word}” 표현을 근거로 {topic} 관련 활동을 추천합니다.')
+                    evidence.append({'student_field': field, 'student_value': value, 'posting_field': source_field,
+                                     'posting_quote': quote, 'matched_term': source_word})
                     break
-        # Allow specific goals outside the curated topic vocabulary, without generic fill.
-        if not matches:
-            stop = {'진로', '목표', '희망', '지망', '취업', '전문가', '대학생', '활동', '공모전', '분야', '기획', '하고', '싶어요', '개발', '사업', '콘텐츠'}
-            for word in re.findall(r'[가-힣A-Za-z][가-힣A-Za-z0-9+#]{1,30}', value):
-                if word in stop:
-                    continue
-                for source_field, source_label in (('title', '제목'), ('category', '분야')):
-                    if contains(item[source_field], word):
-                        matches.append((word, source_field, source_label, word)); score += weight
-                        break
-        if matches:
-            topic, source_field, source_label, word = matches[0]
-            quote = item[source_field]
-            reasons.append(f'{label} “{value}”에 맞춰, 공고 {source_label} “{quote}”의 “{word}” 표현을 근거로 {topic} 관련 활동을 추천합니다.')
-            evidence.append({'student_field': field, 'student_value': value, 'posting_field': source_field,
-                             'posting_quote': quote, 'matched_term': word})
     if not reasons:
         return None  # Experience alone cannot pad unrelated career recommendations.
     for field, label in (('confirmed_skills', '확인한 프로젝트 경험'), ('gap_skills', '경험이 없다고 확인한 보완 후보')):
         for name in profile.get(field, []):
-            source_field = next((f for f in ('title', 'category') if contains(item[f], name)), None)
+            source_field = next((f for f, _ in POSTING_FIELDS if contains(item.get(f) or '', name)), None)
             if source_field:
                 reasons.append(f'{label} “{name}”도 공고의 “{item[source_field]}”에 명시되어 있어 살펴볼 만합니다. 사용 의무나 숙련도는 판단하지 않았습니다.')
                 evidence.append({'student_field': field, 'student_value': name, 'posting_field': source_field,

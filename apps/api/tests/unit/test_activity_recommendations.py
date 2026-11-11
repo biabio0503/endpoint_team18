@@ -2,6 +2,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 import json
 from pathlib import Path
+import sys
 from threading import Event
 from unittest.mock import Mock
 
@@ -10,6 +11,9 @@ import pytest
 from providers.external import contestkorea as provider
 from services.activity_catalog import ActivityCatalog
 from services.activity_recommendations import KST, capture_profile, eligible_target, period_status, recommend
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'fixtures'))
+from experience_activity_regressions import BIKE_DATA, FRONTEND, postings
 
 FIXTURE = json.loads((Path(__file__).resolve().parents[4] / 'data/reference/external-fixtures/activities/contestkorea-demo-v1.json').read_text())
 NOW = datetime(2026, 11, 12, 12, tzinfo=KST)
@@ -20,6 +24,64 @@ MARKETING = {'career_goal': '마케팅 지망생', 'target_role': None}
 
 def records():
     return [provider.normalize(row, 'extracurricular' if row['STR_MEETCODE'] == 'supporter' else 'competition') for row in FIXTURE['meetings']]
+
+
+def test_incident_general_words_and_project_subject_do_not_qualify():
+    assert recommend(FRONTEND, postings(), SOURCES, NOW)['activities'] == []
+    ranked = recommend(BIKE_DATA, postings(), SOURCES, NOW)['activities']
+    assert {item['title'] for item in ranked} == {'공공데이터 활용 경진대회', '자전거 수요 데이터 분석 경진대회'}
+    for item in ranked:
+        for evidence, reason in zip(item['evidence'], item['reasons'], strict=True):
+            assert evidence['matched_term'] not in {'있는', '자전거'}
+            assert evidence['matched_term'] in evidence['posting_quote']
+            assert evidence['posting_quote'] == item[evidence['posting_field']]
+            assert evidence['matched_term'] in reason and evidence['posting_quote'] in reason
+
+
+@pytest.mark.parametrize('subject', ['자전거', '버스', '도서관', '환경'])
+def test_subject_overlap_is_not_a_career_activity(subject):
+    profile = {**BIKE_DATA, 'career_goal': f'{subject} 수요를 데이터로 분석하고 싶습니다.'}
+    item = {**postings()[1], 'title': f'전국 {subject} 대행진', 'category': '체험'}
+    assert recommend(profile, [item], SOURCES, NOW)['activities'] == []
+
+
+@pytest.mark.parametrize('field,quote', [
+    ('title', '자전거 수요 데이터 분석 경진대회'),
+    ('category', '데이터 분석'),
+    ('description_text', '참가자는 대여 이력 데이터로 수요를 분석하고 시각화 결과를 제출합니다.'),
+])
+def test_available_career_evidence_in_each_posting_field_can_qualify(field, quote):
+    item = {**postings()[1], field: quote}
+    ranked = recommend(BIKE_DATA, [item], SOURCES, NOW)['activities']
+    assert len(ranked) == 1
+    assert all(e['posting_field'] == field and e['posting_quote'] == quote for e in ranked[0]['evidence'])
+    assert all(quote in reason for reason in ranked[0]['reasons'])
+
+
+def test_body_is_optional_and_unrelated_body_does_not_supply_missing_evidence():
+    item = {**postings()[1], 'description_text': '누구나 참여할 수 있는 시민 행사입니다.'}
+    assert recommend(BIKE_DATA, [item], SOURCES, NOW)['activities'] == []
+    assert recommend(BIKE_DATA, [{**item, 'description_text': None}], SOURCES, NOW)['activities'] == []
+
+
+def test_every_scored_topic_has_its_own_displayed_source():
+    profile = {'career_goal': '데이터 분석과 마케팅을 하고 싶습니다.', 'target_role': None}
+    item = {**postings()[2], 'title': '데이터 분석과 마케팅 경진대회'}
+    result, = recommend(profile, [item], SOURCES, NOW)['activities']
+    assert len(result['reasons']) == len(result['evidence']) == 2
+    assert result['score'] == 20
+    assert all(e['matched_term'] in reason for e, reason in zip(result['evidence'], result['reasons']))
+
+
+@pytest.mark.parametrize('profile,title', [
+    (FRONTEND, 'React 웹 접근성 실습 캠프'),
+    ({'career_goal': '사용성 테스트를 배우고 싶습니다.'}, 'Figma 프로토타입 워크숍'),
+    ({'career_goal': '공공 자전거 수요를 분석하고 싶습니다.'}, '공공데이터 활용 경진대회'),
+    ({'career_goal': '환경 분야 전문가', 'target_role': '환경 연구원'}, '환경 문제 해결 공모전'),
+])
+def test_specific_capability_and_goal_only_matches_remain(profile, title):
+    item = {**postings()[1], 'title': title, 'category': '교육'}
+    assert len(recommend(profile, [item], SOURCES, NOW)['activities']) == 1
 
 
 def test_order_and_grounded_reasons_change_with_goal():
