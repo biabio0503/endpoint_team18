@@ -140,7 +140,13 @@ jobs:
           docker cp "$TMP_CERT_DIR/server.key" "$DB_CONTAINER:/var/lib/postgresql/data/server.key"
           docker exec --user root "$DB_CONTAINER" chown postgres:postgres /var/lib/postgresql/data/server.crt /var/lib/postgresql/data/server.key
           docker exec --user root "$DB_CONTAINER" chmod 0600 /var/lib/postgresql/data/server.key
-          docker exec --user postgres "$DB_CONTAINER" sh -c "printf '%s\\n' 'ssl = on' \"ssl_cert_file = 'server.crt'\" \"ssl_key_file = 'server.key'\" >> \"\\$PGDATA/postgresql.conf\""
+          cat > "$TMP_CERT_DIR/ssl.conf" <<'CONFIG'
+          ssl = on
+          ssl_cert_file = 'server.crt'
+          ssl_key_file = 'server.key'
+          CONFIG
+          docker cp "$TMP_CERT_DIR/ssl.conf" "$DB_CONTAINER:/tmp/team18-ssl.conf"
+          docker exec --user root "$DB_CONTAINER" sh -c 'cat /tmp/team18-ssl.conf >> /var/lib/postgresql/data/postgresql.conf'
           docker restart "$DB_CONTAINER" >/dev/null
           for attempt in {1..30}; do
             if docker exec "$DB_CONTAINER" pg_isready -U postgres -d team18_document_test >/dev/null 2>&1; then break; fi
