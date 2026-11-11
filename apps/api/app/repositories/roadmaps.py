@@ -6,6 +6,7 @@ from api.domain import now
 from repositories.experience_analysis import AnalysisRepository, decode
 from services.project_experience import digest
 from services.roadmap_validation import error_metadata
+from course_groups import grouped_roadmap
 
 
 class RoadmapRepository(AnalysisRepository):
@@ -78,7 +79,7 @@ def run_payload(store, run, current):
     meta = metadata(run, current)
     if meta['details_restricted'] or run['status'] not in ('success', 'partial'):
         return meta
-    result = decode(run['result_json'])
+    result = grouped_roadmap(decode(run['result_json']), run['catalog_id'])
     progress = store.progress(run['run_id'])
     for step in result['roadmap']:
         for task in step['tasks']:

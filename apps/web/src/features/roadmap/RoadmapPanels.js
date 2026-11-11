@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { recommendationScope } from './jobSkillAnalysis.mjs';
+import { coursePresentation, relatedCourseNames } from './coursePresentation.mjs';
 
 const statusLabels = { confirmed_experience: '확인된 경험', document_supported: '문서 근거 · 본인 확인 필요', needs_confirmation: '확인 필요', not_verified: '자료 부족 · 확인 필요', no_experience: '사용자가 경험 없음으로 응답' };
 
@@ -42,14 +43,14 @@ export function Preparation({ result }) {
 
 export function RoadmapSteps({ result, saving, onToggle }) {
  const byId = Object.fromEntries(result.roadmap.map(step => [step.step_id, step]));
- const courses = Object.fromEntries(result.recommended_courses.map(course => [course.course_id, course]));
+ const { byId: courses } = coursePresentation(result.recommended_courses);
  return <><h2>실행 로드맵</h2><p role="status">작업 완료 {result.progress.completed} / {result.progress.total}개</p>
   <progress aria-label="사용자가 체크한 작업 완료 비율" max={result.progress.total} value={result.progress.completed}/>
   <p className="field-help">순서는 추천 활동 간의 학습 흐름입니다. 학교 공식 선수과목이나 수강 학기를 뜻하지 않습니다.</p>
   <ol className="skill-list">{result.roadmap.map(step => <li className="skill-card" key={step.step_id}>
    <h3>{step.order}단계 · {step.title}</h3><p><b>목적</b> {step.purpose}</p><p><b>추천 이유</b> {step.reason}</p>
    <p>{step.related_skills.map(name => <span className="badge" key={name}>{name}</span>)}</p>
-   {step.related_course_ids.length > 0 && <p>관련 수강 후보: {step.related_course_ids.map(id => courses[id].course_name).join(', ')}</p>}
+   {step.related_course_ids.length > 0 && <p>관련 수강 후보: {relatedCourseNames(step.related_course_ids, courses).join(', ')}</p>}
    <p className="field-help">선행 활동: {step.depends_on.length ? step.depends_on.map(id => `${byId[id].order}단계 ${byId[id].title}`).join(', ') : '없음'}</p>
    <ul className="roadmap-tasks">{step.tasks.map(task => <li key={task.task_id}>
     <label className="roadmap-task-label"><input type="checkbox" checked={task.is_completed} disabled={saving} onChange={() => onToggle(task)}/><b>{task.title}</b></label>
@@ -60,6 +61,7 @@ export function RoadmapSteps({ result, saving, onToggle }) {
 
 export function CourseCandidates({ result }) {
  const catalog = result.basis.catalog;
+ const { cards } = coursePresentation(result.recommended_courses);
  return <><h2>수강 후보</h2><p>이 로드맵 실행의 경험·이수 선택 기준으로 생성한 개인화 후보입니다.</p>
   {result.course_status === 'evidence_unavailable' ? <p className="notice">검증된 직무 근거가 없어 수강 후보 추천을 보류했습니다. 직무 분석 후 로드맵을 다시 생성해 주세요.</p> : result.course_status === 'catalog_unavailable' ? <p className="notice">과목 목록을 사용할 수 없어 수강 후보를 생성하지 않았습니다.</p> : <>
    <p className="field-help">목록 출처: {catalog.source_name} · {catalog.scope_description} · 확인 시각 {new Date(catalog.retrieved_at).toLocaleString('ko-KR')} · 완전성 {catalog.completeness_status === 'complete' ? '전체 목록' : '확인 필요'}</p>
@@ -68,7 +70,7 @@ export function CourseCandidates({ result }) {
    {result.basis.review_status === 'partial' && <p className="notice">현재 목록에 누락된 과목이 있습니다. 이수 선택 확인은 현재 목록 안에 한정됩니다.</p>}
    {result.recommended_courses.length === 0 && <p>현재 근거와 미선택 과목에서 추천할 후보를 찾지 못했습니다.</p>}
   </>}
-  <ul className="skill-list">{result.recommended_courses.map(course => <li className="skill-card" key={course.course_id}>
+  <ul className="skill-list">{cards.map(course => <li className="skill-card" key={course.course_id}>
    <h3>{course.course_name} <span className="badge">{course.course_code || '코드 미제공'}</span></h3>
    <p>{course.credits == null ? '학점 미제공' : `${course.credits}학점`}{course.recommended_year ? ` · 교육과정 권장 ${course.recommended_year}학년` : ''}{course.recommended_term ? ` ${course.recommended_term}` : ''}</p>
    <p>{course.reason}</p><p>{course.personalization_reason}</p><p>관련 기술: {course.related_skills.join(', ')}</p>

@@ -4,6 +4,7 @@ from api.domain import Problem, now, payload
 from api.schemas import ReviewRequest, SelectionPatch, validate_body
 from config import DB_BACKEND
 from repositories.courses import CourseRepository
+from course_groups import member_ids
 
 
 def course_action(rid, action, method, request, body, ctx):
@@ -32,7 +33,7 @@ def course_action(rid, action, method, request, body, ctx):
             if page < 1 or size < 1 or size > 100 or (year is not None and not 1 <= year <= 4) or q.get('completed_only','false') not in ('true','false') or len(q.get('q','')) > 100 or len(q.get('category','')) > 100: raise ValueError
         except ValueError: raise Problem(422, 'validation_error', '검색 또는 페이지 조건이 올바르지 않습니다.')
         status = payload(row)['review_status']
-        all_courses = courses_repo.courses(rid, cid)
+        all_courses = courses_repo.selection_courses(rid, cid)
         for course in all_courses:
             course['is_completed'] = bool(course['is_completed'])
             course['completion_state'] = 'self_reported_completed' if course['is_completed'] else 'not_selected_in_reviewed_catalog' if status in ('confirmed', 'partial') else 'unconfirmed'
@@ -56,7 +57,7 @@ def course_action(rid, action, method, request, body, ctx):
         changes = body.get('changes')
         if set(body) != {'catalog_id','expected_selection_revision','changes'} or not isinstance(changes,list) or not changes or len(changes)>100:
             raise Problem(422, 'validation_error', '과목 선택 요청을 확인해 주세요.')
-        seen=set(); pending=[]
+        seen=set(); pending=[]; group_targets={}
         for change in changes:
             if not isinstance(change,dict) or set(change) != {'course_id','is_completed'} or not isinstance(change['course_id'],str) or type(change['is_completed']) is not bool or change['course_id'] in seen:
                 raise Problem(422, 'validation_error', '중복 또는 잘못된 과목 선택입니다.')
@@ -65,8 +66,24 @@ def course_action(rid, action, method, request, body, ctx):
             inside = courses_repo.membership(cid,course_id)
             if not inside and not (old and old['is_completed'] and not target):
                 raise Problem(422, 'validation_error', '현재 목록에 없는 과목입니다.')
-            previous = bool(old['is_completed']) if old else False
-            if previous != target: pending.append((course_id, cid if inside else old['source_catalog_id'], target))
+            # A single group toggle clears every saved language variant. Turning
+            # it on stores only the existing Korean representative ID.
+            members = member_ids(cid, course_id) if inside else [course_id]
+            representative = members[0]
+            if representative in group_targets:
+                if group_targets[representative] != target:
+                    raise Problem(422, 'validation_error', '같은 과목의 이수 선택이 서로 다릅니다.')
+                continue
+            group_targets[representative] = target
+            if target and not courses_repo.membership(cid, representative):
+                raise Problem(422, 'validation_error', '현재 목록에 없는 과목입니다.')
+            for member in members:
+                state = courses_repo.state(rid, member)
+                previous = bool(state['is_completed']) if state else False
+                completed = target and member == representative
+                if previous != completed:
+                    source = cid if courses_repo.membership(cid, member) else state['source_catalog_id']
+                    pending.append((member, source, completed))
         validate_body(SelectionPatch, body)
         if pending:
             at=now()

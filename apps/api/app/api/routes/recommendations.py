@@ -4,7 +4,7 @@ from api.domain import Problem, payload
 from api.schemas import EmptyRequest, openapi_body, validate_body
 from config import DB_BACKEND
 from repositories.courses import CourseRepository
-from services.course_recommendations import recommend, available_courses
+from services.course_recommendations import recommend, available_courses, selected_courses
 from services.ai_guard import guarded_call
 from services.project_experience import digest, model_basis
 
@@ -42,9 +42,8 @@ def recommendations(rid: str, ctx=Depends(owned_context), body=Depends(parse_bod
     latest = {str(c['course_id']): c for c in courses_repo.recommendation_courses(rid, cid)}
     if digest([rid, revision, profile, list(latest.values()), status, model_basis()]) != basis:
         raise Problem(409, 'revision_conflict', '분석 중 과목 근거가 변경되었습니다. 다시 시도해 주세요.')
-    result = [dict(latest[str(c['course_id'])], is_completed=False, completion_state=c['completion_state']) for c in result if str(c['course_id']) in latest and not latest[str(c['course_id'])]['is_completed']]
-    for course in result:
-        course.pop('description_text', None)
+    # Apply the same completion/equivalence rules even to a cached result.
+    result = selected_courses([str(c['course_id']) for c in result], list(latest.values()), status)
     db.commit()
     return respond(200, {'courses': result, 'status': 'ok', 'catalog_id': cid, 'input_revision': revision, 'review_status': status, 'career_goal': profile['career_goal']})
 
