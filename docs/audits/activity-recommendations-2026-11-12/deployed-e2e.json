@@ -1,0 +1,112 @@
+{
+  "origin": "https://web-seven-xi-rblasxflsf.vercel.app",
+  "checked_at": "2026-11-11T16:17:06.429Z",
+  "profiles": [
+    {
+      "career_goal": "데이터 분석가",
+      "status": "success",
+      "count": 1,
+      "sources": [
+        {
+          "kind": "competition",
+          "status": "success",
+          "error_code": null,
+          "fetched_at": "2026-11-11T16:15:49.212728+00:00",
+          "cache_hit": true,
+          "categories": 10,
+          "failed_categories": 0,
+          "unverified_periods": 0,
+          "rejected_items": 0,
+          "collected": 95
+        },
+        {
+          "kind": "extracurricular",
+          "status": "success",
+          "error_code": null,
+          "fetched_at": "2026-11-11T16:15:35.685581+00:00",
+          "cache_hit": true,
+          "categories": 7,
+          "failed_categories": 0,
+          "unverified_periods": 0,
+          "rejected_items": 0,
+          "collected": 68
+        }
+      ],
+      "first": {
+        "id": "202611020029",
+        "title": "2026년 공공데이터 활용 경진대회",
+        "kind": "competition",
+        "host": "한국체육산업개발(주)",
+        "target": "누구나, 유치원, 초등학생, 중학생, 고등학생, 대학생, 대학원생, 일반인, 외국인",
+        "period": "11.02~12.01",
+        "verified_period": "2026.11.02 ~ 2026.12.01",
+        "deadline": "2026-12-01 (한국 시간, 당일 포함)",
+        "reasons": [
+          "진로 목표 “데이터 분석가”에 맞춰, 공고 제목 “2026년 공공데이터 활용 경진대회”의 “데이터” 표현을 근거로 데이터 분석 관련 활동을 추천합니다."
+        ],
+        "url": "https://www.contestkorea.com/sub/view.php?Txt_gbn=1&Txt_bcode=031410001&str_no=202611020029"
+      },
+      "tab_focus_reused": true,
+      "original_id_and_title_and_period_verified": true
+    },
+    {
+      "career_goal": "마케팅 지망생",
+      "status": "success",
+      "count": 6,
+      "sources": [
+        {
+          "kind": "competition",
+          "status": "success",
+          "error_code": null,
+          "fetched_at": "2026-11-11T16:15:49.212728+00:00",
+          "cache_hit": true,
+          "categories": 10,
+          "failed_categories": 0,
+          "unverified_periods": 0,
+          "rejected_items": 0,
+          "collected": 95
+        },
+        {
+          "kind": "extracurricular",
+          "status": "success",
+          "error_code": null,
+          "fetched_at": "2026-11-11T16:15:35.685581+00:00",
+          "cache_hit": true,
+          "categories": 7,
+          "failed_categories": 0,
+          "unverified_periods": 0,
+          "rejected_items": 0,
+          "collected": 68
+        }
+      ],
+      "first": {
+        "id": "202610300024",
+        "title": "2027년 경주시 SNS 알리미 모집",
+        "kind": "extracurricular",
+        "host": "경주시",
+        "target": "대학생, 대학원생, 일반인",
+        "period": "10.30~11.13",
+        "verified_period": "2026.10.30 ~ 2026.11.13",
+        "deadline": "2026-11-13 (한국 시간, 당일 포함)",
+        "reasons": [
+          "진로 목표 “마케팅 지망생”에 맞춰, 공고 제목 “2027년 경주시 SNS 알리미 모집”의 “sns” 표현을 근거로 마케팅 관련 활동을 추천합니다."
+        ],
+        "url": "https://www.contestkorea.com/sub/view.php?Txt_gbn=2&Txt_bcode=040710001&str_no=202610300024"
+      },
+      "tab_focus_reused": true,
+      "original_id_and_title_and_period_verified": true
+    }
+  ],
+  "checks": [
+    "saved plan resume",
+    "goal only without documents/job analysis/roadmap",
+    "keyboard End tab",
+    "real announcements, reasons and KST deadline",
+    "original page ID/title/period",
+    "tab/focus response reuse",
+    "two career goals"
+  ],
+  "status": "passed",
+  "implementation_commit": "98c47a34bc67d41448a8978334de2185c2adf31c",
+  "checked_at_kst": "2026-11-12T01:17:06.429000+09:00"
+}
