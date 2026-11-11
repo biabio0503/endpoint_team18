@@ -2,15 +2,29 @@
 // Start Next dev with NEXT_PUBLIC_SUPABASE_URL=https://job-skills-test.supabase.co
 // NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=test-key, then run this script.
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 
 const origin = process.env.JOB_SKILLS_WEB_ORIGIN || 'http://localhost:15101';
 const browser = process.env.P5_BROWSER || '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser';
 const port = Number(process.env.PROJECT_CDP_PORT || 9453);
+// Exercise the real verifier with a mocked Gemini response, then render its actual payload.
+const apiRoot = fileURLToPath(new URL('../../../api/', import.meta.url));
+const classbridge = JSON.parse(execFileSync(process.env.PROJECT_TEST_PYTHON || join(apiRoot, '.venv/bin/python'), ['-c', `
+import json
+from classbridge import classbridge_document, classbridge_extraction
+from services.project_experience import verify_experiences
+doc = classbridge_document()
+items, errors = verify_experiences(doc, classbridge_extraction(doc), 'ui-analysis')
+items = [{**item, 'original_filename': 'ClassBridge 합성 소개서', 'user_answer': None, 'user_confirmation': None} for item in items]
+print(json.dumps({'status': 'success', 'input_revision': 1, 'eligible_documents': 1, 'analyzed_documents': 1,
+    'verified_experiences': len(items), 'documents': [{'document_id': doc['document_id'], 'limitations': []}],
+    'excluded_documents': [], 'errors': errors, 'experiences': items, 'source_text': doc['extracted_text']}))
+`], { env: { ...process.env, PYTHONPATH: [join(apiRoot, 'app'), join(apiRoot, 'tests/fixtures')].join(':') }, encoding: 'utf8' }));
 const tmp = mkdtempSync(join(tmpdir(), 'job-skills-ui-'));
 const child = spawn(browser, ['--headless=new', '--no-sandbox', '--disable-gpu', `--remote-debugging-port=${port}`, `--user-data-dir=${tmp}`, 'about:blank'], { stdio: 'ignore' });
 let ws;
@@ -47,12 +61,12 @@ try {
   sessionStorage.setItem('roadmap_request_owner','test-user');
   const m=window.mockProject={revision:1, projectCalls:0, jobCalls:0, analyzed:false, answers:{}, skillAnswer:null, removed:false};
   const item=(name,scope)=>({experience_id:name,analysis_id:'a1',skill_name:name,activity:name+' 작업',contribution_scope:scope,document_id:'doc1',extraction_revision:1,evidence_start:0,evidence_end:22,locations:[{paragraph:1}],original_filename:'프로젝트.txt',evidence_text:'제가 Python으로 전처리했습니다.',user_confirmation:m.answers[name]?.status||null,user_answer:m.answers[name]||null});
-  const project=()=>({status:m.removed?'no_documents':m.analyzed?'success':'not_started',input_revision:m.revision,eligible_documents:m.removed?0:1,analyzed_documents:m.analyzed&&!m.removed?1:0,verified_experiences:m.analyzed&&!m.removed?2:0,documents:[{document_id:'doc1',limitations:[]}],excluded_documents:[],errors:[],experiences:m.analyzed&&!m.removed?[item('Python','personal'),item('Docker','team')]:[]});
+  const project=()=>m.classbridge?{...m.classbridge,input_revision:m.revision,experiences:m.classbridge.experiences.map(e=>({...e,user_answer:m.answers[e.experience_id]||null,user_confirmation:m.answers[e.experience_id]?.status||null}))}:({status:m.removed?'no_documents':m.analyzed?'success':'not_started',input_revision:m.revision,eligible_documents:m.removed?0:1,analyzed_documents:m.analyzed&&!m.removed?1:0,verified_experiences:m.analyzed&&!m.removed?2:0,documents:[{document_id:'doc1',limitations:[]}],excluded_documents:[],errors:[],experiences:m.analyzed&&!m.removed?[item('Python','personal'),item('Docker','team')]:[]});
   const skill=name=>({name,category:'programming_language',mentioned_job_count:1,mention_frequency:1,required_job_count:1,preferred_job_count:0,mentioned_only_job_count:0,unknown_job_count:0,direct_job_count:1,related_job_count:0,seniority_distribution:{entry:1,mid:0,senior:0,unknown:0},evidence:[{job_id:'job1',title:'Data Analyst',source_url:'https://himalayas.app/companies/example/jobs/data',requirement_type:'required',evidence_text:name+' is required.'}]});
-  const jobs=()=>({status:'success',career_goal:'데이터 분석 분야',canonical_role:'Data Analyst',target_role:'데이터 분석가',input_revision:m.revision,analyzed_input_revision:1,snapshot_id:'job-snapshot',reused:!!m.jobCalls,keyword_details:[],collection_summary:{selected_jobs:1},analysis_summary:{analyzed_jobs:1,failed_jobs:0,skipped_jobs:0},skills:[skill('Python'),skill('SQL'),skill('Docker')],errors:[]});
+  const jobs=()=>({status:'success',career_goal:'데이터 분석 분야',canonical_role:'Data Analyst',target_role:'데이터 분석가',input_revision:m.revision,analyzed_input_revision:1,snapshot_id:'job-snapshot',reused:!!m.jobCalls,keyword_details:[],collection_summary:{selected_jobs:1},analysis_summary:{analyzed_jobs:1,failed_jobs:0,skipped_jobs:0},skills:(m.classbridge?['FastAPI','PostgreSQL','Redis','PyMuPDF','pytest']:['Python','SQL','Docker']).map(skill),errors:[]});
   const compare=()=>({status:'success',input_revision:m.revision,project_analysis:project(),job_analysis:jobs(),comparisons:jobs().skills.map(s=>{
    const evidence=project().experiences.filter(e=>e.skill_name===s.name);const a=evidence[0]?.user_answer;
-   const status=s.name==='SQL'&&m.skillAnswer ? m.skillAnswer==='no_experience'?'no_experience':'needs_confirmation' : !evidence.length?'not_verified':a?.status==='confirmed'||a?.status==='corrected'?'confirmed_experience':a?.status==='unknown'?'needs_confirmation':s.name==='Python'?'document_supported':'needs_confirmation';
+   const status=s.name==='SQL'&&m.skillAnswer ? m.skillAnswer==='no_experience'?'no_experience':'needs_confirmation' : !evidence.length?'not_verified':a?.status==='confirmed'||a?.status==='corrected'?'confirmed_experience':a?.status==='unknown'?'needs_confirmation':evidence.some(e=>e.contribution_scope==='personal')?'document_supported':'needs_confirmation';
    return {skill_name:s.name,student_status:status,reason:status==='not_verified'?'현재 자료에서 수행 근거를 찾지 못했습니다. 경험이 없다는 뜻은 아닙니다.':'사용자 확인 상태',preparation_candidate:status==='no_experience'?'consider_learning':status==='confirmed_experience'?'experience_confirmed':'verify_experience_first',project_evidence:evidence,job_evidence:s.evidence};
   })});
   const nativeFetch=window.fetch;
@@ -60,11 +74,11 @@ try {
    const url=String(input);if(!url.includes('/api/'))return nativeFetch(input,options);
    const json=data=>new Response(JSON.stringify(data),{status:200,headers:{'Content-Type':'application/json'}});
    const body=options.body?JSON.parse(options.body):{};
-   if(url.endsWith('/project-experience-analysis')){if(options.method==='POST'){if(!m.analyzed)m.projectCalls++;m.analyzed=true;}return json(project());}
+   if(url.endsWith('/project-experience-analysis')){if(options.method==='POST'){m.lastProjectBody=body;if(!m.analyzed||body.refresh)m.projectCalls++;m.analyzed=true;if(body.refresh){m.answers={};if(m.classbridge)m.classbridge.experiences=m.classbridge.experiences.map(e=>({...e,experience_id:e.experience_id+'-refresh'}));}}return json(project());}
    if(url.includes('/project-experiences/')&&url.endsWith('/confirmation')){const name=url.split('/').at(-2);m.answers[name]={status:body.status,correction:body.correction||null};m.revision++;return json(project());}
    if(url.endsWith('/skill-comparison/answers')){m.skillAnswer=body.status;m.revision++;return json(compare());}
    if(url.endsWith('/skill-comparison'))return json(compare());
-   if(url.includes('/extractions/'))return json({is_current_revision:!m.removed,extracted_text:'제가 Python으로 전처리했습니다.'});
+   if(url.includes('/extractions/'))return json({is_current_revision:!m.removed,extracted_text:m.classbridge?.source_text||'제가 Python으로 전처리했습니다.'});
    if(url.endsWith('/job-skill-analysis')){if(!m.jobCalls)m.jobCalls++;return json(jobs());}
    return json({input_revision:m.revision});
   };
@@ -117,7 +131,32 @@ try {
  await tab(1);
  await wait(`(${card('Python')})?.innerText.includes('자료에서 확인되지 않음')`);
  assert.equal(await run("document.querySelectorAll('.project-evidence').length"), 0);
- console.log('PASS: explicit consent, review, confirm/correct/defer, source text, experience comparison, no-experience distinction, reuse, invalidation, mobile');
+ await tab(0);
+ await run(`window.mockProject.classbridge=${JSON.stringify(classbridge)};window.mockProject.removed=false;window.mockProject.answers={};window.mockProject.revision++`);
+ await tab(1);
+ await wait(`(${card('pytest')})?.innerText.includes('문서 근거 있음 · 사용자 미확인')`);
+ for (const detail of ['FastAPI REST API 9개 설계 및 구현','PostgreSQL 테이블 6개 설계','Redis 큐·재시도 구현','PyMuPDF 문서 파싱 및 OCR 서비스 연동','pytest 자동화 테스트 42개 작성']) {
+  const name = detail.split(' ')[0];
+  await run(`(${card(name)}).querySelectorAll('.project-evidence > summary').forEach(e=>e.click())`);
+  assert.ok(await run(`(${card(name)}).innerText.includes(${JSON.stringify(detail)})`));
+ }
+ await run(`(${card('FastAPI')}).querySelectorAll('.project-evidence details > summary').forEach(e=>e.click())`);
+ assert.ok(await run(`(${card('FastAPI')}).innerText.includes('수행 주체 판정 문맥 · 실제 인용과 별도')`));
+ assert.ok(await run(`(${card('FastAPI')}).innerText.includes('본인 기여 여부')`));
+ await clickText('분석 내용 확인·수정 →');
+ await wait("document.querySelectorAll('.skill-card').length===13");
+ assert.equal(await run("document.querySelectorAll('[role=alert]').length"), 0);
+ assert.ok(await run(`(${card('Docker')}).innerText.includes('일부 설정') && !(${card('Docker')}).innerText.includes('전체 인프라 구축')`));
+ assert.ok(await run(`(${card('Next.js')}).innerText.includes('팀 수행')`));
+ await cardClick('pytest', '맞아요');
+ await wait(`(${card('pytest')}).innerText.includes('본인 경험으로 확인')`);
+ await clickText('프로젝트 경험 재분석');
+ await wait(`!(${card('pytest')}).innerText.includes('본인 경험으로 확인') && document.querySelector('section[aria-busy]').getAttribute('aria-busy')==='false'`);
+ assert.equal(await run('window.mockProject.lastProjectBody.refresh'), true);
+ assert.equal(await run("document.querySelectorAll('[role=alert]').length"), 0);
+ const classbridgeScreenshot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true });
+ writeFileSync('/tmp/team18-classbridge-review-ui.png', Buffer.from(classbridgeScreenshot.data, 'base64'));
+ console.log('PASS: review, confirm/correct/defer, comparison, reuse, invalidation, mobile; ClassBridge 5 detailed activities, separate context, partial configuration, team scope, no optional-field warning, explicit refresh');
 } finally {
  ws?.close(); child.kill(); await delay(500); rmSync(tmp, { recursive: true, force: true });
 }

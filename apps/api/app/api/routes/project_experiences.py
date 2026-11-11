@@ -3,12 +3,12 @@ from fastapi import APIRouter, Depends
 
 from api.dependencies import owned_context, parse_body, require_origin, respond
 from api.domain import Problem, now
-from api.schemas import RevisionRequest, openapi_body, validate_body
+from api.schemas import openapi_body, validate_body
 from repositories.documents import DocumentRepository
 from repositories.experience_analysis import AnalysisRepository, decode
 from services.project_experience import (analyze_document, current_project, current_comparison,
     documents_for_analysis, current_job_snapshot, project_version, skill_key, snapshot_skill_key)
-from services.project_experience_schemas import ExperienceAnswer, SkillAnswer
+from services.project_experience_schemas import ExperienceAnswer, SkillAnswer, ProjectAnalysisRequest
 from services.ai_guard import guarded_call
 
 router = APIRouter(prefix='/api/roadmap-inputs/{rid:roadmap_id}', tags=['project-experiences'])
@@ -33,16 +33,16 @@ def get_analysis(rid: str, ctx=Depends(owned_context)):
     return respond(200, result)
 
 
-@router.post('/project-experience-analysis', dependencies=[Depends(require_origin)], openapi_extra=openapi_body(RevisionRequest))
+@router.post('/project-experience-analysis', dependencies=[Depends(require_origin)], openapi_extra=openapi_body(ProjectAnalysisRequest))
 def run_analysis(rid: str, ctx=Depends(owned_context), body=Depends(parse_body)):
-    request = validate_body(RevisionRequest, body)
+    request = validate_body(ProjectAnalysisRequest, body)
     db, repo, owner = ctx
     row = locked_plan(ctx, rid, request.expected_input_revision)
     documents, _, basis = documents_for_analysis(db, rid)
     store = AnalysisRepository(db)
     version = project_version()
     saved = store.analyses(rid, version)
-    pending = [d for d in documents if (d['document_id'], d['extraction_revision']) not in saved or
+    pending = [d for d in documents if request.refresh or (d['document_id'], d['extraction_revision']) not in saved or
                decode(saved[(d['document_id'], d['extraction_revision'])]['result_json'])['status'] not in ('success', 'partial')]
     db.commit()  # External calls never hold database locks.
     def analyze_pending():
@@ -57,11 +57,18 @@ def run_analysis(rid: str, ctx=Depends(owned_context), body=Depends(parse_body))
     row = locked_plan(ctx, rid, request.expected_input_revision)
     if documents_for_analysis(db, rid)[2] != basis:
         raise Problem(409, 'revision_conflict', '분석 중 문서가 변경되었습니다. 다시 시도해 주세요.')
+    refresh_errors = []
     for document, result in results:
-        store.save_document(rid, document, version, row['input_revision'], result)
+        previous = saved.get((document['document_id'], document['extraction_revision']))
+        if request.refresh and previous and result['status'] == 'error':
+            refresh_errors.extend({**e, 'document_id': document['document_id']} for e in result['errors'])
+            continue  # Keep verified results and their answers after a failed refresh.
+        store.save_document(rid, document, version, row['input_revision'], result,
+                            replace_analysis_id=previous['analysis_id'] if request.refresh and previous else None)
     result = current_project(db, rid, row['input_revision'])
     result['requested_documents'] = len(results)
     result['reused_documents'] = len(documents) - len(pending)
+    result['refresh_errors'] = refresh_errors
     db.commit()
     return respond(200, result)
 

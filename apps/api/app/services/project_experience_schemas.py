@@ -62,3 +62,8 @@ class SkillAnswer(StrictModel):
 
 class JobAnalysisRequest(StrictModel):
     refresh: bool = False
+
+
+class ProjectAnalysisRequest(StrictModel):
+    expected_input_revision: int = Field(ge=0)
+    refresh: bool = False

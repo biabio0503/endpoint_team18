@@ -5,11 +5,11 @@
 ## 처리와 검증 경계
 
 1. 인증한 소유자의 계획을 잠근 짧은 트랜잭션에서 입력 버전과 문서 기준을 읽는다. 삭제되지 않은 현재 `ready`, 또는 현재 버전의 부분 추출 확인을 마친 `partial`만 사용한다. 실제 추출 행·본문·상태가 모두 유효해야 한다. 빈 본문, pending, failed, needs_ocr, 미확인 partial은 제외 사유를 표시한다.
-2. 사용자가 기존 확인 화면에서 명시적으로 분석을 실행하면 외부 Gemini에 `document_id`, `extraction_revision`, `extracted_text`만 보낸다. 원본 파일, 파일명, 사용자 ID, 세션, 과목 자료는 전송하지 않는다. 본문 자체에 포함된 개인정보는 전송될 수 있음을 화면에서 안내한다.
+2. 사용자가 기존 확인 화면에서 명시적으로 분석을 실행하면 외부 Gemini에 `document_id`, `extraction_revision`, `extracted_text`, 위치 필드만 허용한 `segments`를 보낸다. 위치는 문자 범위·페이지·문단·OCR 문단·bbox·이미지 참조다. 원본 파일, 파일명, 사용자 ID, 세션, 과목 자료는 전송하지 않는다. 본문 자체에 포함된 개인정보는 전송될 수 있음을 화면에서 안내한다.
 3. 기존 `_generate` 전송 계층과 운영자가 설정한 `GEMINI_API_KEY`·`GEMINI_MODEL`을 사용한다. 별도 프로젝트 Pydantic 스키마가 기술명, 활동, 개인/팀/미확인 범위, 역할, 결과물, 원문 구절을 검증한다. 외부 본문은 시스템 지시와 분리한 JSON 데이터이며 프롬프트 안의 명령은 무시하도록 지시한다.
-4. 서버가 문서 ID와 추출 버전을 확인하고, 정확한 연속 원문 구절과 기술명/명시적 별칭을 검증한다. 역할·결과물은 구절에 그대로 있는 경우만 허용한다. 근거 없는 항목은 결과에 포함하지 않고 안전한 오류 코드만 기록한다.
+4. 서버가 문서 ID와 추출 버전을 확인하고, 정확한 연속 원문 구절과 기술명/명시적 별칭을 검증한다. 역할·결과물은 독립적으로 검증해 구절에 없는 필드만 null로 바꾼다. `validation_adjustments`는 카드의 필드 정리 기록이며 분석 실패가 아니다. 활동은 기술명과 수행 내용이 함께 있는 원문에서 복원하므로 모델이 넣은 역할·수량이나 과장한 범위가 저장되지 않는다. 수행 근거가 없는 후보는 제외하고 `errors`에 코드·후보 인덱스·기술명(검증 전 모델 값)을 기록한다. 행 연결이 불명확한 표의 기술 언급은 활동을 주장하지 않는 unknown 카드로 유지한다.
 5. `evidence_start/end`는 Python Unicode 문자 위치이며 end는 제외한다. 구절과 겹치는 기존 모든 segment의 페이지·문단을 유지한다. 기술명 뒤의 한국어 조사는 검증 시 구분하지만 이름끼리 부분 문자열 매칭하지 않는다. 반복 항목은 중복 제거한다.
-6. `personal` AI 분류는 원문에 명시적 1인칭 표현이 없으면 `unknown`으로 낮춘다. 이름이 있는 팀원을 업로더와 연결하지 않는다. 원문 존재 검증과 실제 사용자 기여 확인은 별개다. 활동 요약 및 문서 의미 해석은 여전히 AI 해석이며, 사용자가 직접 확인한다.
+6. `personal`은 원문 1인칭, 같은 표의 `본인 기여 여부` 머리글·동일 행 셀, 또는 `본인이 직접 수행한 작업` 목록 문맥으로 검증한다. 좌표가 있으면 같은 페이지/문단/이미지의 bbox와 열·행 정렬을 사용한다. 좌표가 없으면 명시적 구분자(`|`, 탭, 두 칸 이상 공백)가 있는 행만 표로 연결한다. 불명확한 행·겹친 셀·반복 인용은 unknown이다. 목록은 다음 제목·빈 문단·다른 열에서 종료한다. `팀원 담당`과 `미수행`은 개인 수행 문맥보다 우선하며 `일부 설정`을 전체 구축으로 확대하지 않는다. 인용문 자체는 연속 원문으로 보존하고 판정에 사용한 머리글·셀은 `contribution_basis.context`에 각각 문자 범위와 위치를 저장한다. 이름이 있는 팀원을 업로더와 연결하지 않는다. 문서상 개인 수행은 `document_supported`, 사용자의 ‘맞아요’는 `confirmed_experience`로 구분한다.
 7. 외부 호출 중 DB 트랜잭션을 유지하지 않는다. 저장 직전 전체 입력 버전과 문서 기준을 다시 검사하여 변경되었으면 HTTP 409를 반환한다. 외부 호출 실패는 HTTP 200 응답 안의 분석 상태와 오류로 표현한다.
 
 ## 저장 구조와 무효화
@@ -24,6 +24,8 @@
 `confirmed`, `corrected`, `unknown`, `no_experience`를 구분한다. `corrected`만 별도 수정 객체를 받으며 AI 분석 JSON은 변경하지 않는다. 답변 변경 시 input revision을 증가시켜 오래된 화면 저장을 막는다. 동일 답변 재저장은 버전을 증가시키지 않는다. 답변 이력 전체가 아닌 최신 답변을 보관하는 MVP다.
 
 문서 삭제·재추출·교체 시 현재 문서와 정확히 일치하는 분석만 조회한다. 이전 experience ID에는 확인을 저장할 수 없다. 원문 추출 정리가 완료되면 분석과 답변도 FK CASCADE로 삭제된다. 새 문서가 추가되거나 문서 상태가 바뀌면 기술 단위 경험 없음/보류 답변도 문서 기준이 달라져 다시 확인해야 한다. 삭제 문서의 스냅샷을 우회 조회하는 API는 없다.
+
+프로젝트 규칙 버전은 `project-experience-v2:{model}`이다. v1 결과는 v2 캐시로 재사용하지 않으며 GET은 외부 호출을 하지 않는다. 이후 명시적인 POST는 저장된 추출 본문·segments에 새 추출/검증 규칙을 적용한다. 같은 v2 결과는 기본 POST에서 재사용하고, `refresh: true`일 때만 다시 Gemini를 호출한다. 두 경로 모두 OCR·문서 재추출·원본 파일 읽기를 호출하지 않는다. 성공한 재분석은 새 analysis/experience ID를 부여하고, 이전 분석은 `:superseded:{analysis_id}` 버전으로 보관한다. 이전 사용자 확인·수정 답변은 원래 분석에 남으며 새 카드에 이름이나 배열 순서로 연결하지 않는다. 재분석 전체 실패 시 기존 결과와 답변을 유지하고 `refresh_errors`로 별도 안내한다.
 
 ## 비교 알고리즘과 상태
 
@@ -49,7 +51,7 @@
 
 | 메서드 | 경로 | 요청 |
 | --- | --- | --- |
-| POST | `/api/roadmap-inputs/{id}/project-experience-analysis` | `{"expected_input_revision":8}` |
+| POST | `/api/roadmap-inputs/{id}/project-experience-analysis` | `{"expected_input_revision":8}` — 저장 결과 재사용. 명시적 재분석은 `"refresh":true` 추가 |
 | GET | `/api/roadmap-inputs/{id}/project-experience-analysis` | 현재 유효한 분석과 답변 조회. 외부 호출 없음 |
 | PATCH | `/api/roadmap-inputs/{id}/project-experiences/{experience_id}/confirmation` | 아래 답변 예시 |
 | POST | `/api/roadmap-inputs/{id}/job-skill-analysis` | 기존 `{}` 유지. 명시적 새 분석만 `{"refresh":true}` |
@@ -206,3 +208,64 @@ apps/api/.venv/bin/python apps/api/app/scripts/project_experience_live.py --limi
 - 검증: `test_project_experience.py`, `project_experience_scenario.py`, `test_project_experience_api.py`, PostgreSQL Auth fixture·문서 시나리오, 기존 API/OpenAPI 테스트, 프런트 로더 단위 테스트와 프로젝트 E2E, `scripts/project_experience_live.py`.
 
 원문이 실제 존재한다는 검증은 문서의 사실성·작성자 신원·활동 요약의 의미 정확성을 보증하지 않는다. 동기 분석은 운영 프록시의 타임아웃과 Gemini 할당량 제약을 받는다. 개인화 수강 추천, 점수, 실행 로드맵, 공모전 추천 변경은 요청 범위대로 미구현이다.
+
+## v2 ClassBridge 회귀 수정 — 2026-11-11
+
+배포에서 보고된 `role_or_output_not_in_evidence` 5건에는 탈락 후보 기술명이 없어 특정 오류를 PyMuPDF/pytest 누락과 일대일로 연결할 수 없다. 수정 전 코드는 선택 필드 하나의 불일치만으로도 전체 후보를 제외했고, 활동 설명은 검증하지 않았으며, 개인 수행은 인용 안의 1인칭만 허용했다. 따라서 **후보 자체 미추출**, **선택 필드 때문에 탈락**, **개인 수행 문맥 미인식**을 구분해서 검증했다. 새 오류에는 후보 기술명·인덱스를 남긴다.
+
+동일한 합성 Gemini 응답(표 후보 8개 + 상세 작업 후보 5개, 상세 후보에 근거 없는 role/output 포함)을 현재 HEAD의 수정 전 검증기와 v2에 넣어 비교했다. 아래 ‘수정 전’은 이 통제된 재현 결과이며, 실제 배포에서 저장되지 않은 후보를 복구한 결과가 아니다.
+
+| 기술 | 수정 전 합성 재현 | 수정 후 상세 카드 |
+| --- | --- | --- |
+| FastAPI | 직접 구현만 유지 | FastAPI REST API 9개 설계 및 구현 |
+| PostgreSQL | 직접 설계만 유지 | PostgreSQL 테이블 6개 설계 |
+| Redis | 직접 구현만 유지 | Redis 큐·재시도 구현 |
+| PyMuPDF | 상세 후보 탈락 | PyMuPDF 문서 파싱 및 OCR 서비스 연동 |
+| pytest | 상세 후보 탈락 | pytest 자동화 테스트 42개 작성 |
+
+수정 전 8개 카드·선택 필드 오류 5건 → 수정 후 13개 카드·전체 탈락 오류 0건. 상세 작업 5개는 개인 수행 문맥을 확인했고, 표 요약과 별도 원문 위치를 유지한다. 두 기술이 함께 쓰인 셀은 기술별 카드로 분리한다. Docker/GitHub Actions는 일부 설정, Next.js/TypeScript는 팀원 담당이다.
+
+### 실행한 검증과 범위
+
+```sh
+PYTHONPATH=apps/api/app apps/api/.venv/bin/python -m pytest \
+  apps/api/tests/unit \
+  apps/api/tests/integration/test_project_experience_api.py \
+  apps/api/tests/integration/test_job_skill_analysis_api.py \
+  apps/api/tests/integration/test_roadmap_api.py \
+  apps/api/tests/integration/test_document_ocr_api.py -q -rs
+node --experimental-vm-modules --test apps/web/tests/unit/*.test.mjs
+node apps/web/tests/e2e/project-experiences.mjs
+apps/api/.venv/bin/python apps/api/app/scripts/classbridge_experience_live.py \
+  --output /tmp/team18-classbridge-live.json
+git diff --check
+```
+
+- API 전체 단위 + 관련 SQLite 통합: **322 passed, 5 skipped, 30 subtests passed**. skip은 별도 opt-in이 필요한 기존 실모델 과목 추천 1개와 격리 PostgreSQL 환경이 필요한 OCR 4개다. Google SDK의 기존 deprecation warning 1건이 있다.
+- 위 범위 중 프로젝트 단위·API 통합·로드맵 통합: **70 passed**. 역할만/산출물만/둘 다 불일치와 활동 근거 없음, 수량·역할 복원, 페이지/문단 bbox, 뒤섞인 OCR 순서, 다른 페이지/이미지/행, 겹친 셀, 좌표 없는 명확/모호한 행, 목록 종료, 팀원 담당·미수행 우선순위, 중복 인용을 검증했다.
+- 웹 단위: **15 passed**. 브라우저 E2E: **PASS**. 실제 검증기의 합성 응답을 화면에 공급해 5개 상세 작업, 인용과 별도 문맥, 일부 설정, 팀원 범위, 선택 필드 정리 시 경고 없음, 재분석 버튼, 사용자 답변 분리, 390px 화면을 확인했다. 이 E2E의 인증·API 응답은 모의다.
+- API 통합에서 v1→v2 재분석과 명시적 `refresh`가 동일한 저장 본문/segments를 사용하고 OCR 호출·추출 작업 예약이 **0회**임을 검증했다. 후보 순서를 뒤집어도 새 카드에 예전 답변이 연결되지 않으며, 예전 확인·수정 답변은 이전 분석에 보존된다. 실패한 refresh는 기존 결과·답변을 유지한다.
+- 실제 Gemini: 설정된 **gemini-3.5-flash-lite**, 합성 ClassBridge 본문·좌표로 호스트 네트워크에서 응답 2회를 확인했다(각 호출의 재시도 없음). 첫 응답은 상세 5개 모두 보존됐으나 FastAPI 문장을 Python 근거로 쓴 후보 1개를 기술명 검사에서 제외했다. 표 셀 인용 지시를 보완한 최종 응답은 **11개 후보 모두 검증 통과, 오류 0건, 상세 5/5 보존**. Python 직접 사용, Docker/GitHub Actions 일부 설정, Next.js/TypeScript 팀원 담당도 확인됐다. 다음 섹션의 Playwright 작업은 unknown으로 남았다.
+- 실제 PDF/OCR 재실행, 원래 배포 후보 복구, 운영 DB 재분석은 이 검증 범위에 포함되지 않는다. 회귀 입력은 사용자 보고 내용을 옮긴 합성 fixture이며 원본 PDF가 아니다.
+
+로컬 검증 산출물: `/tmp/team18-classbridge-before-after.json`, `/tmp/team18-classbridge-live-first.json`, `/tmp/team18-classbridge-live.json`, `/tmp/team18-classbridge-review-ui.png`. 최종 실제 응답을 저장한 뒤 서버의 이미지 구분·빈 행 경계를 더 보수적으로 처리하고 이전 답변 보존을 추가했으며, 이 추가 경계는 위 단위·통합 테스트로 확인했다.
+
+### 이번 수정 파일
+
+| 파일 | 변경 |
+| --- | --- |
+| `apps/api/app/services/project_experience.py` | 독립 필드 검증, 활동 복원, 후보별 오류, v2 버전 |
+| `apps/api/app/services/project_evidence.py` | 원문 위치·표 좌표·목록 문맥 판정 (신규) |
+| `apps/api/app/services/gemini_projects.py` | 상세 작업·표 셀 추출 지시와 위치 payload |
+| `apps/api/app/services/project_experience_schemas.py` | 명시적 refresh 요청 |
+| `apps/api/app/api/routes/project_experiences.py` | 저장 본문 재분석·실패 시 유지 |
+| `apps/api/app/repositories/experience_analysis.py` | 재분석 교체·이전 분석/답변 보존 |
+| `apps/api/tests/unit/test_project_experience.py` | 독립 검증·활동·좌표·문맥 회귀 |
+| `apps/api/tests/fixtures/classbridge.py` | 읽기 순서가 섞인 합성 ClassBridge 자료 (신규) |
+| `apps/api/tests/integration/project_experience_scenario.py` | 카드 비교·버전·캐시·OCR 미호출·답변 분리 |
+| `apps/api/tests/integration/test_project_experience_api.py` | 새 통합 시나리오 실행 |
+| `apps/api/app/scripts/classbridge_experience_live.py` | 합성 자료로 실제 모델 1회 확인 (신규) |
+| `apps/web/src/features/roadmap/ProjectEvidence.js` | 원문 인용과 판정 문맥을 별도 표시 |
+| `apps/web/src/features/roadmap/ProjectExperienceReview.js` | 명시적 재분석 및 실패 안내 |
+| `apps/web/tests/e2e/project-experiences.mjs` | 실제 검증기 결과로 ClassBridge 화면 회귀 |
+| `docs/project-experience-comparison.md` | v2 동작·재현·검증 범위 기록 |

@@ -7,6 +7,7 @@ from unittest.mock import patch
 import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'fixtures'))
 from fastapi.testclient import TestClient
 from app.main import app
 from api.domain import now
@@ -17,6 +18,8 @@ from services.gemini import GeminiError
 from services.job_skill_analysis import ANALYSIS_VERSION, aggregate_skills, verify_skills
 from services.job_skill_schemas import ExtractedSkill
 from services.project_experience_schemas import DocumentExperience
+from services import project_experience as project_service
+from classbridge import DETAILS, classbridge_document, classbridge_extraction
 
 
 def fake_extraction(document):
@@ -67,7 +70,7 @@ class ProjectExperienceAPI(unittest.TestCase):
     def revision(self):
         return self.client.get(self.base).json()['input_revision']
 
-    def doc(self, text='제가 Python으로 전처리 코드를 작성했습니다.', status='ready', confirmed=False):
+    def doc(self, text='제가 Python으로 전처리 코드를 작성했습니다.', status='ready', confirmed=False, segments=None):
         did = str(uuid.uuid4())
         with closing(connect()) as db:
             Repository(db).begin()
@@ -76,7 +79,7 @@ class ProjectExperienceAPI(unittest.TestCase):
             if status != 'pending':
                 docs.lease(did, 'token', now(), False)
                 docs.finish_extraction(docs.get(self.rid, did), 'token', {
-                    'text': text, 'segments': [{'start': 0, 'end': len(text), 'paragraph': 1}],
+                    'text': text, 'segments': segments if segments is not None else [{'start': 0, 'end': len(text), 'paragraph': 1}],
                     'status': status, 'limitations': ['일부 내용 미추출'] if status == 'partial' else [], 'error_code': None}, now())
             if confirmed:
                 docs.confirm(did, now())
@@ -84,8 +87,9 @@ class ProjectExperienceAPI(unittest.TestCase):
             db.commit()
         return did
 
-    def analyze(self):
-        response = self.client.post(self.base + '/project-experience-analysis', json={'expected_input_revision': self.revision()})
+    def analyze(self, refresh=False):
+        response = self.client.post(self.base + '/project-experience-analysis', json={
+            'expected_input_revision': self.revision(), 'refresh': refresh})
         self.assertEqual(response.status_code, 200, response.text)
         return response.json()
 
@@ -138,7 +142,7 @@ class ProjectExperienceAPI(unittest.TestCase):
             self.assertEqual(self.analyze()['requested_documents'], 0)
             model.assert_not_called()
         saved = next(e for e in changed['experiences'] if e['experience_id'] == docker['experience_id'])
-        self.assertEqual(saved['activity'], 'Docker 작업')
+        self.assertEqual(saved['activity'], '팀은 Docker 환경을 구성했습니다.')
         self.assertEqual(saved['user_answer']['correction']['activity'], '컨테이너를 직접 구성')
         comparisons = {c['skill_name']: c for c in self.comparison()['comparisons']}
         self.assertEqual(comparisons['Python']['student_status'], 'confirmed_experience')
@@ -296,6 +300,104 @@ class ProjectExperienceAPI(unittest.TestCase):
         self.assertEqual(retry['refresh_error']['status'], 'error')
         self.assertEqual(self.comparison()['status'], 'partial')
         self.assertEqual(self.client.post(self.base + '/job-skill-analysis', json={'skills': []}).status_code, 422)
+
+    def test_classbridge_details_context_and_nonfatal_adjustments(self):
+        fixture = classbridge_document()
+        self.doc(fixture['extracted_text'], segments=fixture['segments'])
+        with patch('services.project_experience.extract_project_experiences', side_effect=classbridge_extraction):
+            result = self.analyze()
+        self.assertEqual(result['status'], 'success')
+        self.assertEqual(result['errors'], [])
+        self.assertEqual(result['documents'][0]['errors'], [])
+        self.assertEqual(result['verified_experiences'], 13)
+        for detail in DETAILS.values():
+            item = next(i for i in result['experiences'] if i['activity'] == detail)
+            self.assertEqual(item['contribution_scope'], 'personal')
+            self.assertEqual(item['contribution_basis']['source'], 'document')
+            self.assertEqual(item['contribution_basis']['context'][0]['text'], '본인이 직접 수행한 작업')
+            self.assertIsNone(item['user_confirmation'])
+            self.assertIsNone(item['role'])
+            self.assertIsNone(item['output'])
+        # Result-screen comparison must preserve detailed work alongside table summaries.
+        jobs = job_result()
+        template = jobs['skills'][0]
+        jobs['skills'] = [{**template, 'name': name} for name in DETAILS]
+        with patch('api.routes.job_skill_analysis.analyze_job_skills', return_value=jobs):
+            self.client.post(self.base + '/job-skill-analysis', json={})
+        for comparison in self.comparison()['comparisons']:
+            self.assertEqual(comparison['student_status'], 'document_supported')
+            self.assertIn(DETAILS[comparison['skill_name']], [e['activity'] for e in comparison['project_evidence']])
+
+    def test_refresh_reuses_extraction_and_never_reassigns_answers(self):
+        fixture = classbridge_document()
+        did = self.doc(fixture['extracted_text'], segments=fixture['segments'])
+        with patch('services.project_experience.extract_project_experiences', side_effect=classbridge_extraction):
+            old = self.analyze()
+        details = [i for i in old['experiences'] if i['activity'] in DETAILS.values()]
+        self.answer(details[0], 'confirmed')
+        correction = {'skill_name': 'SQL', 'activity': '직접 작성한 쿼리', 'contribution_scope': 'personal'}
+        self.answer(details[1], 'corrected', correction)
+        def reordered(document):
+            self.assertEqual(document['extracted_text'], fixture['extracted_text'])
+            self.assertEqual(document['segments'], fixture['segments'])
+            result = classbridge_extraction(document)
+            result.experiences.reverse()
+            return result
+        with patch('services.project_experience.extract_project_experiences', side_effect=reordered) as model, \
+             patch('services.document_ocr.DocumentOCR.read', side_effect=AssertionError('OCR must not run')) as ocr, \
+             patch('worker.documents.request_work', side_effect=AssertionError('No extraction scheduled')) as worker:
+            cached = self.analyze()
+            self.assertEqual(cached['requested_documents'], 0)
+            self.assertEqual(sum(i['user_answer'] is not None for i in cached['experiences']), 2)
+            refreshed = self.analyze(refresh=True)
+            self.assertEqual(model.call_count, 1)
+            self.assertEqual(refreshed['requested_documents'], 1)
+            self.assertEqual(refreshed['reused_documents'], 0)
+            self.assertEqual(refreshed['document_basis'], old['document_basis'])
+            self.assertTrue(all(i['extraction_revision'] == 1 and i['user_answer'] is None for i in refreshed['experiences']))
+            self.assertFalse({i['experience_id'] for i in old['experiences']} & {i['experience_id'] for i in refreshed['experiences']})
+            self.assertEqual(self.analyze()['requested_documents'], 0)
+            self.assertEqual(model.call_count, 1)
+            ocr.assert_not_called()
+            worker.assert_not_called()
+        stale = self.client.patch(self.base + '/project-experiences/' + details[0]['experience_id'] + '/confirmation',
+            json={'expected_input_revision': self.revision(), 'status': 'confirmed'})
+        self.assertEqual(stale.status_code, 409)
+        with closing(connect()) as db:
+            self.assertEqual(DocumentRepository(db).get(self.rid, did)['extraction_revision'], 1)
+            self.assertEqual(db.execute('SELECT count(*) AS n FROM document_extractions WHERE document_id=?', (did,)).fetchone()['n'], 1)
+            # Prior user statements remain with their original analysis for audit.
+            self.assertEqual(db.execute('SELECT count(*) AS n FROM project_experience_answers WHERE analysis_id=?',
+                                        (old['experiences'][0]['analysis_id'],)).fetchone()['n'], 2)
+
+    def test_version_upgrade_and_failed_refresh_preserve_answer_boundaries(self):
+        self.doc('제가 Python 코드를 작성했습니다.\n팀은 Docker 환경을 구성했습니다.')
+        with patch.object(project_service, 'PROJECT_VERSION', 'project-experience-v1'), \
+             patch('services.project_experience.extract_project_experiences', side_effect=fake_extraction):
+            legacy = self.analyze()
+            self.answer(legacy['experiences'][0], 'confirmed')
+            self.answer(legacy['experiences'][1], 'corrected', {
+                'skill_name': 'Python', 'activity': '개인 자동화', 'contribution_scope': 'personal'})
+        with patch('services.project_experience.extract_project_experiences', side_effect=fake_extraction) as model, \
+             patch('services.document_ocr.DocumentOCR.read', side_effect=AssertionError('OCR must not run')) as ocr:
+            before = self.client.get(self.base + '/project-experience-analysis').json()
+            self.assertEqual(before['status'], 'not_started')
+            model.assert_not_called()
+            upgraded = self.analyze()
+            self.assertEqual(model.call_count, 1)
+            self.assertTrue(upgraded['analysis_version'].startswith('project-experience-v2:'))
+            self.assertTrue(all(i['user_answer'] is None for i in upgraded['experiences']))
+            ocr.assert_not_called()
+        item = upgraded['experiences'][0]
+        self.answer(item, 'confirmed')
+        with patch('services.project_experience.extract_project_experiences', side_effect=GeminiError('gemini_timeout', 'timeout')):
+            failed = self.analyze(refresh=True)
+        self.assertEqual(failed['refresh_errors'][0]['code'], 'gemini_timeout')
+        self.assertEqual(failed['status'], 'success')
+        self.assertEqual(failed['experiences'][0]['experience_id'], item['experience_id'])
+        self.assertEqual(failed['experiences'][0]['user_confirmation'], 'confirmed')
+        self.assertEqual(self.client.post(self.base + '/project-experience-analysis', json={
+            'expected_input_revision': self.revision(), 'refresh': 'true'}).status_code, 422)
 
 
 if __name__ == '__main__':

@@ -2,17 +2,17 @@
 import hashlib
 import json
 import os
-import re
 import uuid
 
 from repositories.documents import DocumentRepository
 from repositories.experience_analysis import AnalysisRepository, decode
 from services.gemini import GeminiError
 from services.gemini_projects import extract_project_experiences
-from services.job_skill_analysis import ANALYSIS_VERSION, normalize_skill, _key, _skill_in_quote, skill_priority
+from services.project_evidence import EvidenceIndex, names_skill
+from services.job_skill_analysis import ANALYSIS_VERSION, normalize_skill, _key, skill_priority
 
 MAX_PROJECT_CHARS = 60000
-PROJECT_VERSION = 'project-experience-v1'
+PROJECT_VERSION = 'project-experience-v2'
 JOB_VERSION = ANALYSIS_VERSION
 
 
@@ -90,36 +90,42 @@ def verify_experiences(document, extraction, analysis_id):
     if extraction.extraction_revision != document['extraction_revision']:
         return [], [{'code': 'extraction_revision_mismatch'}]
     verified, errors, seen = [], [], set()
-    for item in extraction.experiences:
-        start = document['extracted_text'].find(item.evidence_text)
+    source = EvidenceIndex(document)
+    for index, item in enumerate(extraction.experiences):
+        candidate = {'candidate_index': index, 'skill_name': item.skill_name}
+        start, _ = source.locate(item.evidence_text)
         if start < 0:
-            errors.append({'code': 'evidence_not_in_source'})
+            errors.append({'code': 'evidence_not_in_source', **candidate})
             continue
-        # Korean postpositions may directly follow an English technology name.
-        quote_for_names = re.sub(r'(?<=[A-Za-z0-9])(?=[가-힣])', ' ', item.evidence_text)
-        if not _skill_in_quote(item.skill_name, quote_for_names):
-            errors.append({'code': 'skill_not_in_evidence'})
+        if not names_skill(item.skill_name, item.evidence_text):
+            errors.append({'code': 'skill_not_in_evidence', **candidate})
             continue
-        if any(value is not None and value not in item.evidence_text for value in (item.role, item.output)):
-            errors.append({'code': 'role_or_output_not_in_evidence'})
+        end = start + len(item.evidence_text)
+        grounded = source.resolve(item.skill_name, start, end)
+        if grounded is None:
+            errors.append({'code': 'activity_not_in_evidence', **candidate,
+                           'evidence_start': start, 'evidence_end': end})
             continue
+        adjustments, fields = [], {}
+        for field in ('role', 'output'):
+            value = getattr(item, field)
+            fields[field] = value if value is None or value in item.evidence_text else None
+            if value is not None and fields[field] is None:
+                adjustments.append({'field': field, 'code': field + '_not_in_evidence'})
+        if item.activity != grounded['activity']:
+            adjustments.append({'field': 'activity', 'code': 'activity_restored_from_source'})
         name, category = normalize_skill(item.skill_name, item.category)
-        identity = (skill_key(name), start, item.evidence_text, item.activity)
+        identity = (skill_key(name), start, item.evidence_text)
         if identity in seen:
             continue
         seen.add(identity)
-        end = start + len(item.evidence_text)
-        scope = item.contribution_scope
-        # A model's personal label alone is not a contribution check. Named team
-        # members cannot be mapped to the uploader. The user can clarify later.
-        if scope == 'personal' and not re.search(r'\bI\s|\bmy\s|나는|내가|제가|저는|본인은|본인이', item.evidence_text, re.I):
-            scope = 'unknown'
-        verified.append({**item.model_dump(), 'skill_name': name, 'category': category,
-                         'model_contribution_scope': item.contribution_scope, 'contribution_scope': scope,
+        verified.append({**item.model_dump(), **fields, **grounded, 'skill_name': name, 'category': category,
+                         'model_contribution_scope': item.contribution_scope,
+                         'validation_adjustments': adjustments,
                          'experience_id': str(uuid.uuid4()), 'analysis_id': analysis_id,
                          'document_id': document['document_id'], 'extraction_revision': document['extraction_revision'],
                          'evidence_start': start, 'evidence_end': end, 'evidence_verified': True,
-                         'locations': [s for s in document['segments'] if s['start'] < end and s['end'] > start]})
+                         'locations': source.locations(start, end)})
     return verified, errors
 
 
