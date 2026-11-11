@@ -9,7 +9,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'app'))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'fixtures'))
-from classbridge import DETAILS, ROWS, candidate, classbridge_document, classbridge_extraction, ocr_document, response
+from classbridge import (DETAILS, ROWS, ROLE_DESCRIPTION, candidate, classbridge_document,
+                        classbridge_original_order_document, classbridge_extraction, ocr_document, response)
 from services import project_experience as service
 from services.gemini import GeminiError
 from services.gemini_projects import extract_project_experiences
@@ -220,8 +221,12 @@ def test_geometry_requires_same_table_and_unique_row(change):
             segment['bbox'] = [[150, 800], [410, 820]]
         if value == '직접 구현' and change == 'merged_row':
             segment['bbox'] = [[450, 140], [550, 220]]
-    item, = service.verify_experiences(doc, response(doc, [candidate('FastAPI', 'FastAPI / Redis')]), 'a')[0]
-    assert item['contribution_scope'] == 'unknown'
+    items, errors = service.verify_experiences(doc, response(doc, [candidate('FastAPI', 'FastAPI / Redis')]), 'a')
+    if change == 'far_away':
+        # A detached technology mention has neither an activity nor table context.
+        assert items == [] and errors[0]['code'] == 'activity_not_in_evidence'
+    else:
+        assert not errors and items[0]['contribution_scope'] == 'unknown'
 
 
 def test_without_coordinates_ambiguous_ocr_rows_stay_unknown():
@@ -309,12 +314,94 @@ def test_blank_line_separates_tables_and_negative_cell_overrides_personal_header
     doc = document('기술 스택 | 본인 기여 여부\nDocker | 미수행\n\nFastAPI | 직접 구현')
     items, errors = service.verify_experiences(doc, response(doc, [candidate('Docker', 'Docker'),
         candidate('FastAPI', 'FastAPI')]), 'a')
-    assert not errors
-    assert [i['contribution_scope'] for i in items] == ['unknown', 'unknown']
+    assert len(items) == 1 and items[0]['contribution_scope'] == 'unknown'
     assert items[0]['contribution_basis']['reason'] == 'not_performed'
+    assert errors[0]['skill_name'] == 'FastAPI' and errors[0]['code'] == 'activity_not_in_evidence'
 
 
 def test_other_column_does_not_extend_personal_section():
     doc = ocr_document([('본인이 직접 수행한 작업', 1, 50, 50, 300), (DETAILS['pytest'], 1, 600, 90, 450)])
+    item, = service.verify_experiences(doc, response(doc, [candidate('pytest', DETAILS['pytest'])]), 'a')[0]
+    assert item['contribution_scope'] == 'unknown'
+
+
+@pytest.mark.parametrize('coordinate', ['page', 'paragraph'])
+def test_original_order_role_description_preserves_five_personal_activities(coordinate):
+    doc = classbridge_original_order_document(coordinate)
+    model = classbridge_extraction(doc)
+    outside = 'Playwright 서비스 테스트 48개 작성'
+    model.experiences.extend(response(doc, [candidate('Playwright', outside)]).experiences)
+    items, errors = service.verify_experiences(doc, model, 'a')
+    assert not errors
+    for detail in DETAILS.values():
+        item = next(i for i in items if i['evidence_text'] == detail)
+        assert item['activity'] == detail
+        assert item['contribution_scope'] == 'personal'
+        assert item['contribution_basis']['method'] == 'section_bbox'
+        assert item['contribution_basis']['reason'] == 'document_personal'
+        assert [c['text'] for c in item['contribution_basis']['context']] == [
+            '본인이 직접 수행한 작업', ROLE_DESCRIPTION]
+        assert doc['extracted_text'][item['evidence_start']:item['evidence_end']] == detail
+        for context in item['contribution_basis']['context']:
+            assert doc['extracted_text'][context['start']:context['end']] == context['text']
+    team = [i for i in items if i['skill_name'] in ('Next.js', 'TypeScript')]
+    assert len(team) == 2 and all(i['contribution_scope'] == 'team' for i in team)
+    assert all(i['contribution_basis']['method'] == 'table_bbox' for i in team)
+    after_table = next(i for i in items if i['skill_name'] == 'Playwright')
+    assert after_table['contribution_scope'] == 'unknown'
+    assert after_table['contribution_basis']['reason'] == 'actor_unspecified'
+    assert after_table['contribution_basis']['context'] == []
+
+
+@pytest.mark.parametrize('geometry', [True, False])
+@pytest.mark.parametrize('boundary', ['팀 전체 성과', '4. 시스템 개발', '4) 운영 및 테스트',
+                                     '기술 스택 | 본인 기여 여부'])
+def test_role_description_does_not_extend_context_past_next_section(boundary, geometry):
+    doc = ocr_document([('본인이 직접 수행한 작업', 1, 50, 50, 300),
+        (ROLE_DESCRIPTION, 1, 70, 90, 500), ('① ' + DETAILS['pytest'], 1, 70, 130, 450),
+        (boundary, 1, 50, 170, 500), ('② ' + DETAILS['FastAPI'], 1, 70, 210, 450)])
+    if not geometry:
+        doc['segments'] = []
+    items, errors = service.verify_experiences(doc, response(doc, [candidate(name, DETAILS[name])
+        for name in ('pytest', 'FastAPI')]), 'a')
+    assert not errors
+    assert [i['contribution_scope'] for i in items] == ['personal', 'unknown']
+    assert items[-1]['contribution_basis']['reason'] == 'actor_unspecified'
+
+
+@pytest.mark.parametrize('geometry', [True, False])
+def test_ambiguous_table_reason_is_local_to_table(geometry):
+    doc = classbridge_original_order_document()
+    doc['extracted_text'] = doc['extracted_text'].replace('본인이 직접 수행한 작업', '프로젝트 개발 작업 목록')
+    # Rebuild offsets after replacing the heading; keep the original OCR coordinates.
+    cells = [(line, 1, s['bbox'][0][0], s['bbox'][0][1], s['bbox'][1][0] - s['bbox'][0][0])
+             for line, s in zip(doc['extracted_text'].splitlines(), doc['segments'])]
+    doc = ocr_document(cells)
+    if geometry:
+        doc['segments'] = [s for s in doc['segments'] if doc['extracted_text'][s['start']:s['end']] != '직접 구현']
+    else:
+        doc['segments'] = []
+    model = response(doc, [candidate('pytest', DETAILS['pytest']), candidate('FastAPI', 'FastAPI / Redis')])
+    items, errors = service.verify_experiences(doc, model, 'a')
+    assert not errors
+    assert [i['contribution_scope'] for i in items] == ['unknown', 'unknown']
+    assert [i['contribution_basis']['reason'] for i in items] == ['actor_unspecified', 'ambiguous_table_row']
+
+
+@pytest.mark.parametrize('geometry', [True, False])
+def test_known_row_with_unknown_contribution_is_not_ambiguous(geometry):
+    doc = ocr_document([('기술 스택', 1, 150, 100, 100), ('본인 기여 여부', 1, 450, 100, 130),
+                        ('FastAPI', 1, 150, 140, 200), ('확인 필요', 1, 450, 140, 130)])
+    if not geometry:
+        doc = document('기술 스택 | 본인 기여 여부\nFastAPI | 확인 필요')
+    item, = service.verify_experiences(doc, response(doc, [candidate('FastAPI', 'FastAPI')]), 'a')[0]
+    assert item['contribution_scope'] == 'unknown'
+    assert item['contribution_basis']['reason'] == 'actor_unspecified'
+    assert item['contribution_basis']['method'] == ('table_bbox' if geometry else 'table_row')
+
+
+@pytest.mark.parametrize('description', ['설명: 백엔드 API 개발', '다음 단계: 백엔드 API 개발'])
+def test_other_colon_lines_still_end_the_personal_section(description):
+    doc = document('본인이 직접 수행한 작업\n' + description + '\n① ' + DETAILS['pytest'])
     item, = service.verify_experiences(doc, response(doc, [candidate('pytest', DETAILS['pytest'])]), 'a')[0]
     assert item['contribution_scope'] == 'unknown'

@@ -19,7 +19,8 @@ from services.job_skill_analysis import ANALYSIS_VERSION, aggregate_skills, veri
 from services.job_skill_schemas import ExtractedSkill
 from services.project_experience_schemas import DocumentExperience
 from services import project_experience as project_service
-from classbridge import DETAILS, classbridge_document, classbridge_extraction
+from classbridge import (DETAILS, ROLE_DESCRIPTION, classbridge_document,
+                        classbridge_original_order_document, classbridge_extraction)
 
 
 def fake_extraction(document):
@@ -302,7 +303,7 @@ class ProjectExperienceAPI(unittest.TestCase):
         self.assertEqual(self.client.post(self.base + '/job-skill-analysis', json={'skills': []}).status_code, 422)
 
     def test_classbridge_details_context_and_nonfatal_adjustments(self):
-        fixture = classbridge_document()
+        fixture = classbridge_original_order_document()
         self.doc(fixture['extracted_text'], segments=fixture['segments'])
         with patch('services.project_experience.extract_project_experiences', side_effect=classbridge_extraction):
             result = self.analyze()
@@ -315,9 +316,13 @@ class ProjectExperienceAPI(unittest.TestCase):
             self.assertEqual(item['contribution_scope'], 'personal')
             self.assertEqual(item['contribution_basis']['source'], 'document')
             self.assertEqual(item['contribution_basis']['context'][0]['text'], '본인이 직접 수행한 작업')
+            self.assertEqual(item['contribution_basis']['context'][1]['text'], ROLE_DESCRIPTION)
             self.assertIsNone(item['user_confirmation'])
             self.assertIsNone(item['role'])
             self.assertIsNone(item['output'])
+        team = [i for i in result['experiences'] if i['skill_name'] in ('Next.js', 'TypeScript')]
+        self.assertEqual(len(team), 2)
+        self.assertTrue(all(i['contribution_scope'] == 'team' for i in team))
         # Result-screen comparison must preserve detailed work alongside table summaries.
         jobs = job_result()
         template = jobs['skills'][0]
