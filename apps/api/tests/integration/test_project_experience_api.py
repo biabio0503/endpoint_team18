@@ -12,7 +12,10 @@ CASES = ['sources_confirm_correction_and_job_snapshot_reuse', 'corrected_skill_m
          'owner_scope_and_revision_race', 'invalid_model_document_and_cross_document_quote',
          'partial_failure_rate_limit_and_retry_only_missing_document',
          'explicit_no_experience_and_invalidation_when_documents_change',
-         'partial_job_cache_and_failed_refresh_preserve_verified_result']
+         'partial_job_cache_and_failed_refresh_preserve_verified_result',
+         'classbridge_details_context_and_nonfatal_adjustments',
+         'refresh_reuses_extraction_and_never_reassigns_answers',
+         'version_upgrade_and_failed_refresh_preserve_answer_boundaries']
 
 
 @pytest.mark.parametrize('case', CASES)

@@ -38,13 +38,21 @@ class AnalysisRepository:
         rows = self.db.execute('SELECT * FROM project_experience_analyses WHERE request_id=? AND analysis_version=?', (rid, version))
         return {(r['document_id'], r['extraction_revision']): dict(r) for r in rows}
 
-    def save_document(self, rid, document, version, revision, result):
+    def save_document(self, rid, document, version, revision, result, replace_analysis_id=None):
         # Stable winner if concurrent requests both analyzed the same version.
         existing = self.analyses(rid, version).get((document['document_id'], document['extraction_revision']))
         if existing:
-            if decode(existing['result_json'])['status'] in ('success', 'partial'):
+            if replace_analysis_id and existing['analysis_id'] != replace_analysis_id:
+                return  # Another refresh already won while the external call ran.
+            if not replace_analysis_id and decode(existing['result_json'])['status'] in ('success', 'partial'):
                 return
-            self.db.execute('DELETE FROM project_experience_analyses WHERE analysis_id=?', (existing['analysis_id'],))
+            if replace_analysis_id:
+                # Retain the old observation and its user statements for audit. Only
+                # the current version is selected; answers are never migrated by name/order.
+                self.db.execute('UPDATE project_experience_analyses SET analysis_version=? WHERE analysis_id=?',
+                    (version + ':superseded:' + existing['analysis_id'], existing['analysis_id']))
+            else:
+                self.db.execute('DELETE FROM project_experience_analyses WHERE analysis_id=?', (existing['analysis_id'],))
         self.db.execute('''INSERT INTO project_experience_analyses VALUES(?,?,?,?,?,?,?,?)
             ON CONFLICT(document_id,extraction_revision,analysis_version) DO NOTHING''',
             (result['analysis_id'], rid, document['document_id'], document['extraction_revision'], version,
