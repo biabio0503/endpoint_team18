@@ -13,6 +13,7 @@ from app.main import app
 from api.domain import now
 from config import DB_BACKEND
 from repositories.documents import DocumentRepository
+from repositories.experience_analysis import AnalysisRepository, decode
 from repositories.plans import connect, Repository
 from services.gemini import GeminiError
 from services.job_skill_analysis import ANALYSIS_VERSION, aggregate_skills, verify_skills
@@ -21,7 +22,8 @@ from services.project_experience_schemas import DocumentExperience
 from services import project_experience as project_service
 from classbridge import (DETAILS, ROLE_DESCRIPTION, classbridge_document,
                         classbridge_original_order_document, classbridge_extraction)
-from experience_activity_regressions import EXPERIENCES, PROJECT_TEXT, fixed_extraction
+from experience_activity_regressions import (EXPERIENCES, PROJECT_TEXT, fixed_extraction,
+                                            NEGATION_CASES, negation_extraction)
 
 
 def fake_extraction(document):
@@ -112,6 +114,89 @@ class ProjectExperienceAPI(unittest.TestCase):
         response = self.client.get(self.base + '/skill-comparison')
         self.assertEqual(response.status_code, 200, response.text)
         return response.json()
+
+    def test_negation_fixed_candidates_are_persisted_and_reused(self):
+        expected = {self.doc(text): (text, scopes) for text, scopes in NEGATION_CASES}
+        with patch('services.gemini_projects._generate', side_effect=lambda schema, prompt, doc: negation_extraction(doc)) as model:
+            result = self.analyze()
+            self.assertEqual(result['status'], 'success')
+            self.assertEqual(result['errors'], [])
+            self.assertEqual(result['verified_experiences'], 5)
+            for item in result['experiences']:
+                text, scopes = expected[item['document_id']]
+                scope = scopes[item['skill_name']]
+                self.assertEqual(item['model_contribution_scope'], 'personal')
+                self.assertEqual(item['contribution_scope'], scope)
+                self.assertEqual(item['contribution_basis']['reason'],
+                                 'document_personal' if scope == 'personal' else 'not_performed')
+                self.assertEqual(item['evidence_text'], text)
+                self.assertEqual(text[item['evidence_start']:item['evidence_end']], text)
+                self.assertEqual(project_service.compare_skill([item])[0],
+                                 'document_supported' if scope == 'personal' else 'needs_confirmation')
+            saved = self.client.get(self.base + '/project-experience-analysis').json()
+            self.assertEqual(saved['experiences'], result['experiences'])
+            cached = self.analyze()
+            self.assertEqual(cached['requested_documents'], 0)
+            self.assertEqual(cached['experiences'], result['experiences'])
+            self.assertEqual(model.call_count, 4)
+
+    def test_negation_version_upgrade_applies_on_explicit_refresh(self):
+        text, scopes = NEGATION_CASES[-1]
+        did = self.doc(text)
+
+        def legacy_analysis(document):
+            # Persist the old erroneous v3 outcome, including its original IDs.
+            result = project_service.analyze_document(document)
+            for item in result['experiences']:
+                item['contribution_scope'] = 'personal'
+                item['contribution_basis']['reason'] = 'document_personal'
+            return result
+
+        with patch.object(project_service, 'PROJECT_VERSION', 'project-experience-v3'), \
+             patch('api.routes.project_experiences.analyze_document', side_effect=legacy_analysis), \
+             patch('services.gemini_projects._generate', side_effect=lambda schema, prompt, doc: negation_extraction(doc)):
+            legacy = self.analyze()
+            old_item = next(i for i in legacy['experiences'] if i['skill_name'] == 'Figma')
+            self.assertEqual(old_item['contribution_scope'], 'personal')
+            self.answer(old_item, 'confirmed')
+            with closing(connect()) as db:
+                previous = AnalysisRepository(db).analyses(self.rid, legacy['analysis_version'])[(did, 1)]
+                legacy_result = decode(previous['result_json'])
+
+        def fixed_model(schema, prompt, document):
+            self.assertEqual(document['extracted_text'], text)
+            self.assertEqual(document['extraction_revision'], 1)
+            self.assertEqual(document['segments'], [{'start': 0, 'end': len(text), 'paragraph': 1}])
+            return negation_extraction(document)
+
+        with patch('services.gemini_projects._generate', side_effect=fixed_model) as model, \
+             patch('services.document_ocr.DocumentOCR.read', side_effect=AssertionError('No OCR')) as ocr, \
+             patch('worker.documents.request_work', side_effect=AssertionError('No extraction')) as worker:
+            before = self.client.get(self.base + '/project-experience-analysis').json()
+            self.assertEqual(before['status'], 'not_started')
+            self.assertEqual(before['experiences'], [])
+            model.assert_not_called()
+            refreshed = self.analyze(refresh=True)
+            self.assertTrue(refreshed['analysis_version'].startswith('project-experience-v4:'))
+            self.assertEqual(refreshed['requested_documents'], 1)
+            self.assertEqual(refreshed['reused_documents'], 0)
+            self.assertEqual(refreshed['document_basis'], legacy['document_basis'])
+            self.assertEqual({i['skill_name']: i['contribution_scope'] for i in refreshed['experiences']}, scopes)
+            self.assertTrue(all(i['user_answer'] is None for i in refreshed['experiences']))
+            self.assertFalse({i['experience_id'] for i in legacy['experiences']} &
+                             {i['experience_id'] for i in refreshed['experiences']})
+            saved = self.client.get(self.base + '/project-experience-analysis').json()
+            self.assertEqual(saved['experiences'], refreshed['experiences'])
+            self.assertEqual(self.analyze()['requested_documents'], 0)
+            model.assert_called_once()
+            ocr.assert_not_called()
+            worker.assert_not_called()
+        with closing(connect()) as db:
+            previous = AnalysisRepository(db).analyses(self.rid, legacy['analysis_version'])[(did, 1)]
+            self.assertEqual(decode(previous['result_json']), legacy_result)
+            self.assertEqual(AnalysisRepository(db).answers(self.rid)[old_item['experience_id']]['status'], 'confirmed')
+            self.assertEqual(db.execute('SELECT count(*) AS n FROM document_extractions WHERE document_id=?',
+                                        (did,)).fetchone()['n'], 1)
 
     def test_incident_fixed_model_candidates_are_persisted_and_reused(self):
         did = self.doc(PROJECT_TEXT)
@@ -398,7 +483,7 @@ class ProjectExperienceAPI(unittest.TestCase):
 
     def test_version_upgrade_and_failed_refresh_preserve_answer_boundaries(self):
         self.doc('제가 Python 코드를 작성했습니다.\n팀은 Docker 환경을 구성했습니다.')
-        with patch.object(project_service, 'PROJECT_VERSION', 'project-experience-v2'), \
+        with patch.object(project_service, 'PROJECT_VERSION', 'project-experience-v3'), \
              patch('services.project_experience.extract_project_experiences', side_effect=fake_extraction):
             legacy = self.analyze()
             self.answer(legacy['experiences'][0], 'confirmed')
@@ -411,7 +496,7 @@ class ProjectExperienceAPI(unittest.TestCase):
             model.assert_not_called()
             upgraded = self.analyze()
             self.assertEqual(model.call_count, 1)
-            self.assertTrue(upgraded['analysis_version'].startswith('project-experience-v3:'))
+            self.assertTrue(upgraded['analysis_version'].startswith('project-experience-v4:'))
             self.assertTrue(all(i['user_answer'] is None for i in upgraded['experiences']))
             ocr.assert_not_called()
         item = upgraded['experiences'][0]

@@ -16,7 +16,9 @@ CASES = ['sources_confirm_correction_and_job_snapshot_reuse', 'corrected_skill_m
          'classbridge_details_context_and_nonfatal_adjustments',
          'refresh_reuses_extraction_and_never_reassigns_answers',
          'version_upgrade_and_failed_refresh_preserve_answer_boundaries',
-         'incident_fixed_model_candidates_are_persisted_and_reused']
+         'incident_fixed_model_candidates_are_persisted_and_reused',
+         'negation_fixed_candidates_are_persisted_and_reused',
+         'negation_version_upgrade_applies_on_explicit_refresh']
 
 
 @pytest.mark.parametrize('case', CASES)

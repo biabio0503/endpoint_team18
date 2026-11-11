@@ -15,7 +15,8 @@ from services import project_experience as service
 from services.gemini import GeminiError
 from services.gemini_projects import extract_project_experiences
 from services.project_experience_schemas import DocumentExperience, ExperienceAnswer
-from experience_activity_regressions import EXPERIENCES, PROJECT_TEXT, fixed_extraction
+from experience_activity_regressions import (EXPERIENCES, PROJECT_TEXT, fixed_extraction,
+                                            NEGATION_CASES, negation_extraction)
 
 
 def document(text='제가 Python으로 전처리 코드를 작성했습니다.'):
@@ -27,6 +28,60 @@ def extraction(doc, scope='personal', **changes):
     item = {'skill_name': 'Python 3', 'category': 'programming_language', 'activity': '전처리 코드 작성',
             'contribution_scope': scope, 'evidence_text': doc['extracted_text'], **changes}
     return DocumentExperience(document_id=doc['document_id'], extraction_revision=doc['extraction_revision'], experiences=[item])
+
+
+@pytest.mark.parametrize('text,scopes', NEGATION_CASES,
+                         ids=['performed', 'never_performed', 'participant_problem', 'mixed_activities'])
+@pytest.mark.parametrize('geometry', [False, True], ids=['text', 'bbox'])
+def test_negation_fixed_candidates_follow_source_activity(text, scopes, geometry):
+    doc = document(text)
+    if geometry:
+        doc['segments'][0]['bbox'] = [0, 0, 600, 20]
+    with patch('services.gemini_projects._generate', return_value=negation_extraction(doc)) as model:
+        result = service.analyze_document(doc)
+    model.assert_called_once()
+    assert result['status'] == 'success' and result['errors'] == []
+    items = {item['skill_name']: item for item in result['experiences']}
+    assert set(items) == set(scopes)
+    for name, scope in scopes.items():
+        item = items[name]
+        assert item['model_contribution_scope'] == 'personal'
+        assert item['contribution_scope'] == scope
+        assert item['contribution_basis']['reason'] == (
+            'document_personal' if scope == 'personal' else 'not_performed')
+        assert item['activity'] == item['evidence_text'] == text
+        assert text[item['evidence_start']:item['evidence_end']] == text
+        assert service.compare_skill([{**item, 'user_answer': None}])[0] == (
+            'document_supported' if scope == 'personal' else 'needs_confirmation')
+
+
+@pytest.mark.parametrize('text,scopes', [
+    ('저는 사용자 인터뷰를 진행했지만 Figma로 프로토타입을 제작하지 않았습니다.',
+     {'사용자 인터뷰': 'personal', 'Figma': 'unknown'}),
+    ('저는 Figma로 프로토타입을 만든 적은 없지만 사용자 인터뷰를 진행했습니다.',
+     {'Figma': 'unknown', '사용자 인터뷰': 'personal'}),
+    ('저는 Figma를 사용하지 않았고 사용자 인터뷰를 진행했습니다.',
+     {'Figma': 'unknown', '사용자 인터뷰': 'personal'}),
+    ('저는 사용자 인터뷰를 진행했습니다. Figma로 프로토타입을 만든 적이 없습니다.',
+     {'사용자 인터뷰': 'personal', 'Figma': 'unknown'}),
+    ('저는 사용자 인터뷰와 사용성 테스트를 진행한 적이 없습니다.',
+     {'사용자 인터뷰': 'unknown', '사용성 테스트': 'unknown'}),
+    ('저는 사용자 인터뷰를 진행해 사용자가 기능을 사용하지 못하는 이유를 기록했습니다.',
+     {'사용자 인터뷰': 'personal'}),
+    ('저는 사용자 인터뷰를 진행하여 사용자가 기능을 사용하지 않는 이유를 기록했습니다.',
+     {'사용자 인터뷰': 'personal'}),
+    ('저는 사용자 인터뷰를 진행해 본 적이 없습니다.', {'사용자 인터뷰': 'unknown'}),
+    ('저는 사용자 인터뷰를 진행한 경험이 없습니다.', {'사용자 인터뷰': 'unknown'}),
+    ('저는 Figma로 프로토타입을 만들어 본 적은 없습니다.', {'Figma': 'unknown'}),
+    ('저는 Figma로 프로토타입을 만든 적도 없습니다.', {'Figma': 'unknown'}),
+])
+def test_negation_stays_with_the_named_activity(text, scopes):
+    doc = document(text)
+    model = response(doc, [candidate(name, text) for name in scopes])
+    with patch('services.gemini_projects._generate', return_value=model):
+        result = service.analyze_document(doc)
+    assert result['status'] == 'success' and not result['errors']
+    assert {item['skill_name']: item['contribution_scope'] for item in result['experiences']} == scopes
 
 
 def test_incident_fixed_candidates_survive_real_analysis_pipeline():

@@ -13,7 +13,18 @@ from services.job_skill_analysis import _key, _skill_in_quote
 PERSONAL = re.compile(r'\bI\s|\bmy\s|나는|내가|제가|저는|본인은|본인이', re.I)
 TEAM = re.compile(r'팀원\s*담당|팀원\s+[가-힣A-Za-z]+(?:은|는|이|가)(?=\s)|'
                   r'팀\s*(?:전체|담당|수행|에서는|은|이)|\b(?:we|our team)\b', re.I)
-NEGATIVE = re.compile(r'미수행|미사용|미구현|미참여|(?:수행|사용|구현|제작|진행|기록|정리)하지\s*않|만들지\s*않')
+WORK_VERB = r'(?:수행|사용|구현|참여|설계|작성|파싱|연동|구성|설정|개발|배포|운영|구축|처리|분석|전처리|제작|진행|기록|정리)'
+NEGATIVE = re.compile(
+    r'미수행|미사용|미구현|미참여|(?:' + WORK_VERB + r'하|만들)지\s*(?:않|못)|'
+    r'(?:' + WORK_VERB + r'(?:한|해\s*본)|만든|만들어\s*본)\s*(?:적|경험)(?:이|은|도)?\s*없')
+# Keep the predicate in its clause. Splitting at arbitrary negative words would
+# also reject completed work describing a participant's problem (찾지 못하는).
+# Do not split noun lists: multiple technologies can share one denied predicate.
+ACTIVITY_CLAUSE_END = re.compile(
+    r'(?:' + WORK_VERB + r'(?:했(?:지만|으나|고|으며|는데)|하(?:지만|고|며|여)|해(?:서)?)|'
+    r'만들(?:었(?:지만|으나|고|으며|는데)|어(?:서)?|고|며)|'
+    r'(?:않|없)(?:았|었)?(?:지만|고|으며|는데)|못했(?:지만|고|으며|는데))'
+    r'(?=\s|[,.;!?]|$)|[.!?](?=\s|$)')
 ACTION = re.compile(r'설계|구현|작성|파싱|연동|사용(?:했|하|하여|한|함|해|$|[\s.,])|구성|설정|개발|배포|운영|구축|처리|분석|전처리|'
                     r'만들(?:었|어|고|기|지)|제작|진행|기록|정리|'
                     r'\b(?:used?|built|implemented|designed|wrote|created|developed|configured|deployed|analy[sz]ed)\b', re.I)
@@ -43,6 +54,24 @@ def clean(text):
 
 def performed(text):
     return bool(ACTION.search(text)) and not NON_WORK.search(text)
+
+
+def negates_skill(name, text):
+    # A model may cite the same whole sentence for several activities. Only the
+    # clause naming this candidate can deny it; other clauses remain in the quote.
+    start = 0
+    negatives = list(NEGATIVE.finditer(text))
+    if not negatives:
+        return False
+    # 진행해 본 적이 없다 / 만들어 본 적이 없다 are single negative predicates.
+    ends = [m.end() for m in ACTIVITY_CLAUSE_END.finditer(text)
+            if not any(n.start() < m.end() < n.end() for n in negatives)] + [len(text)]
+    for end in ends:
+        clause = text[start:end]
+        if names_skill(name, clause) and NEGATIVE.search(clause):
+            return True
+        start = end
+    return False
 
 
 def rectangle(segment):
@@ -347,7 +376,7 @@ class EvidenceIndex:
         else:
             return None
         actor_text = '' if flattened_rows else local + ' ' + label
-        if NEGATIVE.search(actor_text) or NON_WORK.search(actor_text):
+        if (not flattened_rows and (negates_skill(name, local) or NEGATIVE.search(label))) or NON_WORK.search(actor_text):
             scope, reason = 'unknown', 'not_performed'
         elif TEAM.search(actor_text):
             scope, reason = 'team', 'explicit_team'
