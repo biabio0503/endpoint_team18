@@ -12,7 +12,7 @@ from services.project_evidence import EvidenceIndex, names_skill
 from services.job_skill_analysis import ANALYSIS_VERSION, normalize_skill, _key, skill_priority
 
 MAX_PROJECT_CHARS = 60000
-PROJECT_VERSION = 'project-experience-v2'
+PROJECT_VERSION = 'project-experience-v3'
 JOB_VERSION = ANALYSIS_VERSION
 
 

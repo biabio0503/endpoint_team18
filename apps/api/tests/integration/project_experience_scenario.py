@@ -21,6 +21,7 @@ from services.project_experience_schemas import DocumentExperience
 from services import project_experience as project_service
 from classbridge import (DETAILS, ROLE_DESCRIPTION, classbridge_document,
                         classbridge_original_order_document, classbridge_extraction)
+from experience_activity_regressions import EXPERIENCES, PROJECT_TEXT, fixed_extraction
 
 
 def fake_extraction(document):
@@ -111,6 +112,26 @@ class ProjectExperienceAPI(unittest.TestCase):
         response = self.client.get(self.base + '/skill-comparison')
         self.assertEqual(response.status_code, 200, response.text)
         return response.json()
+
+    def test_incident_fixed_model_candidates_are_persisted_and_reused(self):
+        did = self.doc(PROJECT_TEXT)
+        # Exercise the real extraction wrapper, verifier, API persistence and GET.
+        with patch('services.gemini_projects._generate', side_effect=lambda schema, prompt, doc: fixed_extraction(doc)) as model:
+            result = self.analyze()
+            self.assertEqual(result['status'], 'success')
+            self.assertEqual(result['errors'], [])
+            items = {item['skill_name']: item for item in result['experiences']}
+            for name, quote in EXPERIENCES[:4]:
+                self.assertEqual(items[name]['contribution_scope'], 'personal')
+                self.assertEqual(items[name]['evidence_text'], quote)
+                self.assertEqual(items[name]['document_id'], did)
+                self.assertIsNone(items[name]['user_answer'])
+            self.assertNotEqual(items['React']['contribution_scope'], 'personal')
+            self.assertNotEqual(items['Framer']['contribution_scope'], 'personal')
+            saved = self.client.get(self.base + '/project-experience-analysis').json()
+            self.assertEqual(saved['experiences'], result['experiences'])
+            self.assertEqual(self.analyze()['requested_documents'], 0)
+            model.assert_called_once()
 
     def test_sources_confirm_correction_and_job_snapshot_reuse(self):
         d1 = self.doc('제가 Python으로 전처리 코드를 작성했습니다.\n팀은 Docker 환경을 구성했습니다.')
@@ -377,7 +398,7 @@ class ProjectExperienceAPI(unittest.TestCase):
 
     def test_version_upgrade_and_failed_refresh_preserve_answer_boundaries(self):
         self.doc('제가 Python 코드를 작성했습니다.\n팀은 Docker 환경을 구성했습니다.')
-        with patch.object(project_service, 'PROJECT_VERSION', 'project-experience-v1'), \
+        with patch.object(project_service, 'PROJECT_VERSION', 'project-experience-v2'), \
              patch('services.project_experience.extract_project_experiences', side_effect=fake_extraction):
             legacy = self.analyze()
             self.answer(legacy['experiences'][0], 'confirmed')
@@ -390,7 +411,7 @@ class ProjectExperienceAPI(unittest.TestCase):
             model.assert_not_called()
             upgraded = self.analyze()
             self.assertEqual(model.call_count, 1)
-            self.assertTrue(upgraded['analysis_version'].startswith('project-experience-v2:'))
+            self.assertTrue(upgraded['analysis_version'].startswith('project-experience-v3:'))
             self.assertTrue(all(i['user_answer'] is None for i in upgraded['experiences']))
             ocr.assert_not_called()
         item = upgraded['experiences'][0]
