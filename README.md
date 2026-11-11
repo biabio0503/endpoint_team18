@@ -52,7 +52,7 @@ npm run dev
 | `SUPABASE_URL`, `SUPABASE_STORAGE_BUCKET` | 비공개 문서 Storage 설정 |
 | `SUPABASE_SECRET_KEY` | 서버 전용 Storage 키. 기존 `SUPABASE_SERVICE_ROLE_KEY`도 지원 |
 | `ROADMAP_OCR_PROVIDER` | 기본 `none`; 승인된 설정 후 `google_vision` |
-| `ROADMAP_OCR_MONTHLY_UNIT_LIMIT`, `ROADMAP_OCR_MAX_PAGES_PER_DOCUMENT` | UTC 월 최대 900단위, 문서 최대 50단위 |
+| `ROADMAP_OCR_MONTHLY_UNIT_LIMIT`, `ROADMAP_OCR_MAX_PAGES_PER_DOCUMENT` | 미국 태평양 시간 월 최대 900단위(DST 반영), 문서 최대 50단위 |
 | `GOOGLE_APPLICATION_CREDENTIALS` | 백엔드 전용 서비스 계정/ADC 파일 경로 |
 | `GEMINI_API_KEY`, `GEMINI_MODEL` | 서버 전용 Gemini 키와 모델 (기본 모델 `gemini-3.5-flash`) |
 | `ROADMAP_API_ORIGIN` | Next.js 서버 rewrite 대상. 운영 빌드에는 HTTPS 출처 필요 |

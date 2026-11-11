@@ -11,7 +11,7 @@ MESSAGES = {
     'ocr_credentials_invalid': '현재 OCR 기능 이용 불가: 서버 인증 설정을 확인해야 합니다.',
     'ocr_auth_error': '현재 OCR 기능 이용 불가: 서버 인증 또는 권한을 확인해야 합니다.',
     'ocr_quota_exceeded': 'OCR 제공자의 사용량 제한으로 읽지 못했습니다.',
-    'ocr_budget_exceeded': 'OCR 사용량 제한 안내: 이번 UTC 월의 처리 한도에 도달했습니다.',
+    'ocr_budget_exceeded': 'OCR 사용량 제한 안내: 이번 미국 태평양 시간 기준 월의 처리 한도에 도달했습니다.',
     'ocr_document_limit': '문서당 OCR 페이지·이미지 처리 한도에 도달했습니다.',
     'ocr_timeout': 'OCR 응답 시간이 초과되었습니다. 중복 호출 방지를 위해 다시 호출하지 않습니다.',
     'ocr_uncertain': '이전 OCR 호출의 완료 여부를 확인할 수 없어 다시 호출하지 않습니다.',

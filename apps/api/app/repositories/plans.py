@@ -13,6 +13,9 @@ def connect():
         raise StorageUnavailable('ROADMAP_DB_BACKEND는 sqlite 또는 postgres여야 합니다.')
     db = sqlite3.connect(DB_PATH, timeout=10, isolation_level=None, check_same_thread=False)
     db.row_factory = sqlite3.Row
+    # Shared IANA conversion for the additive OCR migration and SQLite CHECK.
+    from services.ocr_billing import billing_period
+    db.create_function('ocr_billing_period', 1, billing_period, deterministic=True)
     db.execute('PRAGMA foreign_keys = ON')
     return db
 
