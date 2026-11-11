@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import JobSkillAnalysis from './JobSkillAnalysis';
+import ActivityRecommendations from './ActivityRecommendations';
 import { Preparation, RoadmapSteps, CourseCandidates } from './RoadmapPanels';
 import { Heading } from '../../components/layout/Shell';
 import { apiRequest } from '../../lib/api/client';
@@ -14,6 +15,7 @@ export default function Result() {
  const [result, setResult] = useState(null), [history, setHistory] = useState([]);
  const [phase, setPhase] = useState('loading'), [message, setMessage] = useState(''), [errorCode, setErrorCode] = useState('');
  const [saving, setSaving] = useState(false), [skillResult, setSkillResult] = useState(null);
+ const [activityResult, setActivityResult] = useState(null);
  const epoch = useRef(0), selectedRun = useRef(''), generating = useRef(false);
  const load = useCallback(async (runId = selectedRun.current) => {
   const ticket = ++epoch.current;
@@ -78,15 +80,16 @@ export default function Result() {
  }
  const usable = result?.roadmap && !result.details_restricted;
  const busy = phase === 'generating' || phase === 'loading' || saving;
- const displayed = selected === 1 ? skillResult : result;
+ const displayed = selected === 4 ? activityResult : selected === 1 ? skillResult : result;
  const displayedGoal = displayed?.career_goal || plan?.input?.career_goal;
  return <>
   <div className="result-head"><Heading number="06" title="로드맵 결과" description="입력 기준에 따른 결과 화면입니다."/><Link href="/input/basic" className="button">입력 수정</Link></div>
-  <div className="result-summary"><div><span>진로 목표</span><strong>{displayedGoal || '입력 확인 중'}</strong></div><div><span>생성 당시 입력 기준</span><strong>{displayed?.run_id || selected === 1 && displayed ? `입력 버전 ${displayed.input_revision}` : '표시할 기준 없음'}</strong></div></div>
-  <p className="notice">진행 순서: 입력·프로젝트 경험 확인 → 직무 역량 비교에서 분석 실행 → 로드맵 생성. 외부 분석이 어려우면 제한 안내를 먼저 저장할 수 있습니다.</p>
+  <div className="result-summary"><div><span>진로 목표</span><strong>{displayedGoal || '입력 확인 중'}</strong></div><div><span>{selected === 4 ? '추천에 사용한 입력 기준' : '생성 당시 입력 기준'}</span><strong>{displayed?.run_id || [1, 4].includes(selected) && displayed ? `입력 버전 ${displayed.input_revision}` : '표시할 기준 없음'}</strong></div></div>
+  <p className="notice">진행 순서: 입력·프로젝트 경험 확인 → 직무 역량 비교에서 분석 실행 → 로드맵 생성. 외부 분석이 어려우면 제한 안내를 먼저 저장할 수 있습니다. 공모전·대외활동은 진로 목표만으로 바로 확인할 수 있습니다.</p>
   <div className="result-tabs" role="tablist" aria-label="결과 구성" onKeyDown={onKeyDown}>{tabs.map((tab, i) => <button key={tab} role="tab" id={`tab-${i}`} aria-controls="result-panel" aria-selected={selected === i} tabIndex={selected === i ? 0 : -1} onClick={() => changeTab(i)}>{tab}</button>)}</div>
-  <section id="result-panel" role="tabpanel" aria-labelledby={`tab-${selected}`} className={selected === 4 ? 'empty-state' : 'empty-state skill-panel'}>
+  <section id="result-panel" role="tabpanel" aria-labelledby={`tab-${selected}`} className="empty-state skill-panel">
    <JobSkillAnalysis active={selected === 1} onResult={onSkillResult}/>
+   <ActivityRecommendations active={selected === 4} inputRevision={plan?.input_revision} onResult={setActivityResult}/>
    {selected !== 1 && selected !== 4 && <>
     <div className="doc-actions roadmap-controls"><button className="primary" onClick={() => generate(false)} disabled={busy || pending || !plan}>{result?.limited_guidance_available ? '제한 안내 로드맵 생성' : '로드맵 생성'}</button>
      {history.some(r => ['success', 'partial'].includes(r.status)) && <button onClick={() => generate(true)} disabled={busy || pending || !plan}>현재 입력으로 다시 분석</button>}
@@ -108,7 +111,6 @@ export default function Result() {
     {result?.status === 'failed' && <p role="status">{roadmapErrorMessage(result)}</p>}
     {usable ? selected === 0 ? <Preparation result={result}/> : selected === 2 ? <RoadmapSteps result={result} saving={busy} onToggle={toggle}/> : <CourseCandidates result={result}/> : !result?.details_restricted && <p>아직 표시할 로드맵 결과가 없습니다. 분석 근거를 확인한 후 로드맵을 생성해 주세요.</p>}
    </>}
-   {selected === 4 && <><strong>공모전·대외활동 · 준비 중</strong><p>현재 공모전·대외활동 수집과 개인화 추천은 제공하지 않습니다. 로드맵을 생성해도 이 탭의 결과는 추가되지 않습니다.</p></>}
   </section>
   <footer className="footer"><span className="field-help">완료 체크는 실행 기록이며 기술 숙련도나 취업 준비 점수가 아닙니다.</span><Link className="button" href="/input/review">경험 확인·수정</Link></footer>
  </>;
