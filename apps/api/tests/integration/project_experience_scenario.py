@@ -23,7 +23,7 @@ from services import project_experience as project_service
 from classbridge import (DETAILS, ROLE_DESCRIPTION, classbridge_document,
                         classbridge_original_order_document, classbridge_extraction)
 from experience_activity_regressions import (EXPERIENCES, PROJECT_TEXT, fixed_extraction,
-                                            NEGATION_CASES, negation_extraction)
+                                            NEGATION_CASES, negation_extraction, CLAUSE_CASES)
 
 
 def fake_extraction(document):
@@ -115,6 +115,102 @@ class ProjectExperienceAPI(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.text)
         return response.json()
 
+    def test_clause_regressions_remain_unconfirmed_in_comparison_and_roadmap(self):
+        from services.roadmap_generation import capture_basis, model_input
+        from roadmap_scenario import fake_roadmap
+        cases = {self.doc(text): (text, name, short, scope) for _, text, name, short, scope in CLAUSE_CASES}
+
+        def fixed(schema, prompt, doc):
+            text, name, short, scope = cases[doc['document_id']]
+            return DocumentExperience(document_id=doc['document_id'], extraction_revision=doc['extraction_revision'],
+                experiences=[dict(skill_name=name, category='other', activity=text,
+                                  contribution_scope='personal', evidence_text=short)])
+
+        with patch('services.gemini_projects._generate', side_effect=fixed):
+            result = self.analyze()
+        self.assertEqual(result['status'], 'success')
+        self.assertEqual(len(result['experiences']), 5)
+        for item in result['experiences']:
+            text, name, short, scope = cases[item['document_id']]
+            self.assertEqual(item['contribution_scope'], scope)
+            self.assertEqual(item['evidence_text'], short)
+            self.assertEqual(text[item['evidence_start']:item['evidence_end']], short)
+            self.assertIsNone(item['user_answer'])
+        self.jobs()
+        compared = {c['skill_name']: c for c in self.comparison()['comparisons']}
+        self.assertEqual(compared['SQL']['student_status'], 'needs_confirmation')
+        self.assertEqual(compared['Docker']['student_status'], 'needs_confirmation')
+        self.assertEqual(compared['Python']['student_status'], 'document_supported')
+        with closing(connect()) as db:
+            basis = capture_basis(db, db.execute('SELECT * FROM roadmap_inputs WHERE request_id=?', (self.rid,)).fetchone())
+        self.assertTrue(model_input(basis)['skills'])
+        self.assertTrue(all(s['allowed_action_type'] == 'verify_experience' for s in model_input(basis)['skills']))
+        with patch('api.routes.roadmaps.generate_roadmap', side_effect=fake_roadmap):
+            response = self.client.post(self.base + '/roadmap', json={'expected_input_revision': self.revision()})
+        self.assertEqual(response.status_code, 201, response.text)
+        saved = self.client.get(self.base + '/roadmap').json()
+        self.assertEqual(saved['preparation_summary']['confirmed_skills'], [])
+        self.assertEqual(saved['preparation_summary']['learning_candidates'], [])
+        self.assertTrue(all(t['task_type'] == 'verify_experience' for s in saved['roadmap'] for t in s['tasks']))
+
+    def test_activity_basis_tracks_effective_project_and_job_evidence(self):
+        def basis():
+            response = self.client.get(self.base)
+            self.assertEqual(response.status_code, 200, response.text)
+            return response.json()['activity_basis']
+
+        initial = basis()
+        self.doc()
+        document_basis = basis()
+        self.assertNotEqual(initial, document_basis)
+        with patch('services.project_experience.extract_project_experiences', side_effect=fake_extraction):
+            first = self.analyze()['experiences'][0]
+            self.assertEqual(basis(), document_basis)  # No confirmed skills yet.
+            self.answer(first, 'confirmed')
+            confirmed = basis()
+            self.assertNotEqual(confirmed, document_basis)
+            revision = self.revision()
+            refreshed = self.analyze(refresh=True)
+            self.assertEqual(self.revision(), revision)
+            self.assertIsNone(refreshed['experiences'][0]['user_answer'])
+            self.assertEqual(basis(), document_basis)
+            again = self.analyze(refresh=True)
+            self.assertEqual(basis(), document_basis)  # New IDs, same effective evidence.
+            self.answer(again['experiences'][0], 'confirmed')
+            self.assertEqual(basis(), confirmed)
+        with patch('services.project_experience.extract_project_experiences', side_effect=GeminiError('gemini_timeout', 'fixed')):
+            self.assertTrue(self.analyze(refresh=True)['refresh_errors'])
+            self.assertEqual(basis(), confirmed)
+        jobs, _ = self.jobs()
+        self.assertEqual(basis(), confirmed)
+        response = self.client.post(self.base + '/skill-comparison/answers', json={
+            'expected_input_revision': self.revision(), 'snapshot_id': jobs['snapshot_id'],
+            'skill_name': 'SQL', 'status': 'no_experience'})
+        self.assertEqual(response.status_code, 200, response.text)
+        gap = basis()
+        self.assertNotEqual(gap, confirmed)
+        with patch('api.routes.job_skill_analysis.analyze_job_skills', return_value={'status': 'error', 'errors': []}):
+            failed = self.client.post(self.base + '/job-skill-analysis', json={'refresh': True}).json()
+        self.assertIn('refresh_error', failed)
+        self.assertEqual(basis(), gap)
+        revision = self.revision()
+        with patch('api.routes.job_skill_analysis.analyze_job_skills', return_value=job_result()):
+            for _ in range(2):
+                self.assertEqual(self.client.post(self.base + '/job-skill-analysis', json={'refresh': True}).status_code, 200)
+                self.assertEqual(basis(), confirmed)  # Replaced snapshot removes its SQL answer.
+        self.assertEqual(self.revision(), revision)
+        with patch('api.routes.activities.catalog.get', return_value=([], [])):
+            response = self.client.get(self.base + '/activities')
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()['activity_basis'], basis())
+        # A field unrelated to activity ranking must not invalidate its cache.
+        changed = self.client.patch(self.base, json={'expected_input_revision': self.revision(), 'changes': {'year_level': 2}})
+        self.assertEqual(changed.status_code, 200, changed.text)
+        self.assertEqual(basis(), confirmed)
+        changed = self.client.patch(self.base, json={'expected_input_revision': self.revision(), 'changes': {'target_role': '백엔드 개발자'}})
+        self.assertEqual(changed.status_code, 200, changed.text)
+        self.assertNotEqual(basis(), confirmed)
+
     def test_negation_fixed_candidates_are_persisted_and_reused(self):
         expected = {self.doc(text): (text, scopes) for text, scopes in NEGATION_CASES}
         with patch('services.gemini_projects._generate', side_effect=lambda schema, prompt, doc: negation_extraction(doc)) as model:
@@ -145,14 +241,14 @@ class ProjectExperienceAPI(unittest.TestCase):
         did = self.doc(text)
 
         def legacy_analysis(document):
-            # Persist the old erroneous v3 outcome, including its original IDs.
+            # Persist the old erroneous v4 outcome, including its original IDs.
             result = project_service.analyze_document(document)
             for item in result['experiences']:
                 item['contribution_scope'] = 'personal'
                 item['contribution_basis']['reason'] = 'document_personal'
             return result
 
-        with patch.object(project_service, 'PROJECT_VERSION', 'project-experience-v3'), \
+        with patch.object(project_service, 'PROJECT_VERSION', 'project-experience-v4'), \
              patch('api.routes.project_experiences.analyze_document', side_effect=legacy_analysis), \
              patch('services.gemini_projects._generate', side_effect=lambda schema, prompt, doc: negation_extraction(doc)):
             legacy = self.analyze()
@@ -177,7 +273,7 @@ class ProjectExperienceAPI(unittest.TestCase):
             self.assertEqual(before['experiences'], [])
             model.assert_not_called()
             refreshed = self.analyze(refresh=True)
-            self.assertTrue(refreshed['analysis_version'].startswith('project-experience-v4:'))
+            self.assertTrue(refreshed['analysis_version'].startswith('project-experience-v5:'))
             self.assertEqual(refreshed['requested_documents'], 1)
             self.assertEqual(refreshed['reused_documents'], 0)
             self.assertEqual(refreshed['document_basis'], legacy['document_basis'])
@@ -483,7 +579,7 @@ class ProjectExperienceAPI(unittest.TestCase):
 
     def test_version_upgrade_and_failed_refresh_preserve_answer_boundaries(self):
         self.doc('제가 Python 코드를 작성했습니다.\n팀은 Docker 환경을 구성했습니다.')
-        with patch.object(project_service, 'PROJECT_VERSION', 'project-experience-v3'), \
+        with patch.object(project_service, 'PROJECT_VERSION', 'project-experience-v4'), \
              patch('services.project_experience.extract_project_experiences', side_effect=fake_extraction):
             legacy = self.analyze()
             self.answer(legacy['experiences'][0], 'confirmed')
@@ -496,7 +592,7 @@ class ProjectExperienceAPI(unittest.TestCase):
             model.assert_not_called()
             upgraded = self.analyze()
             self.assertEqual(model.call_count, 1)
-            self.assertTrue(upgraded['analysis_version'].startswith('project-experience-v4:'))
+            self.assertTrue(upgraded['analysis_version'].startswith('project-experience-v5:'))
             self.assertTrue(all(i['user_answer'] is None for i in upgraded['experiences']))
             ocr.assert_not_called()
         item = upgraded['experiences'][0]

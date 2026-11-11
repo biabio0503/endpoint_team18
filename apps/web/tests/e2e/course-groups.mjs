@@ -46,12 +46,25 @@ try {
  };
  const click = text => run(`[...document.querySelectorAll('button')].find(e=>e.textContent===${JSON.stringify(text)}&&!e.disabled).click()`);
  const search = async value => {
+  // The input changes before the debounced request starts; the previous ready
+  // row can still be enabled then. Wait for this query's fetch and rendered row.
+  await run(`window.completedCourseQuery=null`);
   await run(`(()=>{const e=document.querySelector('input[aria-label="과목명·코드 검색"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(e,${JSON.stringify(value)});e.dispatchEvent(new Event('input',{bubbles:true}));})()`);
-  await wait(`document.querySelector('input[aria-label="과목명·코드 검색"]').value===${JSON.stringify(value)} && document.body.innerText.includes('검색 결과 1개') && !document.querySelector('[role=switch]').disabled`);
+  await wait(`window.completedCourseQuery===${JSON.stringify(value)} && document.querySelector('input[aria-label="과목명·코드 검색"]').value===${JSON.stringify(value)} && document.body.innerText.includes('검색 결과 1개') && !document.querySelector('[role=switch]').disabled`);
  };
  await send('Page.enable');
  await send('Network.setCookie', { name: cookie.slice(0, separator), value: cookie.slice(separator + 1), url: origin, httpOnly: true, sameSite: 'Lax' });
  await send('Page.addScriptToEvaluateOnNewDocument', { source: `
+  const courseFetch=window.fetch;
+  window.fetch=async(input,options)=>{
+   const response=await courseFetch(input,options);
+   const url=new URL(String(input),location.origin);
+   if(url.pathname.endsWith('/courses')&&response.ok){
+    await response.clone().json();
+    window.completedCourseQuery=url.searchParams.get('q');
+   }
+   return response;
+  };
   localStorage.setItem('sb-job-skills-test-auth-token',JSON.stringify({access_token:'test.token.value',refresh_token:'test-refresh',expires_at:Math.floor(Date.now()/1000)+3600,expires_in:3600,token_type:'bearer',user:{id:'course-groups-qa-user',is_anonymous:true}}));
   sessionStorage.setItem('roadmap_request_id',${JSON.stringify(fixture.request_id)});
   sessionStorage.setItem('roadmap_request_owner','course-groups-qa-user');

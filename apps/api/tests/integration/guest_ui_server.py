@@ -9,7 +9,7 @@ with tempfile.TemporaryDirectory(prefix='team18-guest-ui-') as tmp:
     os.environ.update(ROADMAP_DB_BACKEND='sqlite', ROADMAP_DB_PATH=str(Path(tmp)/'ui.db'),
         ROADMAP_FILE_STORAGE_PATH=str(Path(tmp)/'files'), ROADMAP_AUTO_SEED_DEV='0',
         ROADMAP_APP_ORIGIN='http://localhost:15101', ROADMAP_INSECURE_LOCAL_COOKIE='1',
-        GEMINI_API_KEY='', SUPABASE_URL='', SUPABASE_SECRET_KEY='', RENDER='false')
+        GEMINI_API_KEY='', CONTESTKOREA_API_KEY='', SUPABASE_URL='', SUPABASE_SECRET_KEY='', RENDER='false')
     sys.path.insert(0,str(Path(__file__).resolve().parents[2]))
     from app.main import app
     from repositories.plans import connect
