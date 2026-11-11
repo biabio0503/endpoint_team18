@@ -13,7 +13,7 @@
 - 운영 저장소: Supabase PostgreSQL(서버의 psycopg 3)과 비공개 Supabase Storage. Gemini는 백엔드에서만 호출합니다. 개발과 격리 테스트는 SQLite와 로컬 파일 저장소도 지원합니다.
 - 브라우저 → Vercel Next.js `/api/*` rewrite → Render FastAPI → PostgreSQL / Storage / Gemini. API는 쓰기 요청 Origin, 운영 Supabase Bearer 인증(로컬 SQLite는 HttpOnly 세션 쿠키), 계획 소유권을 검사합니다.
 
-문서 원본과 추출 결과는 버전 관리되며, 부분 추출 확인·재추출·삭제를 지원합니다. PostgreSQL의 문서 작업은 lease로 중복 처리를 방지하고 후속 요청에서 복구합니다. Render Free에서는 요청이 없을 때 즉시 실행이 보장되지 않습니다. OCR은 제공하지 않습니다.
+문서 원본과 추출 결과는 버전 관리되며, 부분 추출 확인·재추출·삭제를 지원합니다. PostgreSQL의 문서 작업은 lease로 중복 처리를 방지하고 후속 요청에서 복구합니다. Render Free에서는 요청이 없을 때 즉시 실행이 보장되지 않습니다. 스캔 PDF와 DOCX 본문 이미지에는 선택적 Google Cloud Vision OCR을 지원하며 기본값은 비활성화입니다. [설정·비용 보호·마이그레이션·검증 안내](docs/google-vision-ocr.md)를 확인하세요.
 
 ## 폴더와 문서
 
@@ -51,6 +51,9 @@ npm run dev
 | `ROADMAP_POSTGRES_DOCUMENTS_ENABLED` | PostgreSQL 문서 기능 활성화 플래그 |
 | `SUPABASE_URL`, `SUPABASE_STORAGE_BUCKET` | 비공개 문서 Storage 설정 |
 | `SUPABASE_SECRET_KEY` | 서버 전용 Storage 키. 기존 `SUPABASE_SERVICE_ROLE_KEY`도 지원 |
+| `ROADMAP_OCR_PROVIDER` | 기본 `none`; 승인된 설정 후 `google_vision` |
+| `ROADMAP_OCR_MONTHLY_UNIT_LIMIT`, `ROADMAP_OCR_MAX_PAGES_PER_DOCUMENT` | UTC 월 최대 900단위, 문서 최대 50단위 |
+| `GOOGLE_APPLICATION_CREDENTIALS` | 백엔드 전용 서비스 계정/ADC 파일 경로 |
 | `GEMINI_API_KEY`, `GEMINI_MODEL` | 서버 전용 Gemini 키와 모델 (기본 모델 `gemini-3.5-flash`) |
 | `ROADMAP_API_ORIGIN` | Next.js 서버 rewrite 대상. 운영 빌드에는 HTTPS 출처 필요 |
 | `ROADMAP_DB_PATH`, `ROADMAP_FILE_STORAGE_PATH` | 로컬 SQLite와 문서 경로 |
