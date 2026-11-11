@@ -19,6 +19,7 @@ from providers.document_images import pdf_page_image
 from providers.google_vision_ocr import GoogleVisionOCR, OCRError, availability
 from repositories.documents import DocumentRepository
 from services import document_ocr as service
+from services.ocr_billing import billing_period
 from services.document_ocr import DocumentOCR, LeaseLost
 from worker import documents as worker
 
@@ -130,7 +131,8 @@ def test_render_bounds():
 
 
 @pytest.fixture
-def ledger(tmp_path,monkeypatch):
+def ledger(tmp_path,monkeypatch,request):
+    legacy = getattr(request, 'param', None) == 'legacy'
     postgres=os.environ.get('ROADMAP_OCR_TEST_BACKEND')=='postgres'
     cleanup=lambda:None
     if postgres:
@@ -149,7 +151,9 @@ def ledger(tmp_path,monkeypatch):
             admin.execute(f'CREATE TABLE "{schema}".roadmap_inputs(request_id text PRIMARY KEY, input_revision integer NOT NULL DEFAULT 0, updated_at timestamptz)')
             admin.execute("DO $$ BEGIN IF NOT EXISTS(SELECT FROM pg_roles WHERE rolname='anon') THEN CREATE ROLE anon; END IF; IF NOT EXISTS(SELECT FROM pg_roles WHERE rolname='authenticated') THEN CREATE ROLE authenticated; END IF; END $$")
             root=Path(__file__).resolve().parents[4]
-            for name in ('20261108122001_phase3_documents.sql','20261110091129_document_ocr_units.sql'):
+            names = ['20261108122001_phase3_documents.sql','20261110091129_document_ocr_units.sql']
+            if not legacy: names.append('20261111021219_document_ocr_billing_period.sql')
+            for name in names:
                 admin.execute((root/'supabase/migrations'/name).read_text().replace('public.',f'"{schema}".'))
             admin.execute(f"INSERT INTO \"{schema}\".roadmap_inputs(request_id) VALUES('plan')")
         def connect():
@@ -160,9 +164,12 @@ def ledger(tmp_path,monkeypatch):
         path=tmp_path/'ocr.sqlite3'
         def connect():
             db=sqlite3.connect(path,isolation_level=None,timeout=10); db.row_factory=sqlite3.Row
+            db.create_function('ocr_billing_period', 1, billing_period, deterministic=True)
             db.execute('PRAGMA foreign_keys=ON'); return db
         with closing(connect()) as db:
-            for file in sorted((Path(__file__).resolve().parents[2]/'migrations').glob('*.sql')): db.executescript(file.read_text())
+            for file in sorted((Path(__file__).resolve().parents[2]/'migrations').glob('*.sql')):
+                if legacy and file.name == '010_document_ocr_billing_period.sql': continue
+                db.executescript(file.read_text())
             db.execute("INSERT INTO session_owners(owner_id,token_digest,expires_at,created_at) VALUES('owner','digest','2099-01-01','2026-01-01')")
             db.execute("INSERT INTO roadmap_inputs(request_id,owner_id,created_at,updated_at) VALUES('plan','owner','2026-01-01','2026-01-01')")
     monkeypatch.setattr(service,'connect',connect); monkeypatch.setattr(worker,'connect',connect)
@@ -239,15 +246,15 @@ def test_same_unit_concurrent_call(ledger):
     assert provider.detect.call_count==1
 
 
-def test_utc_month_and_hard_ceiling(ledger,monkeypatch):
-    monkeypatch.setattr(service,'now',lambda:datetime(2026,11,30,23,59,tzinfo=timezone.utc))
+def test_pacific_month_and_hard_ceiling(ledger,monkeypatch):
+    monkeypatch.setattr(service,'budget_time',lambda db:datetime(2026,11,30,23,59,tzinfo=timezone.utc))
     monkeypatch.setenv('ROADMAP_OCR_MONTHLY_UNIT_LIMIT','999999'); ocr,_=reader(ledger)
     with closing(ledger()) as db: db.execute("UPDATE project_documents SET extraction_lease_until='2099-01-01T00:00:00+00:00'")
     ocr.read('page:1',png)
     with closing(ledger()) as db:
         assert service.remaining(db)==899
         assert db.execute('SELECT usage_month FROM document_ocr_units').fetchone()['usage_month']=='2026-11'
-        monkeypatch.setattr(service,'now',lambda:datetime(2026,12,1,0,0,tzinfo=timezone.utc))
+        monkeypatch.setattr(service,'budget_time',lambda db:datetime(2026,12,1,8,0,tzinfo=timezone.utc))
         assert service.remaining(db)==900
     ocr.read('page:1',png)
 

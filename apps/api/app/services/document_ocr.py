@@ -11,6 +11,7 @@ import json
 from config import ocr_settings
 from providers.google_vision_ocr import GoogleVisionOCR, OCRError, availability
 from repositories.plans import connect
+from services.ocr_billing import billing_period
 
 
 class LeaseLost(Exception):
@@ -21,9 +22,17 @@ def now():
     return datetime.now(timezone.utc)
 
 
-def remaining(db):
-    used = db.execute('SELECT count(*) AS n FROM document_ocr_units WHERE usage_month=?',
-                      (now().strftime('%Y-%m'),)).fetchone()['n']
+def budget_time(db):
+    """All PostgreSQL workers use the same clock, independent of host timezones/skew."""
+    if getattr(db, 'backend', 'sqlite') == 'postgres':
+        return db.execute('SELECT clock_timestamp() AS at').fetchone()['at'].astimezone(timezone.utc)
+    return now()
+
+
+def remaining(db, *, period=None):
+    period = period or billing_period(budget_time(db))
+    used = db.execute('SELECT count(*) AS n FROM document_ocr_units WHERE billing_period=?',
+                      (period,)).fetchone()['n']
     return max(0, ocr_settings()['monthly_limit'] - used)
 
 
@@ -110,7 +119,10 @@ class DocumentOCR:
         self.check()
         with closing(connect()) as db:
             postgres = getattr(db, 'backend', 'sqlite') == 'postgres'
-            db.execute('BEGIN' if postgres else 'BEGIN IMMEDIATE')
+            # A session default of REPEATABLE READ would retain the snapshot
+            # taken by _active() before waiting for the global lock. Explicit
+            # READ COMMITTED ensures the count sees the previous holder's commit.
+            db.execute('BEGIN ISOLATION LEVEL READ COMMITTED' if postgres else 'BEGIN IMMEDIATE')
             self._active(db)
             if postgres:
                 # Dedicated lock shared by every process, across all owners.
@@ -122,14 +134,18 @@ class DocumentOCR:
             count = db.execute('SELECT count(*) AS n FROM document_ocr_units WHERE document_id=?',
                                (self.row['document_id'],)).fetchone()['n']
             if count >= ocr_settings()['document_limit']: raise OCRError('ocr_document_limit')
-            if remaining(db) < 1: raise OCRError('ocr_budget_exceeded')
-            at = now()
+            at = budget_time(db).astimezone(timezone.utc)
+            period = billing_period(at)
+            if remaining(db, period=period) < 1: raise OCRError('ocr_budget_exceeded')
             db.execute("""INSERT INTO document_ocr_units(document_id,unit_key,extraction_revision,
-                usage_month,status,created_at) VALUES(?,?,?,?,'reserved',?)""",
-                (self.row['document_id'], key, self.row['extraction_revision'], at.strftime('%Y-%m'), at.isoformat()))
+                usage_month,billing_period,status,created_at) VALUES(?,?,?,?,?,'reserved',?)""",
+                (self.row['document_id'], key, self.row['extraction_revision'],
+                 at.strftime('%Y-%m'), period, at.isoformat()))
             db.commit()  # Must be durable before dispatch. Never refund uncertain calls.
         self.check()
-        if now().strftime('%Y-%m') != at.strftime('%Y-%m'):
+        with closing(connect()) as db:
+            dispatch_period = billing_period(budget_time(db))
+        if dispatch_period != period:
             # A delayed dispatch must not spend a previous month's reservation.
             raise OCRError('ocr_uncertain')
         try:
