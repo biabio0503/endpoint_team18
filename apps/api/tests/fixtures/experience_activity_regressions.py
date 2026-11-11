@@ -22,6 +22,27 @@ def fixed_extraction(document):
             for name, quote in EXPERIENCES])
 
 
+NEGATION_CASES = [
+    ('저는 사용자 인터뷰를 진행했습니다.', {'사용자 인터뷰': 'personal'}),
+    ('저는 사용자 인터뷰를 진행한 적이 없습니다.', {'사용자 인터뷰': 'unknown'}),
+    ('저는 사용자 인터뷰를 진행해 사용자가 예약 버튼을 찾지 못하는 지점을 기록했습니다.',
+     {'사용자 인터뷰': 'personal'}),
+    ('저는 사용자 인터뷰를 진행했지만 Figma로 프로토타입을 만든 적은 없습니다.',
+     {'사용자 인터뷰': 'personal', 'Figma': 'unknown'}),
+]
+
+
+def negation_extraction(document):
+    text = document['extracted_text']
+    scopes = next(scopes for quote, scopes in NEGATION_CASES if quote == text)
+    # Both candidates in the mixed case deliberately cite the entire sentence.
+    return DocumentExperience(document_id=document['document_id'],
+        extraction_revision=document['extraction_revision'], experiences=[
+            {'skill_name': name, 'category': 'other', 'activity': text,
+             'contribution_scope': 'personal', 'evidence_text': text}
+            for name in scopes])
+
+
 FRONTEND = {'career_goal': '사용자가 편하게 쓸 수 있는 웹을 만들고 싶습니다.', 'target_role': '프론트엔드 개발자'}
 BIKE_DATA = {'career_goal': '공공 자전거 수요를 분석하고 싶습니다.', 'target_role': '데이터 분석가'}
 
