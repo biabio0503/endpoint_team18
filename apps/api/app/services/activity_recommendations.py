@@ -141,6 +141,15 @@ def recommend(profile, items, sources, now=None, limit=12):
             continue
         seen.add(item['id'])
         period = period_status(item.get('verified_period') or item['period'], now)  # Recheck cache hits too.
+        if item.get('source') in ('dacon', 'daker'):
+            try:
+                start = datetime.fromisoformat(item['application_start_at']).astimezone(KST)
+                end = datetime.fromisoformat(item['application_end_at']).astimezone(KST)
+                period = {'status': 'open' if start <= now <= end else 'closed',
+                          'deadline': end.date().isoformat(), 'closes_at': end.isoformat(),
+                          'deadline_label': end.strftime('%Y-%m-%d %H:%M (한국 시간)')}
+            except (KeyError, TypeError, ValueError):
+                continue
         if period['status'] != 'open' or not eligible_target(item['target']):
             continue
         relevance = match(profile, item)
@@ -156,4 +165,4 @@ def recommend(profile, items, sources, now=None, limit=12):
     return {'status': status, 'activities': recommendations, 'sources': sources,
             'career_goal': profile['career_goal'], 'target_role': profile.get('target_role'),
             'evaluated_at': now.isoformat(), 'valid_until': valid_until.isoformat(),
-            'sample_notice': '콘테스트코리아 Basic DEMO의 분야별 최근 등록 10건 표본입니다. 전체 공고가 아니며, 상세 참가 조건과 변경 사항은 원문에서 확인해 주세요.'}
+            'sample_notice': '콘테스트코리아는 Basic DEMO 분야별 최근 등록 10건, 데이콘·데이커는 서버가 마지막으로 수집에 성공한 공개 목록 표본입니다. 전체 공고가 아니며 접수 기간과 참가 자격을 확인한 공고만 추천합니다. 변경 사항은 원문을 확인해 주세요.'}

@@ -1,0 +1,20 @@
+# Add this Cron Job alongside the existing apps/api Web Service.
+services:
+  - type: cron
+    name: team18-dacon-daily
+    runtime: docker
+    repo: https://github.com/biabio0503/endpoint_team18
+    branch: 크롤링
+    plan: starter
+    schedule: "10 0 * * *" # 09:10 Asia/Seoul, every day; Render uses UTC.
+    # rootDir deliberately omitted: both crawling/ and apps/api/ must be present.
+    dockerContext: .
+    dockerfilePath: ./crawling/dacon/Dockerfile
+    dockerCommand: python -m crawling.dacon.run --mode scheduled
+    envVars:
+      - key: ROADMAP_DB_BACKEND
+        value: postgres
+      - key: ROADMAP_DATABASE_URL
+        sync: false
+      - key: PYTHONUNBUFFERED
+        value: "1"

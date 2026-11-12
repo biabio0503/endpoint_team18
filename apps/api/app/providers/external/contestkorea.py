@@ -92,7 +92,7 @@ def normalize(item, kind):
     # The live category response can also contain promoted posts of the other kind.
     if query.get('Txt_gbn') in ('1', '2'):
         kind = next(k for k, v in KINDS.items() if v == query['Txt_gbn'])
-    return {**record, 'kind': kind}
+    return {**record, 'kind': kind, 'source': 'contestkorea', 'source_label': '콘테스트코리아'}
 
 
 def verify_period(record):
