@@ -39,7 +39,10 @@ try:
     assert response.status_code == 200, response.text
     results = {}
     for goal in ('Python 입문', '파이썬 입문', 'C++ 입문', 'C와 C++', 'CNN',
-                 'convolutional neural network', 'JavaScript 입문', 'pandas 학습'):
+                 'convolutional neural network', 'JavaScript 입문', 'pandas 학습',
+                 'C plus plus 입문', 'C# 입문', 'C sharp 입문', 'Java script 입문', '자바스크립트 입문',
+                 'Java와 JavaScript를 배우고 싶다', 'C는 이미 배웠고 C++를 배우고 싶다',
+                 'C++는 이미 배웠고 C를 배우고 싶다', 'C와 C++를 배우고 싶다'):
         response = case.client.patch(case.base, json={'expected_input_revision': case.revision(),
                                                      'changes': {'career_goal': goal, 'target_role': None}})
         assert response.status_code == 200, response.text
@@ -56,6 +59,14 @@ try:
         results[goal] = courses
     assert signature(results['Python 입문']) == signature(results['파이썬 입문'])
     assert signature(results['CNN']) == signature(results['convolutional neural network'])
+    assert signature(results['C++ 입문']) == signature(results['C plus plus 입문'])
+    assert signature(results['C# 입문']) == signature(results['C sharp 입문'])
+    assert signature(results['JavaScript 입문']) == signature(results['Java script 입문']) == signature(results['자바스크립트 입문'])
+    assert all(c['recommendation_type'] != 'direct' for c in results['C# 입문'])
+    assert results['C는 이미 배웠고 C++를 배우고 싶다'][0]['course_name'].startswith('프로그래밍입문(2)')
+    assert results['C++는 이미 배웠고 C를 배우고 싶다'][0]['course_name'].startswith('프로그래밍입문(1)')
+    assert all(c['recommendation_type'] == 'direct' for c in results['C와 C++를 배우고 싶다'][:2])
+    assert results['Java와 JavaScript를 배우고 싶다'][0]['recommendation_type'] == 'direct'
     assert results['C++ 입문'][0]['course_name'].startswith('프로그래밍입문(2)')
     assert results['C++ 입문'][0]['recommendation_type'] == 'direct'
     assert next(c for c in results['C++ 입문'] if c['course_name'].startswith('프로그래밍입문(1)'))['recommendation_type'] == 'foundation'
@@ -65,6 +76,8 @@ try:
     assert results['JavaScript 입문'][0]['course_name'] == '웹프로그래밍'
     assert results['JavaScript 입문'][0]['recommendation_type'] == 'direct'
     assert all(c['recommendation_type'] != 'direct' for c in results['pandas 학습'])
-    print('Both POST APIs: eight catalog goals agree; no live Gemini calls.')
+    for goal, courses in results.items():
+        print(f"{goal}: {courses[0]['course_name']} [{courses[0]['recommendation_type']}] ({len(courses)} courses)")
+    print(f'Both POST APIs: {len(results)} catalog goals agree; alias signatures match; no live Gemini calls.')
 finally:
     case.tearDown()

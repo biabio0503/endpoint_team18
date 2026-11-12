@@ -3,6 +3,23 @@
 The guard's dedicated tests set small explicit limits and exercise real concurrent
 reservations; other tests suppress only time/volume limits, never ownership/leases.
 """
+import atexit
+import os
+from pathlib import Path
+import sys
+import tempfile
+
+# Set these before pytest imports any test module or application configuration.
+# PostgreSQL scenarios opt in through their own test URLs and subprocess setup.
+_test_storage = tempfile.TemporaryDirectory(prefix='team18-pytest-')
+atexit.register(_test_storage.cleanup)
+os.environ.update(PYTHON_DOTENV_DISABLED='1', ROADMAP_DB_BACKEND='sqlite',
+                  ROADMAP_DATABASE_URL='', ROADMAP_DB_PATH=str(Path(_test_storage.name) / 'test.sqlite3'),
+                  ROADMAP_FILE_STORAGE_PATH=str(Path(_test_storage.name) / 'files'),
+                  ROADMAP_AUTO_SEED_DEV='0', ROADMAP_INSECURE_LOCAL_COOKIE='1',
+                  ROADMAP_APP_ORIGIN='http://localhost:3000', RENDER='false')
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'app'))
+
 import pytest
 
 @pytest.fixture(autouse=True)
