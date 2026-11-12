@@ -56,3 +56,23 @@ test('overlapping tab activations share the same in-flight request', async () =>
  release({ activities: [], valid_until: '2026-11-12T00:00:00Z' });
  assert.deepEqual(await a, await b);
 });
+
+test('an exact event deadline expires the cache at 10:00 KST with both original links intact', async () => {
+ let clock = Date.parse('2026-11-30T09:58:00+09:00'), calls = 0;
+ const deadline = '2026-11-30T10:00:00+09:00';
+ const card = { deadline_label: '2026-11-30 10:00 마감 (한국 시간)', source_links: [
+  { source: 'contestkorea', url: 'https://www.contestkorea.com/sub/view.php?str_no=review' },
+  { source: 'daker', url: 'https://daker.ai/public/hackathons/review' },
+ ] };
+ const load = createActivityLoader({ resolvePlanId: async () => 'plan', now: () => clock, apiRequest: async path => {
+  if (!path.endsWith('/activities')) return { input_revision: 1 };
+  calls++;
+  return { activities: clock < Date.parse(deadline) ? [card] : [], valid_until: deadline };
+ } });
+ const first = await load();
+ assert.equal(first.activities[0].source_links.length, 2);
+ clock = Date.parse('2026-11-30T09:59:59+09:00');
+ assert.deepEqual(await load(), first); assert.equal(calls, 1);
+ clock = Date.parse(deadline);
+ assert.deepEqual((await load()).activities, []); assert.equal(calls, 2);
+});

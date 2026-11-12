@@ -24,7 +24,7 @@ def parse_point(value, end=False):
 
 def extract_evidence(text, calendar_bounds=None):
     lines = [line.strip() for line in (text or '').splitlines() if line.strip()]
-    periods, targets, evidence = {}, [], {}
+    periods, targets, evidence, precision = {}, [], {}, {}
     for i, line in enumerate(lines):
         # Bounded block: do not let a nearby competition/submission period stand
         # in for registration. Stop at the next labelled section/date range.
@@ -43,6 +43,7 @@ def extract_evidence(text, calendar_bounds=None):
                     if end >= start:
                         key = start.isoformat(), end.isoformat()
                         periods[key], evidence[key] = found[0], quote
+                        precision[key] = 'time' if len(re.findall(r'\d+', found[2])) > 3 else 'date'
                 except ValueError:
                     pass
             # Daker displays month/day on its explicitly labelled registration
@@ -64,6 +65,7 @@ def extract_evidence(text, calendar_bounds=None):
                     if len(interpretations) == 1:
                         key = interpretations[0]
                         periods[key], evidence[key] = found[0], quote + '\n연도 근거: ' + ' ~ '.join(calendar_bounds)
+                        precision[key] = 'time'
         if TARGET.search(line):
             value = TARGET.sub('', line, count=1).strip(' :：[]【】-')
             following = []
@@ -85,7 +87,8 @@ def extract_evidence(text, calendar_bounds=None):
     if len(periods) == 1:
         (start, end), period = next(iter(periods.items()))
         result.update(application_start_at=start, application_end_at=end,
-                      application_period=period, application_evidence=evidence[(start, end)])
+                      application_period=period, application_evidence=evidence[(start, end)],
+                      application_end_precision=precision[(start, end)])
     return result
 
 

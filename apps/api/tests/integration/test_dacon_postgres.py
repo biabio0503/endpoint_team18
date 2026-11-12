@@ -35,8 +35,10 @@ def database(request):
     connection.execute(sql.SQL('CREATE SCHEMA {}').format(sql.Identifier(schema)))
     migration = Path(__file__).resolve().parents[4] / 'supabase/migrations/20261112012208_dacon_daily_snapshots.sql'
     connection.execute(migration.read_text().replace('public.', schema + '.'))
-    for pattern in ('*_contestkorea_filtered_snapshots.sql', '*_activity_candidates.sql'):
-        if getattr(request, 'param', None) == 'legacy' and pattern == '*_activity_candidates.sql':
+    for pattern in ('*_contestkorea_filtered_snapshots.sql', '*_activity_candidates.sql', '*_activity_candidate_verification_retry.sql'):
+        if getattr(request, 'param', None) == 'legacy' and pattern != '*_contestkorea_filtered_snapshots.sql':
+            continue
+        if getattr(request, 'param', None) == 'before_retry' and pattern == '*_activity_candidate_verification_retry.sql':
             continue
         path, = migration.parent.glob(pattern)
         connection.execute(path.read_text().replace('public.', schema + '.'))
@@ -141,7 +143,7 @@ def test_repeated_recommendation_api_reads_only_db_and_ck_survives(database, mon
     monkeypatch.setattr(activities, 'capture_profile', lambda *args: (plan, 'stable'))
     ck = {'id': 'ck-fixture', 'kind': 'competition', 'title': '데이터 분석 경진대회', 'target': '대학생',
           'period': '상시 접수', 'category': '데이터', 'source': 'contestkorea'}
-    monkeypatch.setattr(activities, 'load_contestkorea_catalog', lambda db: ([ck], {'status': 'success', 'kind': 'competition'}))
+    monkeypatch.setattr(activities, 'load_contestkorea_catalog', lambda db, **kwargs: ([ck], {'status': 'success', 'kind': 'competition'}))
     app = FastAPI(); app.include_router(activities.router)
     app.dependency_overrides[owned_context] = lambda: (adapter, repo, {'owner_id': 'test'})
     with TestClient(app) as client:

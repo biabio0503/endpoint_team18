@@ -43,7 +43,7 @@ with TestClient(main.app, headers=headers) as client, patch('api.routes.activiti
         other.post('/api/roadmap-inputs')
         assert other.get(path).status_code == 404
     assert fetch.call_count == count
-    def changed_goal(*args):
+    def changed_goal(*args, **kwargs):
         client.patch(base, json={'expected_input_revision': 1, 'changes': {'career_goal': '마케팅'}})
         return [item], sources
     fetch.side_effect = changed_goal

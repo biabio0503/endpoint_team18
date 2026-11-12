@@ -60,7 +60,7 @@ def candidate_keys(item):
     return keys
 
 
-def merge_events(ranked):
+def group_events(ranked):
     groups, index = [], {}
     for item in ranked:
         # Require agreement with every member: missing URLs must not bridge two
@@ -75,12 +75,20 @@ def merge_events(ranked):
             groups[number].append(item)
         for key in keys:
             index.setdefault(key, set()).add(number)
-    result = []
-    for group in groups:
-        links = [{'source': x.get('source', 'contestkorea'), 'source_label': x.get('source_label', '콘테스트코리아'),
+    return groups
+
+
+def source_links(group):
+    return [{'source': x.get('source', 'contestkorea'), 'source_label': x.get('source_label', '콘테스트코리아'),
                   'original_id': x.get('original_id', x['id']), 'url': x.get('url'),
                   'last_success_at': x.get('last_success_at'), 'check_status': x.get('check_status'),
                   'stale': x.get('stale', False)} for x in group]
+
+
+def merge_events(ranked):
+    result = []
+    for group in group_events(ranked):
+        links = source_links(group)
         result.append({**group[0], 'source_links': links,
                        'source_label': ' · '.join(x['source_label'] for x in links)})
     return result

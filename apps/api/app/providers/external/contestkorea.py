@@ -118,6 +118,19 @@ def label_text(value):
     return re.sub(r'[\s:：·ㆍ.]+', '', value)
 
 
+def confirmed_state(value):
+    """Read assertions, not future/conditional notices about closing.
+
+    Strip each qualified closure separately, so a notice cannot hide a later
+    explicit current state in the same cell.
+    """
+    closure = r'(?:조기\s*)?(?:(?:참가\s*)?(?:접수|신청|모집|대회|행사)(?:이|가)?\s*)?(?:마감|종료|취소)'
+    value = re.sub(closure + r'\s*(?:될\s*수\s*있(?:습니다|어요|음|으며)?|가능(?:합니다|하지만|하며|함)?|예정(?:입니다|임)?|되지\s*않았[가-힣]*|시(?=\s|[,.)]|$)|일|까지)', '', value)
+    cancelled = bool(re.search(r'(?:접수|모집|대회|행사)(?:이|가)?\s*취소|^취소[.!]?$', value.strip()))
+    closed = bool(re.search(r'조기\s*마감|(?:접수|신청|모집)(?:이|가)?\s*(?:마감|종료)|^(?:마감|종료)[.!]?$', value.strip()))
+    return cancelled, closed
+
+
 def parse_detail(record, raw):
     page = html.fromstring(raw.decode('utf-8-sig'))
     cells = [tr.xpath('./td')[0] for tr in page.xpath('//tr[th]')
@@ -136,9 +149,10 @@ def parse_detail(record, raw):
     links = set(filter(None, links))
     if len(links) == 1:
         result['official_application_url'] = links.pop()
-    if any(re.search(r'(?:접수|모집|대회|행사)\s*취소|^취소$', value.strip()) for value in states):
+    assertions = [confirmed_state(value) for value in states]
+    if any(cancelled for cancelled, _ in assertions):
         return {**result, 'application_cancelled': True, 'period_source': 'original_page'}
-    if any(re.search(r'조기\s*마감|(?:접수|신청|모집)\s*(?:마감|종료)(?!일|까지)|^(?:마감|종료)$', value.strip()) for value in states):
+    if any(closed for _, closed in assertions):
         return {**result, 'application_closed': True, 'period_source': 'original_page'}
     if len(cells) != 1:
         raise ValueError('registration_structure_changed')
@@ -247,8 +261,14 @@ def collect_kind(kind, key, *, eligible_only=False, now=None, detail_cache=None,
             for item in records:
                 try:
                     record = normalize(item, kind)
-                    if eligible_only and (not eligible_target(record['target'])
-                            or period_status(record['period'], now)['status'] == 'closed'):
+                    old = (known_details or {}).get(record['id'])
+                    unverified = old and old.get('_needs_verification')
+                    # An authoritative unexpired detail must be checked even if
+                    # the API listing still advertises its pre-extension date.
+                    detail_active = old and not (old.get('application_closed') or old.get('application_cancelled')) and period_status(
+                        old.get('verified_period') or old.get('period') or '', now)['status'] in ('open', 'upcoming')
+                    if eligible_only and not detail_active and not unverified and (not eligible_target(record['target'])
+                            or (period_status(record['period'], now)['status'] == 'closed' and not old)):
                         skipped.setdefault(record['id'], record)
                         continue
                     unique.setdefault(record['id'], record)
@@ -258,8 +278,11 @@ def collect_kind(kind, key, *, eligible_only=False, now=None, detail_cache=None,
     def verify(record):
         if record['id'] not in cache:
             old = (known_details or {}).get(record['id'])
-            if old and (old.get('listing_signature') or listing_signature(old)) == record.get('listing_signature'):
-                cache[record['id']] = {**old, 'detail_reused': True}
+            terminal = old and not old.get('_needs_verification') and (old.get('application_closed') or old.get('application_cancelled') or
+                               period_status(old.get('verified_period') or old.get('period') or '', now)['status'] == 'closed')
+            waiting = old and old.get('_needs_verification') and old['_retry_at'] > now
+            if waiting or (terminal and (old.get('listing_signature') or listing_signature(old)) == record.get('listing_signature')):
+                cache[record['id']] = {**{k: v for k, v in old.items() if not k.startswith('_')}, 'detail_reused': True}
             else:
                 cache[record['id']] = verify_period(record)
         return cache[record['id']]

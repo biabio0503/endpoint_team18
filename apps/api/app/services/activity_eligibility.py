@@ -39,9 +39,34 @@ def period_status(value, now):
             raise ValueError
     except ValueError:
         return {'status': 'unknown'}
-    return {'status': 'upcoming' if now < start else 'closed' if now > end else 'open',
+    return {'status': 'upcoming' if now < start else 'closed' if now >= end else 'open',
             'deadline': end_date.isoformat(), 'opens_at': start.isoformat(), 'closes_at': end.isoformat(),
-            'deadline_label': end_date.isoformat() + (f' {end_time:%H:%M} (한국 시간)' if b['hour'] else ' (한국 시간, 당일 포함)')}
+            'deadline_precision': 'time' if b['hour'] else 'date',
+            'deadline_label': end_date.isoformat() + (f' {end_time:%H:%M} 마감 (한국 시간)' if b['hour'] else ' (한국 시간, 당일 포함)')}
+
+
+def application_period(item, now):
+    if item.get('source') not in ('dacon', 'daker'):
+        return period_status(item.get('verified_period') or item.get('period') or '', now)
+    try:
+        start = datetime.fromisoformat(item['application_start_at'])
+        end = datetime.fromisoformat(item['application_end_at'])
+        if start.tzinfo is None or end.tzinfo is None or end < start:
+            return {'status': 'unknown'}
+        start, end = start.astimezone(KST), end.astimezone(KST)
+    except (KeyError, TypeError, ValueError):
+        return {'status': 'unknown'}
+    precision = item.get('application_end_precision')
+    if precision not in ('time', 'date'):
+        # Compatibility with successful historical payloads: consult the actual
+        # original period, never infer precision from a synthesized timestamp.
+        closing_text = re.split(r'~|～|∼|–|—|부터', item.get('application_period') or '')[-1]
+        precision = 'time' if re.search(r'\d{1,2}(?::\d{2}|시)', closing_text) else 'date'
+    return {'status': 'upcoming' if now < start else 'closed' if now >= end else 'open',
+            'opens_at': start.isoformat(), 'closes_at': end.isoformat(), 'deadline': end.date().isoformat(),
+            'deadline_precision': precision,
+            'deadline_label': end.strftime('%Y-%m-%d %H:%M 마감 (한국 시간)') if precision == 'time'
+                              else end.strftime('%Y-%m-%d (한국 시간, 당일 포함)')}
 
 
 def eligible_target(value):
