@@ -135,7 +135,7 @@ def test_repeated_recommendation_api_reads_only_db_and_ck_survives(database, mon
     monkeypatch.setattr(activities, 'capture_profile', lambda *args: (plan, 'stable'))
     ck = {'id': 'ck-fixture', 'kind': 'competition', 'title': '데이터 분석 경진대회', 'target': '대학생',
           'period': '상시 접수', 'category': '데이터', 'source': 'contestkorea'}
-    monkeypatch.setattr(activities.catalog, 'get', lambda: ([ck], [{'status': 'success', 'kind': 'competition'}]))
+    monkeypatch.setattr(activities, 'load_contestkorea_catalog', lambda db: ([ck], {'status': 'success', 'kind': 'competition'}))
     app = FastAPI(); app.include_router(activities.router)
     app.dependency_overrides[owned_context] = lambda: (adapter, repo, {'owner_id': 'test'})
     with TestClient(app) as client:

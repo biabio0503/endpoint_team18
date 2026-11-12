@@ -11,6 +11,8 @@ import re
 from urllib.parse import urlencode, urljoin, urlsplit, parse_qsl
 from urllib.request import Request, build_opener, HTTPRedirectHandler
 from lxml import html
+from datetime import datetime
+from services.activity_eligibility import KST, eligible_target, period_status
 
 BASE = 'https://www.contestkorea.com'
 KINDS = {'competition': '1', 'extracurricular': '2'}
@@ -123,6 +125,8 @@ def verify_period(record):
         if not full or tuple(map(int, short.groups())) != tuple(int(full[i]) for i in (2, 3, 5, 6)):
             raise ValueError
         return {**record, 'verified_period': period, 'period_source': 'original_page'}
+    except OSError:
+        return {**record, 'period_source': 'unverified', 'verification_error': 'provider_unavailable'}
     except Exception:
         return {**record, 'period_source': 'unverified'}
 
@@ -136,9 +140,11 @@ class Collection:
     rejected_items: int = 0
     error_code: str | None = None
     unverified_periods: int = 0
+    failed_details: int = 0
 
 
-def collect_kind(kind, key):
+def collect_kind(kind, key, *, eligible_only=False, now=None):
+    now = (now or datetime.now(KST)).astimezone(KST)
     if not key:
         return Collection((), 'error', error_code='not_configured')
     try:
@@ -172,13 +178,20 @@ def collect_kind(kind, key):
             for item in records:
                 try:
                     record = normalize(item, kind)
+                    if eligible_only and (not eligible_target(record['target'])
+                            or period_status(record['period'], now)['status'] == 'closed'):
+                        continue
                     unique.setdefault(record['id'], record)
                 except (ValueError, TypeError):
                     rejected += 1
     with ThreadPoolExecutor(max_workers=4) as pool:
         items = tuple(pool.map(verify_period, unique.values()))
     unverified = sum(item.get('period_source') == 'unverified' for item in items)
-    incomplete = failed or rejected or unverified
+    failed_details = sum(bool(item.get('verification_error')) for item in items)
+    if eligible_only:
+        items = tuple(item for item in items if
+                      period_status(item.get('verified_period') or item['period'], now)['status'] in ('open', 'upcoming'))
+    incomplete = failed or rejected or failed_details or (unverified and not eligible_only)
     status = 'error' if failed == len(codes) or (rejected and not unique) else 'partial' if incomplete else 'success'
     return Collection(items, status, len(codes), failed, rejected,
-                      'collection_incomplete' if incomplete else None, unverified)
+                      'collection_incomplete' if incomplete else None, unverified, failed_details)

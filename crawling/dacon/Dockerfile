@@ -6,6 +6,10 @@ COPY crawling/dacon/requirements*.txt crawling/dacon/build.sh ./crawling/dacon/
 # native-runtime build environment. The web service needs none of these.
 RUN bash crawling/dacon/build.sh
 COPY crawling/dacon/ ./crawling/dacon/
+COPY crawling/contestkorea/ ./crawling/contestkorea/
+COPY crawling/activities/ ./crawling/activities/
 COPY apps/api/app/config.py ./apps/api/app/config.py
 COPY apps/api/app/repositories/postgres.py ./apps/api/app/repositories/postgres.py
-CMD ["python", "-m", "crawling.dacon.run", "--mode", "scheduled"]
+COPY apps/api/app/providers/external/contestkorea.py ./apps/api/app/providers/external/contestkorea.py
+COPY apps/api/app/services/activity_eligibility.py ./apps/api/app/services/activity_eligibility.py
+CMD ["python", "-m", "crawling.activities.run", "--mode", "scheduled"]

@@ -1,11 +1,10 @@
 """Conservative KST eligibility and deterministic, source-grounded recommendations."""
-from datetime import date, datetime, time, timedelta
+from datetime import datetime, timedelta
 import re
-from zoneinfo import ZoneInfo
 
 from services.project_experience import compare_skill, current_comparison, digest
 
-KST = ZoneInfo('Asia/Seoul')
+from services.activity_eligibility import KST, period_status, eligible_target
 # Synonyms describe a topic, never a posting's unmentioned tool requirements.
 TOPICS = {
     '데이터 분석': ('데이터', 'data', '분석', 'analytics', '통계', '시각화'),
@@ -24,52 +23,6 @@ TOPICS = {
 # studying the environment, an environmental event alone is not analysis practice.
 DOMAINS = {'환경', '건축'}
 POSTING_FIELDS = (('title', '제목'), ('category', '분야'), ('description_text', '본문'))
-DATE = r'(?:(?P<year>20\d{2})\s*[.\-/년]\s*)?(?P<month>\d{1,2})\s*[.\-/월]\s*(?P<day>\d{1,2})(?:\s*[.일])?'
-POINT = re.compile(r'^' + DATE + r'(?:\s*\([월화수목금토일](?:요일)?\))?(?:\s+(?P<hour>\d{1,2})(?::(?P<minute>\d{2})|시(?:\s*(?P<kminute>\d{1,2})분)?))?\s*$')
-ALWAYS = {'상시', '상시접수', '상시모집', '연중상시', '연중상시접수', '연중접수'}
-
-
-def period_status(value, now):
-    """Require a year anchor. An omitted end year can roll into the next year."""
-    value = value.strip()
-    if re.sub(r'\s+', '', value) in ALWAYS:
-        return {'status': 'open', 'deadline': None, 'deadline_label': '상시 접수', 'closes_at': None}
-    parts = re.split(r'\s*(?:~|～|∼|–|부터)\s*', value)
-    if len(parts) != 2:
-        return {'status': 'unknown'}
-    matches = [POINT.fullmatch(re.sub(r'까지$', '', p).strip()) for p in parts]
-    if not all(matches):
-        return {'status': 'unknown'}
-    a, b = [m.groupdict() for m in matches]
-    if not a['year'] and not b['year']:
-        return {'status': 'unknown'}
-    try:
-        am, ad, bm, bd = (int(a['month']), int(a['day']), int(b['month']), int(b['day']))
-        ay = int(a['year'] or b['year'])
-        by = int(b['year'] or a['year'])
-        if not b['year'] and (bm, bd) < (am, ad):
-            by += 1
-        if not a['year'] and (am, ad) > (bm, bd):
-            ay -= 1
-        start_date, end_date = date(ay, am, ad), date(by, bm, bd)
-        start_time = time(int(a['hour'] or 0), int(a['minute'] or a['kminute'] or 0))
-        end_time = time(int(b['hour']), int(b['minute'] or b['kminute'] or 0)) if b['hour'] else time.max
-        start, end = datetime.combine(start_date, start_time, KST), datetime.combine(end_date, end_time, KST)
-        if end < start:
-            raise ValueError
-    except ValueError:
-        return {'status': 'unknown'}
-    return {'status': 'upcoming' if now < start else 'closed' if now > end else 'open',
-            'deadline': end_date.isoformat(), 'closes_at': end.isoformat(),
-            'deadline_label': end_date.isoformat() + (f' {end_time:%H:%M} (한국 시간)' if b['hour'] else ' (한국 시간, 당일 포함)')}
-
-
-def eligible_target(value):
-    # Lists with additional conditions (e.g. 해당자, 지역/학년 제한, 제외) are ambiguous.
-    tokens = [t.strip() for t in re.split(r'[,/·ㆍ•|\n]', value) if t.strip()]
-    known = {'누구나', '대학생', '대학원생', '일반인', '외국인', '유치원', '초등학생', '중학생', '고등학생'}
-    return bool(set(tokens) & {'대학생', '누구나'}) and all(t in known for t in tokens)
-
 
 def contains(text, word):
     # ASCII boundaries avoid AI in 'campaign', Java in JavaScript, etc.
@@ -145,12 +98,13 @@ def recommend(profile, items, sources, now=None, limit=12):
             try:
                 start = datetime.fromisoformat(item['application_start_at']).astimezone(KST)
                 end = datetime.fromisoformat(item['application_end_at']).astimezone(KST)
-                period = {'status': 'open' if start <= now <= end else 'closed',
+                period = {'status': 'upcoming' if now < start else 'closed' if now > end else 'open',
+                          'opens_at': start.isoformat(),
                           'deadline': end.date().isoformat(), 'closes_at': end.isoformat(),
                           'deadline_label': end.strftime('%Y-%m-%d %H:%M (한국 시간)')}
             except (KeyError, TypeError, ValueError):
                 continue
-        if period['status'] != 'open' or not eligible_target(item['target']):
+        if period['status'] not in ('open', 'upcoming') or not eligible_target(item['target']):
             continue
         relevance = match(profile, item)
         if relevance:
@@ -160,6 +114,8 @@ def recommend(profile, items, sources, now=None, limit=12):
     status = 'error' if all(s['status'] == 'error' for s in sources) else 'partial' if any(s['status'] != 'success' for s in sources) else 'success'
     valid_until = now + timedelta(minutes=5)
     for item in recommendations:
+        if item['status'] == 'upcoming' and item.get('opens_at'):
+            valid_until = min(valid_until, datetime.fromisoformat(item['opens_at']))
         if item['closes_at']:
             valid_until = min(valid_until, datetime.fromisoformat(item['closes_at']))
     return {'status': status, 'activities': recommendations, 'sources': sources,
