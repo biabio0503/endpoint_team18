@@ -9,7 +9,7 @@ const closedResponse = process.env.ACTIVITY_REVIEW_CLOSED_ARTIFACT
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_EXECUTABLE && { executablePath: process.env.CHROMIUM_EXECUTABLE }) });
 const context = await browser.newContext({ viewport: { width: 1200, height: 1000 } });
-const id = '11111111-1111-1111-1111-111111111111', userId = 'fixture-user';
+const id = '11111111-1111-1111-1111-111111111111', userId = 'fixture-user', activityBasis = 'fixture-basis';
 let mode = 'success', activityCalls = 0, roadmapFails = true;
 const item = storedResponse?.activities[0] || { id: 'fixture', kind: 'competition', status: 'open', source_label: '콘테스트코리아 · 데이커', title: '공공데이터 분석 경진대회', category: '데이터·통계',
  host: '테스트 기관', target: '대학생', period: '2026.11.01 ~ 2026.12.01', deadline_label: '2026-12-01 (한국 시간, 당일 포함)',
@@ -30,7 +30,7 @@ await context.route('**/api/**', async route => {
   activityCalls++;
   if (mode === 'network') { await route.abort(); return; }
   body = { ...storedResponse, status: mode === 'partial' ? 'partial' : mode === 'error' ? 'error' : 'success',
-   request_id: id, input_revision: 1, career_goal: '데이터 분석가', evaluated_at: new Date().toISOString(),
+   request_id: id, input_revision: 1, activity_basis: activityBasis, career_goal: '데이터 분석가', evaluated_at: new Date().toISOString(),
    valid_until: new Date(Date.now()+300000).toISOString(), sample_notice: '브라우저 회귀 테스트용 고정 공고입니다.',
    activities: mode === 'upcoming' ? [{ ...item, status: 'upcoming', opens_at: '2026-12-01T09:00:00+09:00',
       period: '2026.12.01 09:00 ~ 2026.12.31', deadline_label: '2026-12-31 (한국 시간, 당일 포함)' }]
@@ -40,7 +40,7 @@ await context.route('**/api/**', async route => {
  } else if (path.endsWith('/roadmap') || path.endsWith('/roadmaps')) {
   status = roadmapFails ? 503 : 200;
   body = roadmapFails ? { error: 'roadmap_failed', message: '로드맵 조회 테스트 실패' } : { runs: [], status: 'needs_job_analysis' };
- } else body = { request_id: id, input_revision: 1, input: { career_goal: '데이터 분석가' } };
+ } else body = { request_id: id, input_revision: 1, activity_basis: activityBasis, input: { career_goal: '데이터 분석가' } };
  await route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 });
 await context.route('https://www.contestkorea.com/**', route => route.fulfill({ contentType: 'text/html', body: '<h1>원문 링크 목적지 확인</h1>' }));
@@ -65,7 +65,10 @@ try {
  }
  // Roadmap HTTP 503 does not block this panel. Repeated tab visits do not recollect.
  await page.keyboard.press('Home');
+ const planResponse = page.waitForResponse(response => new URL(response.url()).pathname.endsWith(`/roadmap-inputs/${id}`));
  await page.keyboard.press('End');
+ await (await planResponse).finished();
+ await page.locator('.activity-recommendations[aria-busy="false"]:visible').waitFor();
  await page.getByRole('heading', { name: item.title }).waitFor();
  assert.equal(activityCalls, 1);
  assert.equal(await page.getByRole('heading', { name: item.title }).count(), 1);
