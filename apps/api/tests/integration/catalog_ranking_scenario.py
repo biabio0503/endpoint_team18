@@ -42,7 +42,11 @@ try:
                  'convolutional neural network', 'JavaScript 입문', 'pandas 학습',
                  'C plus plus 입문', 'C# 입문', 'C sharp 입문', 'Java script 입문', '자바스크립트 입문',
                  'Java와 JavaScript를 배우고 싶다', 'C는 이미 배웠고 C++를 배우고 싶다',
-                 'C++는 이미 배웠고 C를 배우고 싶다', 'C와 C++를 배우고 싶다'):
+                 'C++는 이미 배웠고 C를 배우고 싶다', 'C와 C++를 배우고 싶다',
+                 'C와 C++는 이미 배웠고 JavaScript를 배우고 싶다',
+                 'C는 이미 배웠고 C++도 이미 배웠고 JavaScript를 배우고 싶다',
+                 '자료구조는 이미 배웠고 CNN을 배우고 싶다',
+                 '자료구조와 CNN을 함께 배우고 싶다'):
         response = case.client.patch(case.base, json={'expected_input_revision': case.revision(),
                                                      'changes': {'career_goal': goal, 'target_role': None}})
         assert response.status_code == 200, response.text
@@ -53,8 +57,11 @@ try:
         assert roadmap_response.json()['generation_mode'] == 'limited_guidance'
         courses = course_response.json()['courses']
         roadmap_courses = roadmap_response.json()['recommended_courses']
-        signature = lambda rows: [(c['course_id'], c['recommendation_type']) for c in rows]
+        signature = lambda rows: [(c['course_id'], c['recommendation_type'], c['learning_keywords']) for c in rows]
         assert signature(courses) == signature(roadmap_courses)
+        assert len(courses) >= 5
+        types = [c['recommendation_type'] for c in courses]
+        assert types == sorted(types, key=lambda kind: kind != 'direct')
         assert all(c['availability_status'] == 'not_verified' for c in courses + roadmap_courses)
         results[goal] = courses
     assert signature(results['Python 입문']) == signature(results['파이썬 입문'])
@@ -76,6 +83,28 @@ try:
     assert results['JavaScript 입문'][0]['course_name'] == '웹프로그래밍'
     assert results['JavaScript 입문'][0]['recommendation_type'] == 'direct'
     assert all(c['recommendation_type'] != 'direct' for c in results['pandas 학습'])
+    for goal in ('C와 C++는 이미 배웠고 JavaScript를 배우고 싶다',
+                 'C는 이미 배웠고 C++도 이미 배웠고 JavaScript를 배우고 싶다'):
+        assert results[goal][0]['course_name'] == '웹프로그래밍'
+        assert [c['learning_keywords'] for c in results[goal] if c['recommendation_type'] == 'direct'] == [['JavaScript']]
+    prior = results['자료구조는 이미 배웠고 CNN을 배우고 싶다']
+    assert {c['course_name'].split(' (')[0] for c in prior if c['recommendation_type'] == 'direct'} == {'인공지능개론', '기계학습'}
+    assert all(c['learning_keywords'] == ['CNN'] for c in prior if c['recommendation_type'] == 'direct')
+    together = results['자료구조와 CNN을 함께 배우고 싶다']
+    assert {'자료구조', 'CNN'} <= {k for c in together if c['recommendation_type'] == 'direct' for k in c['learning_keywords']}
+    for goal in list(results)[-4:]:
+        print(goal)
+        for i, c in enumerate(results[goal], 1):
+            print(f"  {i}. {c['course_name']} [{c['recommendation_type']}] {c['learning_keywords'] if c['recommendation_type'] == 'direct' else ''}")
+    completed_id = results['자료구조와 CNN을 함께 배우고 싶다'][0]['course_id']
+    case.complete_course(completed_id, CATALOG)
+    completed_response = case.client.post(case.base + '/course-recommendations', json={})
+    completed_roadmap = case.make()
+    assert completed_response.status_code == 200 and completed_roadmap.status_code == 201
+    after_completion = completed_response.json()['courses']
+    assert signature(after_completion) == signature(completed_roadmap.json()['recommended_courses'])
+    assert completed_id not in {c['course_id'] for c in after_completion}
+    assert len(after_completion) >= 5
     for goal, courses in results.items():
         print(f"{goal}: {courses[0]['course_name']} [{courses[0]['recommendation_type']}] ({len(courses)} courses)")
     print(f'Both POST APIs: {len(results)} catalog goals agree; alias signatures match; no live Gemini calls.')

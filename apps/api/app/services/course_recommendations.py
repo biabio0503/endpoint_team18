@@ -5,7 +5,7 @@ from functools import lru_cache
 
 from services.job_skill_analysis import ALIASES, normalize_skill
 
-RULES_VERSION = 'course-evidence-v4-goal-mentions'
+RULES_VERSION = 'course-evidence-v5-keyword-experience'
 
 # One vocabulary is used for explicit goals, job skills and related candidates.
 # Keep overlapping language names distinct when matching free text.
@@ -74,11 +74,11 @@ def _matches(keyword, text):
 
 
 @lru_cache(maxsize=512)
-def _goal_mentions(goal):
-    """Resolve overlapping known aliases by longest span, retaining separate mentions."""
+def _goal_mentions(goal, keywords=()):
+    """Resolve aliases and catalog keywords by longest span, retaining separate mentions."""
     normalized = unicodedata.normalize('NFKC', goal).casefold()
     candidates = []
-    names = {entry[0] for entry in COURSE_ALIASES.values()}
+    names = {entry[0] for entry in COURSE_ALIASES.values()} | set(keywords)
     for name in names:
         for match in _pattern(name).finditer(normalized):
             candidates.append((match.start(), match.end(), _key(name)))
@@ -89,23 +89,33 @@ def _goal_mentions(goal):
     return normalized, sorted(accepted)
 
 
-def _goal_learning_match(keyword, goal):
-    if not _matches(keyword, goal):
-        return False
-    normalized, mentions = _goal_mentions(goal)
-    key = _key(keyword)
-    if key not in {_key(entry[0]) for entry in COURSE_ALIASES.values()}:
-        return True
-    for index, (_, end, mention_key) in enumerate(mentions):
-        if mention_key != key:
-            continue
+def _goal_mention_states(goal, keywords):
+    normalized, mentions = _goal_mentions(goal, tuple(sorted(set(keywords))))
+    past = []
+    for index, (_, end, _) in enumerate(mentions):
         next_start = mentions[index + 1][0] if index + 1 < len(mentions) else len(normalized)
         context = normalized[end:next_start].split('.')[0]
-        # Only past/possessed experience belongs to this mention. "경험 없음" remains a goal.
-        past = re.match(r'\s*(?:은|는|을|를|이|가|의)?\s*(?:이미\s*)?(?:배웠|학습했|공부했|익혔|알고\s*있|경험(?:이|은|을)?\s*(?:있|보유))', context)
-        if not past:
-            return True
-    return False
+        # A negated experience ("경험 없음") is not past experience.
+        past.append(bool(re.match(r'\s*(?:은|는|을|를|이|가|의|도)?\s*(?:이미\s*)?(?:배웠|학습했|공부했|익혔|알고\s*있|경험(?:이|은|을)?\s*(?:있|보유))', context)))
+    # A conjunction directly joining mentions shares the last mention's predicate.
+    for index in range(len(mentions) - 2, -1, -1):
+        gap = normalized[mentions[index][1]:mentions[index + 1][0]]
+        if past[index + 1] and re.fullmatch(r'\s*(?:(?:와|과|하고|랑|이랑|및|,|·|/|와\s*같은)\s*)+', gap):
+            past[index] = True
+    states = {}
+    for (_, _, key), is_past in zip(mentions, past):
+        states.setdefault(key, []).append(is_past)
+    return states
+
+
+def _goal_learning_match(keyword, goal, states):
+    if not _matches(keyword, goal):
+        return False
+    key = _key(keyword)
+    # Preserve the existing multiword topic fallback when there is no literal span.
+    if key in states:
+        return not all(states[key])
+    return not _pattern(keyword).search(unicodedata.normalize('NFKC', goal).casefold())
 
 
 def rank_courses(profile, courses, review_status, skills=()):
@@ -113,7 +123,10 @@ def rank_courses(profile, courses, review_status, skills=()):
     job = [s['skill_name'] for s in skills if s.get('job_requirement', {}).get('recommendation_eligible', True)]
     programming_goal = any(_matches(term, goal) for term in PROGRAMMING_GOALS)
     ranked = []
-    mentioned_keys = {key for _, _, key in _goal_mentions(goal)[1]}
+    keywords = [k['keyword'] for course in courses
+                for source in (course.get('_keyword_sources') or [course])
+                for k in source.get('keywords', []) if k.get('keyword_role') == 'learning']
+    states = _goal_mention_states(goal, keywords + job)
     for course in available_courses(courses).values():
         description = course.get('description_text') or ''
         sources = course.get('_keyword_sources') or [course]
@@ -123,10 +136,10 @@ def rank_courses(profile, courses, review_status, skills=()):
                     for k in source.get('keywords', []) if (k.get('evidence_text') or '').strip()
                     and k['evidence_text'] in (source.get('description_text') or '')]
         learning = [k for k in evidence if k['keyword_role'] == 'learning']
-        direct_goal = [k for k in learning if _goal_learning_match(k['keyword'], goal)]
+        direct_goal = [k for k in learning if _goal_learning_match(k['keyword'], goal, states)]
         direct_job = [k for k in learning
                       if any(_key(k['keyword']) == _key(name) for name in job)
-                      and not (_key(k['keyword']) in mentioned_keys and not _goal_learning_match(k['keyword'], goal))]
+                      and not (_key(k['keyword']) in states and all(states[_key(k['keyword'])]))]
         matching = direct_goal or direct_job
         foundation = any(_matches(k['keyword'], '프로그래밍 기초') for k in learning) and programming_goal
         if matching:
