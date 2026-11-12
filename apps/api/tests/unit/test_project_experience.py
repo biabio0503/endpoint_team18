@@ -68,15 +68,23 @@ def test_short_quote_does_not_borrow_actor_or_negation_from_another_cell(geometr
     assert items[0]['contribution_basis']['reason'] == 'actor_unspecified'
 
 
-@pytest.mark.parametrize('separator', ['\n', ' | ', '\t'])
-def test_merged_ocr_box_does_not_carry_subject_across_rows_or_cells(separator):
+@pytest.mark.parametrize('separator', ['\n', ' | ', '\t', '  '])
+@pytest.mark.parametrize('geometry', [False, True], ids=['text', 'merged_ocr_box'])
+def test_merged_ocr_box_does_not_carry_subject_across_rows_or_cells(separator, geometry):
     text = '제가 Python을 사용했고' + separator + 'SQL을 사용했습니다.'
     doc = document(text)
-    doc['segments'][0]['bbox'] = [0, 0, 600, 60]
-    items, errors = service.verify_experiences(doc, response(doc, [candidate('SQL', 'SQL을 사용')]), 'a')
-    assert errors == []
-    assert items[0]['contribution_scope'] == 'unknown'
-    assert items[0]['contribution_basis']['reason'] == 'actor_unspecified'
+    if geometry:
+        doc['segments'][0]['bbox'] = [0, 0, 600, 60]
+    for quote in (text, 'SQL을 사용'):
+        items, errors = service.verify_experiences(doc, response(doc, [candidate('SQL', quote)]), 'a')
+        assert errors == []
+        item, = items
+        assert item['evidence_text'] == quote
+        assert text[item['evidence_start']:item['evidence_end']] == quote
+        assert item['locations'] == doc['segments']
+        assert item['contribution_scope'] == 'unknown'
+        assert item['contribution_basis']['reason'] == 'actor_unspecified'
+        assert service.compare_skill([{**item, 'user_answer': None}])[0] == 'needs_confirmation'
 
 
 @pytest.mark.parametrize('text,scopes', NEGATION_CASES,
