@@ -5,6 +5,9 @@ from datetime import datetime
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
+from crawling.activities.batch import Batch
+from crawling.activities.candidates import Candidates, identity, state
+
 KST = ZoneInfo('Asia/Seoul')
 LOCK_KEY = 1800910
 
@@ -14,6 +17,7 @@ class Store:
     run_table = "dacon_collection_runs"
     snapshot_table = "dacon_daily_snapshots"
     item_table = "dacon_daily_items"
+    sources = ("dacon", "daker")
 
     def __init__(self, connection, clock=None, lock_key=LOCK_KEY):
         self.db = connection  # psycopg connection; autocommit, direct/session pooler
@@ -45,15 +49,43 @@ class Store:
                 WHERE collection_date=%s AND mode='scheduled' AND status='success' LIMIT 1""", (day,)).fetchone():
                 return self._record(run_id, day, mode, 'already_succeeded', started)
             result = self._record(run_id, day, mode, 'running', started)
-            # Import validation here: the API never imports a crawler or Playwright.
-            records = self.validate(collect())
+            Candidates(self.db, self.sources, started).classify_history()
+            collected = collect()
+            batch = collected if isinstance(collected, Batch) else Batch(collected)
+            observations = self.observations(batch.items)
+            records = self.validate([i for i in observations if not i.get('verification_error')])
+            current = Candidates(self.db, self.sources, self.clock().astimezone(KST))
+            seen = {identity(item) for item in observations}
+            due = current.due(seen)
+            rechecked = self.observations(self.recheck(due)) if due else []
+            failures = [i for i in (*observations, *rechecked) if i.get('verification_error')
+                        or i.get('period_source') == 'unverified']
+            metrics = {**batch.metrics, 'rechecked_items': len(rechecked),
+                       'recheck_failures': sum(bool(i.get('verification_error')) for i in rechecked),
+                       'discovered_unique': len(seen),
+                       'eligible_items': sum(state(i, current.now)[0] == 'active' for i in records),
+                       'unknown_periods': batch.metrics.get('unknown_periods', sum(state(i, current.now)[0] == 'unknown' for i in records))}
+            status = 'partial' if failures or batch.status != 'success' else 'success'
+            if batch.status == 'error' and not records and not rechecked:
+                status = 'failed'
             finished = self.clock().astimezone(KST)
+            from psycopg.types.json import Jsonb
             with self.db.transaction():
-                self.publish(day, run_id, finished, records)
-                self.db.execute(f"""UPDATE {self.run_table} SET status='success',
-                    finished_at=%s, collected_count=%s WHERE id=%s""", (finished, len(records), run_id))
-            return {**result, 'status': 'success', 'collected_count': len(records),
-                    'succeeded_at': finished.isoformat()}
+                current.mark_missing(seen)
+                for item in observations:
+                    current.apply(item, seen=True)
+                for item in rechecked:
+                    current.apply(item, seen=False)
+                # Partial progress updates individual candidates, never replaces
+                # the last complete discovery snapshot with an empty/partial day.
+                if status == 'success':
+                    self.publish(day, run_id, finished, records)
+                self.db.execute(f"""UPDATE {self.run_table} SET status=%s,
+                    finished_at=%s, collected_count=%s, metrics=%s, error_code=%s WHERE id=%s""",
+                    (status, finished, len(records), Jsonb(metrics),
+                     None if status == 'success' else 'collection_incomplete', run_id))
+            return {**result, 'status': status, 'collected_count': len(records), 'metrics': metrics,
+                    'succeeded_at': finished.isoformat() if status == 'success' else None}
         except BaseException as error:
             if result:
                 # Error bodies/DSNs are not persisted; the old snapshot is untouched.
@@ -65,6 +97,14 @@ class Store:
             raise
         finally:
             self.db.execute('SELECT pg_advisory_unlock(%s)', (self.lock_key,))
+
+    def observations(self, records):
+        from crawling.dacon.validation import validate_records
+        return validate_records(records)
+
+    def recheck(self, records):
+        from crawling.dacon.crawler import recheck
+        return recheck(records)
 
     def validate(self, records):
         from crawling.dacon.validation import validate_records

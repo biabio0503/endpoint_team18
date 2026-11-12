@@ -12,4 +12,5 @@ COPY apps/api/app/config.py ./apps/api/app/config.py
 COPY apps/api/app/repositories/postgres.py ./apps/api/app/repositories/postgres.py
 COPY apps/api/app/providers/external/contestkorea.py ./apps/api/app/providers/external/contestkorea.py
 COPY apps/api/app/services/activity_eligibility.py ./apps/api/app/services/activity_eligibility.py
+COPY apps/api/app/services/activity_identity.py ./apps/api/app/services/activity_identity.py
 CMD ["python", "-m", "crawling.activities.run", "--mode", "scheduled"]

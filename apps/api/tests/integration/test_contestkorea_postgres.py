@@ -20,13 +20,11 @@ from repositories.contestkorea import load_catalog
 @pytest.fixture
 def ck_database(database):
     db, another = database
-    schema = db.execute('SELECT current_schema() AS name').fetchone()['name']
-    path, = (Path(__file__).resolve().parents[4] / 'supabase/migrations').glob('*_contestkorea_filtered_snapshots.sql')
-    db.execute(path.read_text().replace('public.', schema + '.'))
     return db, another
 
 
-def test_filters_and_content_dedupe_across_days_preserve_history(ck_database):
+def test_filters_and_content_dedupe_across_days_preserve_history(ck_database, monkeypatch):
+    monkeypatch.setattr(Store, "recheck", lambda self, records: records)
     db, _ = ck_database
     now = [NOW]
     store = Store(db, lambda: now[0])
@@ -43,14 +41,14 @@ def test_filters_and_content_dedupe_across_days_preserve_history(ck_database):
     assert store.run(lambda: [record(title='새 데이터 분석 대회')])['status'] == 'success'
     assert db.execute('SELECT count(*) AS n FROM contestkorea_item_versions').fetchone()['n'] == 3
     rows, meta = load_catalog(PostgresConnection(db, psycopg.Error))
-    assert len(rows) == 1 and rows[0]['title'] == '새 데이터 분석 대회'
+    assert len(rows) == 2 and any(r['title'] == '새 데이터 분석 대회' for r in rows)
     assert store.status(NOW.date())['snapshot']['collected_count'] == 2
     before = store.status()['snapshot']
     assert store.run(Mock(side_effect=RuntimeError('provider failed')))['status'] == 'failed'
     assert store.status()['snapshot'] == before
     assert load_catalog(PostgresConnection(db, psycopg.Error))[1]['status'] == 'partial'
     assert store.run(lambda: [])['collected_count'] == 0
-    assert load_catalog(PostgresConnection(db, psycopg.Error))[0] == []
+    assert len(load_catalog(PostgresConnection(db, psycopg.Error))[0]) == 2
     # Current-day superseded content is reclaimed; historical versions remain.
     assert db.execute('SELECT count(*) AS n FROM contestkorea_item_versions').fetchone()['n'] == 2
 

@@ -37,7 +37,7 @@ def main():
             signal.signal(signal.SIGTERM, stop)
             result = store.run(collect, args.mode)
         print(json.dumps(result, ensure_ascii=False, default=str))
-        return 1 if result.get('status') == 'failed' else 0
+        return 1 if result.get('status') in ('failed', 'partial') else 0
     except Exception as error:
         print(json.dumps({'status': 'failed', 'error_code': type(error).__name__}), file=sys.stderr)
         return 1

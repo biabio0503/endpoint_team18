@@ -50,8 +50,8 @@ export default function ActivityRecommendations({ active, inputRevision, onResul
   {data && data.status !== 'error' && data.activities.length === 0 && <p role="status">{data.status === 'partial' ? '정상 조회된 공고 중 ' : ''}현재 추천 조건에 맞는 공고가 없습니다. 목표 관련성, 접수 기간과 참가 대상을 확인한 공고만 표시합니다.</p>}
   {data && <>
    <p className="field-help">{data.sample_notice}</p>
-   <p className="field-help">판정 시각: {new Date(data.evaluated_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })} (한국 시간) · 각 출처의 마지막 성공 수집 자료를 조회하며, 접수 마감은 조회 시점에 다시 확인합니다.</p>
-   <ul className="skill-list">{data.activities.map(item => <li key={item.id} className="skill-card">
+   <p className="field-help">판정 시각: {new Date(data.evaluated_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })} (한국 시간) · 서버에 누적한 공고를 조회하며, 접수 마감은 조회 시점에 다시 확인합니다. 원문 확인 시각은 출처별로 표시합니다.</p>
+   <ul className="skill-list">{data.activities.map(item => <li key={`${item.source}:${item.original_id || item.id}`} className="skill-card">
     <div className="skill-title"><span className="badge">{activityKindLabel(item.kind)}</span><span className="badge">{item.status === 'upcoming' ? '접수 예정' : '접수 중'}</span><h3>{item.title}</h3></div>
     <dl className="skill-summary">
      <div><dt>출처</dt><dd>{item.source_label || '콘테스트코리아'}</dd></div>
@@ -65,7 +65,10 @@ export default function ActivityRecommendations({ active, inputRevision, onResul
     </dl>
     <h4>추천 이유</h4>
     {item.reasons.map((reason, i) => <p key={i}>{reason}</p>)}
-    <a className="button" href={item.url} target="_blank" rel="noopener noreferrer" aria-label={`${item.title} 원문 보기 (새 창)`}>원문 보기 <span aria-hidden="true">↗</span></a>
+    {(item.source_links || [{ source: item.source, source_label: item.source_label, url: item.url }]).map(link => <div key={`${link.source}:${link.url}`}>
+     <a className="button" href={link.url} target="_blank" rel="noopener noreferrer" aria-label={`${item.title} ${link.source_label} 원문 보기 (새 창)`}>{link.source_label} 원문 보기 <span aria-hidden="true">↗</span></a>
+     {link.last_success_at && <p className="field-help">마지막 원문 확인: {new Date(link.last_success_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })} (한국 시간){link.stale ? ' · 최근 재확인 지연 — 신청 전 원문을 확인해 주세요.' : ''}</p>}
+    </div>)}
    </li>)}</ul>
   </>}
  </div>;

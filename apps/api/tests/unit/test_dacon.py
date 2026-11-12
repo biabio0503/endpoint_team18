@@ -103,6 +103,5 @@ def test_browser_uses_korean_time_even_on_utc_server(monkeypatch):
     browser.new_context.return_value.new_page.return_value.goto.side_effect = RuntimeError('stop before network')
     monkeypatch.setitem(sys.modules, 'playwright', SimpleNamespace())
     monkeypatch.setitem(sys.modules, 'playwright.sync_api', SimpleNamespace(sync_playwright=lambda: manager))
-    with pytest.raises(RuntimeError, match='stop before network'):
-        collect()
+    assert collect().status == 'error'
     assert browser.new_context.call_args.kwargs['timezone_id'] == 'Asia/Seoul'

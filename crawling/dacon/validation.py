@@ -79,6 +79,7 @@ def extract_evidence(text, calendar_bounds=None):
         normalized = '누구나'
     result = {'application_start_at': None, 'application_end_at': None,
               'application_period': None, 'application_evidence': None,
+              'application_cancelled': any(re.fullmatch(r'(?:대회|행사|접수|모집)(?:이|가)?\s*취소(?:되었습니다|되었어요|됨)?[.!]?', line) for line in lines),
               'application_closed': any(re.fullmatch(r'(?:참가\s*)?(?:신청|접수)(?:이|가)?\s*(?:마감|종료)(?:되었습니다|되었어요|됨)?[.!]?', line) for line in lines),
               'eligibility_text': target or None, 'target': normalized}
     if len(periods) == 1:
@@ -103,7 +104,7 @@ def validate_records(records):
                 or parsed.scheme != 'https' or parsed.hostname != {'dacon': 'dacon.io', 'daker': 'daker.ai'}[source]
                 or parsed.username or parsed.password or parsed.query or parsed.fragment
                 or not re.fullmatch(pattern, parsed.path) or not str(item.get('title', '')).strip()
-                or item.get('status') not in ('진행중', '모집중', '종료', '마감', '연습', 'unknown', 'conflict')):
+                or item.get('status') not in ('진행중', '모집중', '접수예정', '종료', '마감', '연습', 'unknown', 'conflict')):
             raise ValueError('invalid_record')
         for field in ('application_start_at', 'application_end_at'):
             if item.get(field):

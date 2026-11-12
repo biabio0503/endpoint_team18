@@ -6,27 +6,28 @@ import sys
 from providers.external.contestkorea import KINDS, collect_kind, original_url
 from services.activity_eligibility import KST, eligible_target, period_status
 import re
+from crawling.activities.batch import Batch
 
 
-class CollectionIncomplete(Exception):
-    pass
-
-
-def collect():
+def collect(*, known=None):
     now = datetime.now(KST)
     key = os.environ.get('CONTESTKOREA_API_KEY', '').strip()
-    items = []
+    items, metrics, statuses = {}, {}, []
+    detail_cache = {}
     for kind in KINDS:
-        result = collect_kind(kind, key, eligible_only=True, now=now)
-        print(f'[contestkorea] {kind}: {result.status}, kept={len(result.items)}, '
-              f'categories={result.categories}, failed_categories={result.failed_categories}, '
-              f'unverified_periods={result.unverified_periods}, failed_details={result.failed_details}',
+        result = collect_kind(kind, key, eligible_only=True, now=now, detail_cache=detail_cache, known_details=known)
+        statuses.append(result.status)
+        for field in ('categories', 'failed_categories', 'rejected_items', 'fetched_items', 'eligible_items',
+                      'unknown_periods', 'parse_failures', 'network_failures', 'limited_categories', 'reused_details'):
+            metrics[field] = metrics.get(field, 0) + getattr(result, field)
+        for item in result.observations or result.items:
+            items.setdefault(item['id'], item)
+        print(f'[contestkorea] {kind}: {result.status}, fetched={result.fetched_items}, '
+              f'eligible={result.eligible_items}, unknown={result.unknown_periods}, '
+              f'parse_failures={result.parse_failures}, network_failures={result.network_failures}',
               file=sys.stderr, flush=True)
-        if result.status != 'success':
-            # Never publish a partial category/kind snapshot as a complete day.
-            raise CollectionIncomplete(result.error_code or 'collection_incomplete')
-        items.extend(result.items)
-    return items
+    status = 'error' if all(s == 'error' for s in statuses) else 'partial' if any(s != 'success' for s in statuses) else 'success'
+    return Batch(list(items.values()), status, metrics)
 
 
 def compact_records(records, now):
@@ -42,11 +43,13 @@ def compact_records(records, now):
                 or not record['title'].strip()):
             raise ValueError('invalid_record')
         original_url(record['url'])
-        if (not eligible_target(record['target']) or
+        if (record.get('verification_error') or record.get('period_source') in ('unknown', 'unverified')
+                or record.get('application_closed') or record.get('application_cancelled')
+                or not eligible_target(record['target']) or
                 period_status(record.get('verified_period') or record['period'], now)['status'] not in ('open', 'upcoming')):
             continue
         # No raw API responses, HTML, posters, binaries, or repeated derived fields.
-        fields = ('id', 'kind', 'title', 'category', 'host', 'target', 'period', 'url', 'verified_period')
+        fields = ('id', 'kind', 'title', 'category', 'host', 'target', 'period', 'url', 'verified_period', 'official_application_url')
         item = {key: record[key] for key in fields if record.get(key)}
         if item['id'] in unique and unique[item['id']] != item:
             raise ValueError('conflicting_duplicate')
