@@ -15,7 +15,7 @@ TEAM = re.compile(r'팀원\s*담당|팀원\s+[가-힣A-Za-z]+(?:은|는|이|가)
                   r'팀\s*(?:전체|담당|수행|에서는|은|이)|\b(?:we|our team)\b', re.I)
 WORK_VERB = r'(?:수행|사용|구현|참여|설계|작성|파싱|연동|구성|설정|개발|배포|운영|구축|처리|분석|전처리|제작|진행|기록|정리)'
 NEGATIVE = re.compile(
-    r'미수행|미사용|미구현|미참여|(?:' + WORK_VERB + r'하|만들)지\s*(?:않|못)|'
+    r'미수행|미사용|미구현|미참여|(?:' + WORK_VERB + r'(?:하|해\s*보)|만들|만들어\s*보)지\s*(?:않|못)|'
     r'(?:' + WORK_VERB + r'(?:한|해\s*본)|만든|만들어\s*본)\s*(?:적|경험)(?:이|은|도)?\s*없')
 # Keep the predicate in its clause. Splitting at arbitrary negative words would
 # also reject completed work describing a participant's problem (찾지 못하는).
@@ -35,6 +35,9 @@ TECH_HEADER = re.compile(r'^기술\s*스택$')
 ROW_LABEL = re.compile(r'^(?:직접\s*(?:사용|구현|설계)|일부\s*설정|팀원\s*담당|미수행)$')
 ROLE_DESCRIPTION = re.compile(r'^담당\s*역할\s*[:：]\s*\S')
 NUMBERED = re.compile(r'^\s*(\d+)[.)]\s+')
+# Match text_cells' explicit delimiters even when OCR merges cells into one box.
+# Coordinates do not make an actor in an adjacent cell valid evidence.
+SOURCE_CELL_BREAK = re.compile(r'[\n|\t]| {2,}')
 
 
 def names_skill(name, text):
@@ -64,14 +67,48 @@ def negates_skill(name, text):
     if not negatives:
         return False
     # 진행해 본 적이 없다 / 만들어 본 적이 없다 are single negative predicates.
-    ends = [m.end() for m in ACTIVITY_CLAUSE_END.finditer(text)
-            if not any(n.start() < m.end() < n.end() for n in negatives)] + [len(text)]
+    barriers = {m.end() for m in SOURCE_CELL_BREAK.finditer(text)}
+    ends = sorted({m.end() for m in ACTIVITY_CLAUSE_END.finditer(text)
+                   if not any(n.start() < m.end() < n.end() for n in negatives)} | barriers | {len(text)})
     for end in ends:
         clause = text[start:end]
         if names_skill(name, clause) and NEGATIVE.search(clause):
             return True
         start = end
     return False
+
+
+def source_clause(name, text, quote_start, quote_end):
+    """Resolve only the candidate's clause, carrying an omitted subject forward.
+
+    Callers bound text to one source line/cell. A subject never travels backwards,
+    across a sentence, or through a new explicit subject. Unresolved/multiple
+    occurrences stay unknown instead of trusting the model's personal label.
+    """
+    negatives = list(NEGATIVE.finditer(text))
+    barriers = {m.end() for m in SOURCE_CELL_BREAK.finditer(text)}
+    ends = sorted({m.end() for m in ACTIVITY_CLAUSE_END.finditer(text)
+                   if not any(n.start() < m.end() < n.end() for n in negatives)} | barriers | {len(text)})
+    start, inherited, matches = 0, None, []
+    for end in ends:
+        clause = text[start:end]
+        predicates = [m.start() for pattern in (ACTION, NEGATIVE) if (m := pattern.search(clause))]
+        subject_text = clause[:min(predicates)] if predicates else clause
+        personal, team = bool(PERSONAL.search(subject_text)), bool(TEAM.search(clause))
+        # Technology topics ("Docker는") are not people. An unidentified named
+        # subject ("민수는") must not inherit a student's previous contribution.
+        subjects = re.findall(r'(?<!\w)(?:담당자\s+)?[가-힣A-Za-z]+(?:은|는|이|가)(?=\s)', subject_text)
+        other = any(not PERSONAL.search(s) and not team and not names_skill(name, s)
+                    for s in subjects)
+        actor = ('unknown' if personal and team or personal and other else
+                 'team' if team else 'personal' if personal else 'unknown' if other else inherited)
+        if names_skill(name, text[max(start, quote_start):min(end, quote_end)]) and start < quote_end and end > quote_start:
+            matches.append((clause.strip(), actor))
+        inherited = None if end in barriers or re.search(r'[.!?]\s*$', clause) else actor
+        start = end
+    if len(matches) == 1:
+        return matches[0]
+    return text.strip(), 'unknown'
 
 
 def rectangle(segment):
@@ -348,8 +385,18 @@ class EvidenceIndex:
         if len(units) != 1:
             return None
         unit = units[0]
+        if not has_geometry:
+            cells = self.text_cells(unit)
+            if cells:
+                cells = [c for c in cells if c['start'] < end and c['end'] > start and names_skill(name, c['text'])]
+                if len(cells) != 1:
+                    return None
+                unit = cells[0]
         a, b = max(start, unit['start']), min(end, unit['end'])
-        local = self.text[a:b].strip()
+        # The original model quote/offsets remain untouched in verify_experiences.
+        # Judgment reads the full source clause, never a clipped model substring.
+        local = unit['text'].strip()
+        judgment, actor = source_clause(name, unit['text'], a - unit['start'], b - unit['start'])
         table = self.table_geometry(unit) if has_geometry else self.table_text(a, b)
         context, method, label = [], 'quote', ''
         if table:
@@ -366,7 +413,7 @@ class EvidenceIndex:
                 r'직접\s*(?:사용|구현|설계)|일부\s*설정|팀원\s*담당|미수행', local)) > 1)
         if flattened_rows:
             activity = name + ' · 수행 내용 미확인'
-        elif performed(local) or NEGATIVE.search(local) or TEAM.search(local):
+        elif performed(judgment) or NEGATIVE.search(judgment) or TEAM.search(judgment):
             activity = clean(local)
         elif label:
             activity = clean(local) + ' · ' + label
@@ -375,13 +422,13 @@ class EvidenceIndex:
             activity = clean(local)
         else:
             return None
-        actor_text = '' if flattened_rows else local + ' ' + label
-        if (not flattened_rows and (negates_skill(name, local) or NEGATIVE.search(label))) or NON_WORK.search(actor_text):
+        actor_text = '' if flattened_rows else judgment + ' ' + label
+        if (not flattened_rows and (negates_skill(name, judgment) or NEGATIVE.search(label))) or NON_WORK.search(actor_text):
             scope, reason = 'unknown', 'not_performed'
-        elif TEAM.search(actor_text):
+        elif not flattened_rows and (actor == 'team' or TEAM.search(label)):
             scope, reason = 'team', 'explicit_team'
-        elif not flattened_rows and ((table and ROW_LABEL.fullmatch(label))
-                                     or (context and not table) or PERSONAL.search(local)):
+        elif not flattened_rows and actor != 'unknown' and ((table and ROW_LABEL.fullmatch(label))
+                                     or (context and not table) or actor == 'personal'):
             scope, reason = 'personal', 'document_personal'
         else:
             scope, reason = 'unknown', 'ambiguous_table_row' if ambiguous_table else 'actor_unspecified'
