@@ -5,8 +5,7 @@
 ```bash
 # 운영과 같은 Linux 이미지 빌드
 docker build -f crawling/dacon/Dockerfile -t team18-dacon .
-# 이미지 안에서 예약/수동이 사용하는 동일한 파이프라인
-python -m crawling.dacon.run --mode scheduled
+# 데이콘만 수동 수집
 python -m crawling.dacon.run --mode manual
 # 네트워크 수집 없이 DB 운영 상태/이력 조회
 python -m crawling.dacon.run --status
@@ -27,7 +26,7 @@ python -m crawling.dacon.run --status --date 2026-11-12
 
 ## 중복 실행과 장애
 
-전체 소스에 대해 PostgreSQL session advisory lock 하나를 사용한다. 잠금 획득 전에는 사이트에 접속하지 않는다. 겹친 실행은 `already_running` JSON을 반환하고 이력에 기록한다. 대기하거나 기존 실행을 취소하지 않는다. `scheduled`는 그 KST 날짜의 예약 성공 이력이 있으면 `already_succeeded`, `manual`은 매번 재수집한다. 수동 실행은 cron 설정이나 다음 예약 시각을 수정하지 않는다.
+전체 소스에 대해 PostgreSQL session advisory lock 하나를 사용한다. 잠금 획득 전에는 사이트에 접속하지 않는다. 겹친 실행은 `already_running` JSON을 반환하고 이력에 기록한다. 대기하거나 기존 실행을 취소하지 않는다. `scheduled`는 그 KST 날짜의 예약 성공 이력이 있으면 `already_succeeded`, `manual`은 매번 재수집한다. 운영 수집은 manual 모드로 실행한다.
 
 프로세스 종료 시 연결이 닫히면서 잠금이 해제된다. SIGTERM은 실패 이력을 기록하고, 강제 종료/DB 단절로 남은 `running`은 다음 잠금 획득자가 `failed / interrupted`로 정리한다. DB 장애로 실패 이력조차 기록할 수 없으면 CLI가 실패 종료하며 Render 로그에서 확인한다. 종료 코드 1은 실패, 0은 성공/중복 실행 건너뜀이다.
 
@@ -35,4 +34,4 @@ python -m crawling.dacon.run --status --date 2026-11-12
 
 `GET /api/roadmap-inputs/{id}/activities`는 `dacon_daily_snapshots`의 최신 날짜와 `dacon_daily_items`만 조회한다. 최신 수집 실패 시 마지막 성공 자료를 사용하고 출처 상태를 `partial`로 표시한다. 조회할 때마다 신청 마감을 KST로 다시 평가한다. 콘테스트코리아와 동일한 목표 관련성 점수·참가 자격 기준을 사용하며 출처 이름과 접수 마감을 카드에 표시한다. 데이콘 DB 자료가 없거나 조회에 실패해도 콘테스트코리아는 계속 제공한다.
 
-Render 입력값, 수동 One-off Job 실행, SQL 점검, 실제 검증 범위는 [운영 인수인계](../../docs/dacon-server-collection.md)를 참고한다.
+두 출처를 함께 수집하는 GitHub Actions와 로컬 실행 방법은 [운영 인수인계](../../docs/dacon-server-collection.md#서버에서-지금-수동-실행)를 참고한다.
