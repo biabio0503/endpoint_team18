@@ -14,7 +14,8 @@ class GuestGuardrails(RoadmapAPI):
         with patch('api.routes.roadmaps.generate_roadmap') as ai:
             limited = self.make().json()
             self.assertEqual(limited['generation_mode'],'limited_guidance')
-            self.assertEqual(limited['recommended_courses'],[])
+            self.assertEqual([c['course_id'] for c in limited['recommended_courses']], [DB_COURSE])
+            self.assertEqual(limited['recommended_courses'][0]['recommendation_type'], 'exploration')
             self.assertEqual(limited['evidence'],{})
             self.client.patch(self.base,json={'expected_input_revision':self.revision(),'changes':{'career_goal':'새 관심 분야'}})
             new = self.make().json()

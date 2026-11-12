@@ -49,6 +49,13 @@ are never rewritten. Database substitute relationships do not define UI groups.
                           course_code=' / '.join(member['course_code'] for member in group['members']),
                           member_course_ids=[member['course_id'] for member in group['members']],
                           course_group=group['group_number'])
+            # Each reviewed language member retains its own source: a quote from
+            # one description must never be validated against another member.
+            if any('keywords' in row for row in rows):
+                course['_keyword_sources'] = [
+                    {'course_id': row['course_id'], 'description_text': row.get('description_text') or '',
+                     'keywords': row.get('keywords', [])} for row in rows
+                ]
         for field in ('is_completed', 'equivalent_completed'):
             if any(field in row for row in rows):
                 course[field] = any(row.get(field, False) for row in rows)
@@ -64,8 +71,11 @@ are never rewritten. Database substitute relationships do not define UI groups.
 
 def grouped_roadmap(result, catalog_id):
     """Present old English/duplicate cards and both step references without AI."""
+    courses = grouped_courses(result['recommended_courses'], catalog_id)
+    for course in courses:
+        course.pop('_keyword_sources', None)
     return {**result,
-            'recommended_courses': grouped_courses(result['recommended_courses'], catalog_id),
+            'recommended_courses': courses,
             'roadmap': [{**step, 'related_course_ids': list(dict.fromkeys(
                 canonical_id(catalog_id, cid) for cid in step['related_course_ids']))}
                 for step in result['roadmap']]}

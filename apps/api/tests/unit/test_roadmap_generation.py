@@ -48,7 +48,7 @@ def test_authoritative_summary_and_intent(status, group):
 @pytest.mark.parametrize('case', ['foreign_course', 'completed_course', 'duplicate_course', 'made_up_skill', 'foreign_evidence',
     'unrelated_evidence', 'missing_comparison', 'state_changed', 'unknown_treated_as_gap', 'confirmed_basics',
     'cycle', 'missing_step', 'bad_order', 'duplicate_step', 'duplicate_task', 'duplicate_action', 'empty_criterion',
-    'empty_action', 'empty_deliverable', 'fake_course_content', 'unselected_course_link', 'invented_schedule',
+    'empty_action', 'empty_deliverable', 'unselected_course_link', 'invented_schedule',
     'unknown_learning_prose', 'invented_lecture_content', 'frequency_priority'])
 def test_invalid_outputs_rejected(case):
     b, raw = basis(), output()
@@ -78,7 +78,6 @@ def test_invalid_outputs_rejected(case):
     elif case == 'empty_criterion': task['completion_criteria'] = '  '
     elif case == 'empty_action': task['action'] = ''
     elif case == 'empty_deliverable': task['deliverable'] = ''
-    elif case == 'fake_course_content': c['course_evidence'] = '실제 제공되지 않은 실습'
     elif case == 'unselected_course_link': s['related_course_ids'] = ['another-course']
     elif case == 'invented_schedule': s['weeks'] = 3
     elif case == 'unknown_learning_prose':
@@ -98,13 +97,23 @@ def test_course_uncertainty_and_server_fields(review):
     assert result['course_code'] == 'DB1' and result['credits'] == 3
     assert result['description_basis'] == 'name_inference'
     assert result['availability_status'] == 'not_verified'
+    assert result['source'] == b['catalog']
+    assert 'course_role' in result and 'description_text' in result
     assert result['recommendation_confidence'] == 'limited'
     assert result['completion_state'] == ('unconfirmed' if review == 'unconfirmed' else 'not_selected_in_reviewed_catalog')
     b['courses'][0]['description_text'] = 'SQL 조회와 관계형 모델을 학습합니다.'
     raw = output(); raw['recommended_courses'][0]['course_evidence'] = 'SQL 조회'
     course = validate_result(raw, b)['recommended_courses'][0]
     assert course['description_basis'] == 'description'
-    assert course['recommendation_confidence'] == ('supported' if review == 'confirmed' else 'limited')
+    assert course['recommendation_confidence'] == 'limited'
+
+
+def test_model_course_text_is_discarded():
+    raw = output()
+    raw['recommended_courses'][0]['course_evidence'] = '실제 제공되지 않은 실습'
+    result = validate_result(raw, basis())['recommended_courses'][0]
+    assert result['course_evidence'] == '데이터베이스'
+    assert result['availability_status'] == 'not_verified'
 
 
 def test_minimal_input_no_reanalysis_or_completed_candidate():
