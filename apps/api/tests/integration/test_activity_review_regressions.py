@@ -67,11 +67,15 @@ def detail(state='접수 중', period='2026.11.01 ~ 2026.11.30', title='데이�
 def transport(monkeypatch, page, period='2026.11.01 ~ 2026.11.30'):
     """Keep actual discovery, verifier and HTML parser; replace only HTTP edges."""
     listing = [{'STR_MEETCODE': 'review', 'STR_MEETING': '데이터 분석 경진대회',
-                'STR_MENU': '데이터', 'STR_HOST': '주최기관', 'STR_TARGET': '대학생',
+                'STR_MENU': '학문•과학•IT', 'STR_HOST': '주최기관', 'STR_TARGET': '대학생',
                 'STR_DATE1': period, 'STR_URL': 'https://www.contestkorea.com/sub/view.php?str_no=review'}]
     monkeypatch.setenv('CONTESTKOREA_API_KEY', 'fixture-secret')
-    monkeypatch.setattr(ck, 'request_json', lambda endpoint, *args:
-                        [{'STR_BCODE': '0301'}] if endpoint == 'menu_info_api.php' else list(listing))
+    def request(endpoint, params, key):
+        if endpoint == 'menu_info_api.php':
+            kind = 'competition' if params['int_gbn'] == '1' else 'extracurricular'
+            return [{'STR_BCODE': code, 'STR_IDXWORD': name} for code, name in ck.CONTESTKOREA_CATEGORIES[kind].items()]
+        return list(listing) if params['Txt_bcode'].startswith('03') else []
+    monkeypatch.setattr(ck, 'request_json', request)
     response = Mock(); response.__enter__ = Mock(return_value=response); response.__exit__ = Mock(return_value=False)
     response.read.side_effect = lambda *args: page[0]
     opener = Mock(); opener.open.return_value = response
@@ -82,7 +86,7 @@ def transport(monkeypatch, page, period='2026.11.01 ~ 2026.11.30'):
 def collect_pair(db, clock, monkeypatch, *, generic=False, date_only=False, relevant_source='contestkorea'):
     listing, _ = transport(monkeypatch, [detail()])
     if relevant_source != 'contestkorea':
-        listing[0].update(STR_MEETING='미래 챌린지', STR_MENU='일반')
+        listing[0].update(STR_MEETING='미래 챌린지', STR_MENU='학문•과학•IT')
     store = Store(db, lambda: clock[0])
     assert store.run(lambda: collect(known=store.known_details()))['status'] == 'success'
     period = '2026.11.01 ~ 2026.11.30' if date_only else '2026.11.01 09:00 ~ 2026.11.30 10:00'

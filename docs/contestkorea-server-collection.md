@@ -4,7 +4,9 @@
 
 2026-11-10 발급 메일의 **API 명세서_Basic_콘테스트코리아(261110).pdf, DEMO v1.1, 2쪽**을 확인했다. 기본 응답은 분야별 최근 10건이지만, 같은 쪽에 **`limitsu=100`으로 반환 건수를 조정하는 옵션**이 명시되어 있다. 따라서 10건이 계약상 고정 상한이라는 기존 설명을 수정한다. [발급 명세 메일](https://mail.google.com/mail/u/0/#all/1a1c4652933c2940)
 
-수집기는 공모전·대외활동의 메뉴 코드를 모두 조회하고 공식 `limitsu`만 100 → 200 → 400 → 800 → 1,000으로 늘린다. 요청보다 적게 반환하거나 같은 ID 집합이 반복되면 종료한다. **1,000은 이 서비스의 요청/응답 크기 보호 상한이며 공급자가 약속한 최대값이 아니다.** 분야별 결과가 상한에 도달하거나 확장이 중단되면 `limited_categories`로 표시한다. 명세에는 페이지 번호·cursor·전체 건수·전체 이력 조회 계약이 없어 전체 수집은 보장하지 않는다. 반환된 범위 안에서 ID 중복을 제거하고, 공모전/대외활동에 중복 노출된 상세도 실행당 한 번만 요청한다.
+수집기는 메뉴 응답에서 확인한 네 분야만 목록 API에 요청한다. 대회·공모전은 학문•과학•IT (`030310001`), 아이디어•건축•창업 (`031410001`), 대외활동은 교육 • 강연 • 멘토링 • 세미나 (`040410001`), 전시 • 박람 • 행사 • 축제 (`040510001`)다. 발급 명세 1~3쪽의 `STR_IDXWORD`·`STR_BCODE`와 공고 자체의 대표 분야 `STR_MENU`로 판정한다. 공백·구분 기호를 무시하되 분야 전체 이름이 일치해야 하며, 복수 분야는 같은 종류의 허용 분야가 하나라도 있으면 포함한다. 범위 밖 홍보 공고는 상세 확인 전에 제외한다. 허용 메뉴가 누락되면 나머지는 수집하고 `missing_categories`에 코드를 기록하며 partial 또는 failed로 처리한다. 이전 범위 밖 후보는 재확인·추천에서 제외하되 이력은 보존한다. 데이콘·데이커에는 이 제한을 적용하지 않는다.
+
+각 허용 분야에서 공식 `limitsu`만 100 → 200 → 400 → 800 → 1,000으로 늘린다. 요청보다 적게 반환하거나 같은 ID 집합이 반복되면 종료한다. **1,000은 이 서비스의 요청/응답 크기 보호 상한이며 공급자가 약속한 최대값이 아니다.** 분야별 결과가 상한에 도달하거나 확장이 중단되면 `limited_categories`로 표시한다. 명세에는 페이지 번호·cursor·전체 건수·전체 이력 조회 계약이 없어 전체 수집은 보장하지 않는다. 반환된 범위 안에서 ID 중복을 제거하고, 공모전/대외활동에 중복 노출된 상세도 실행당 한 번만 요청한다.
 
 명세에 없는 파라미터는 사용하지 않는다. 2026-11-12 실측에서 학문·과학·IT 분야는 기본 요청 10건, `limitsu=100` 100건, `limitsu=200` 200건을 반환했다. 키와 키가 포함된 요청 URL은 로그·문서·DB에 저장하지 않는다. 발급 메일의 사용 기한은 **2026-11-24**이며 이후 사용에는 갱신된 키가 필요하다.
 
@@ -39,7 +41,9 @@
 
 명시적인 `미정`/`추후 공지`는 정상적인 기간 미확인이다. 접수기간 표 자체가 없거나 날짜 구조가 잘못되면 파싱 실패, 연결/HTTP 실패는 네트워크 실패다. 일부 실패가 있으면 `partial`로 기록하고 **확인된 개별 공고의 갱신은 반영**한다. 마지막 성공 날짜 스냅샷은 교체하지 않는다. 신규 오류 공고를 적격 후보로 만들지 않으며, 기존 오류 공고는 마지막 성공 내용을 보존한다. 실제 적격 0건은 `success/0`이 가능하지만 누적 후보의 일괄 삭제를 뜻하지 않는다.
 
-CLI와 `--status`의 `recent_runs[].metrics`에서 다음을 확인한다: `fetched_items`(분야별 확장 응답에서 ID 중복을 제거한 건수 합), `discovered_unique`(출처 내 고유 공고), `eligible_items`, `unknown_periods`, `parse_failures`, `network_failures`, `failed_categories`, `rejected_items`, `limited_categories`, `rechecked_items`, `recheck_failures`, `reused_details`. 원본 ID가 여러 분야에 걸치면 `fetched_items`와 `discovered_unique`가 다르다. 재확인 오류는 `recheck_failures`에 별도로 집계한다.
+연도가 있는 목록 접수기간만으로 신규 공고의 마감이 확실하면 상세 조회를 건너뛴다. 연도 미상이나 원문에서 확인한 미마감 연장이 있는 공고는 원문을 확인한다. 원문에서 마감·취소가 확인되면 추천하지 않는다.
+
+CLI와 `--status`의 `recent_runs[].metrics`에서 다음을 확인한다: `skipped_closed`(목록에서 마감으로 판정해 상세를 생략한 신규 고유 공고), `detail_requests`(목록 공고의 실제 상세 요청), `total_detail_requests`(누락·실패 후보 재확인 포함), `missing_categories`(종류별 누락 코드), `fetched_items`(분야별 확장 응답에서 ID 중복을 제거한 건수 합), `discovered_unique`(출처 내 고유 공고), `eligible_items`, `unknown_periods`, `parse_failures`, `network_failures`, `failed_categories`, `rejected_items`, `limited_categories`, `rechecked_items`, `recheck_failures`, `reused_details`. 원본 ID가 여러 분야에 걸치면 `fetched_items`와 `discovered_unique`가 다르다. 재확인 오류는 `recheck_failures`에 별도로 집계한다.
 
 ## 추천과 중복 통합
 

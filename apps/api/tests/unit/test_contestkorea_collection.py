@@ -17,7 +17,7 @@ NOW = datetime(2026,11,12,9,10,tzinfo=KST)
 
 def record(**changes):
     return {'id': '202611010001', 'kind': 'competition', 'source': 'contestkorea',
-            'source_label': '콘테스트코리아', 'title': '데이터 분석 공모전', 'category': '데이터', 'host': '주최기관',
+            'source_label': '콘테스트코리아', 'title': '데이터 분석 공모전', 'category': '학문•과학•IT', 'host': '주최기관',
             'target': '대학생', 'period': '2026.11.01 ~ 2026.11.30',
             'url': 'https://www.contestkorea.com/sub/view.php?str_no=202611010001', **changes}
 
@@ -61,11 +61,11 @@ def test_minimal_fields_no_html_images_raw_response_or_daily_derived_fields():
 
 def test_filter_before_detail_avoids_unneeded_requests(monkeypatch):
     def raw(id, target, period):
-        return {'STR_MEETCODE': id, 'STR_MEETING': 'AI 대회', 'STR_MENU':'AI', 'STR_HOST':'기관',
+        return {'STR_MEETCODE': id, 'STR_MEETING': 'AI 대회', 'STR_MENU':'학문•과학•IT', 'STR_HOST':'기관',
                 'STR_TARGET':target, 'STR_DATE1':period, 'STR_URL':f'https://www.contestkorea.com/sub/view.php?str_no={id}'}
     records = [raw('1','고등학생','11.01~11.30'), raw('2','대학생','2026.10.01 ~ 2026.10.31'),
                raw('3','대학생','11.01~11.30')]
-    monkeypatch.setattr(provider, 'request_json', lambda endpoint,*args: [{'STR_BCODE':'0301'}] if endpoint=='menu_info_api.php' else records)
+    monkeypatch.setattr(provider, 'request_json', lambda endpoint,*args: [{'STR_BCODE': code, 'STR_IDXWORD': name} for code, name in provider.CONTESTKOREA_CATEGORIES['competition'].items()] if endpoint=='menu_info_api.php' else records)
     verify = Mock(side_effect=lambda item: {**item, 'verified_period':'2026.11.01 ~ 2026.11.30'})
     monkeypatch.setattr(provider, 'verify_period', verify)
     result = provider.collect_kind('competition', 'secret', eligible_only=True, now=NOW)
@@ -74,9 +74,9 @@ def test_filter_before_detail_avoids_unneeded_requests(monkeypatch):
 
 
 def test_unknown_period_skipped_but_detail_transport_failure_is_failure(monkeypatch):
-    raw = {'STR_MEETCODE':'1','STR_MEETING':'AI','STR_MENU':'AI','STR_HOST':'기관','STR_TARGET':'대학생',
+    raw = {'STR_MEETCODE':'1','STR_MEETING':'AI','STR_MENU':'학문•과학•IT','STR_HOST':'기관','STR_TARGET':'대학생',
            'STR_DATE1':'11.01~11.30','STR_URL':'https://www.contestkorea.com/sub/view.php?str_no=1'}
-    monkeypatch.setattr(provider, 'request_json', lambda endpoint,*args: [{'STR_BCODE':'0301'}] if endpoint=='menu_info_api.php' else [raw])
+    monkeypatch.setattr(provider, 'request_json', lambda endpoint,*args: [{'STR_BCODE': code, 'STR_IDXWORD': name} for code, name in provider.CONTESTKOREA_CATEGORIES['competition'].items()] if endpoint=='menu_info_api.php' else [raw])
     monkeypatch.setattr(provider, 'verify_period', lambda item: {**item,'period_source':'unverified'})
     result = provider.collect_kind('competition', 'secret', eligible_only=True, now=NOW)
     assert result.status == 'partial' and result.items == () and result.parse_failures == 1

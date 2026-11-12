@@ -79,16 +79,16 @@ def test_same_numeric_id_in_different_sources_is_not_dropped():
 
 def test_ck_official_limit_option_and_repeated_response_termination(monkeypatch):
     calls = []
-    raw = {'STR_MEETCODE': '1','STR_MEETING':'AI','STR_MENU':'AI','STR_HOST':'기관','STR_TARGET':'대학생',
+    raw = {'STR_MEETCODE': '1','STR_MEETING':'AI','STR_MENU':'학문•과학•IT','STR_HOST':'기관','STR_TARGET':'대학생',
            'STR_DATE1':'11.01~11.30','STR_URL':'https://www.contestkorea.com/sub/view.php?str_no=1'}
     def request(endpoint, params, key):
         calls.append((endpoint, params))
-        return [{'STR_BCODE':'0301'}] if endpoint == 'menu_info_api.php' else [raw] * params['limitsu']
+        return [{'STR_BCODE': code, 'STR_IDXWORD': name} for code, name in ck.CONTESTKOREA_CATEGORIES['competition'].items()] if endpoint == 'menu_info_api.php' else [raw] * params['limitsu']
     monkeypatch.setattr(ck, 'request_json', request)
     monkeypatch.setattr(ck, 'verify_period', lambda item: {**item, 'verified_period':record()['period']})
     result = ck.collect_kind('competition', 'secret', eligible_only=True, now=NOW)
-    assert [p['limitsu'] for e,p in calls if e=='meeting_info_api.php'] == [100,200]
-    assert result.limited_categories == 1 and len(result.items) == 1
+    assert [p['limitsu'] for e,p in calls if e=='meeting_info_api.php'] == [100,200,100,200]
+    assert result.limited_categories == 2 and len(result.items) == 1
 
 
 class ListingPage:
@@ -153,14 +153,14 @@ def test_explicit_status_cell_overrides_open_dates(value,expected):
 
 
 def test_ck_broken_structure_is_partial_zero_not_success_zero(monkeypatch):
-    raw={'STR_MEETCODE':'1','STR_MEETING':'AI','STR_MENU':'AI','STR_HOST':'기관','STR_TARGET':'대학생',
+    raw={'STR_MEETCODE':'1','STR_MEETING':'AI','STR_MENU':'학문•과학•IT','STR_HOST':'기관','STR_TARGET':'대학생',
          'STR_DATE1':'11.01~11.30','STR_URL':'https://www.contestkorea.com/sub/view.php?str_no=1'}
-    monkeypatch.setattr(ck,'request_json',lambda endpoint,*args: [{'STR_BCODE':'0301'}] if endpoint=='menu_info_api.php' else [raw])
+    monkeypatch.setattr(ck,'request_json',lambda endpoint,*args: [{'STR_BCODE': code, 'STR_IDXWORD': name} for code, name in ck.CONTESTKOREA_CATEGORIES['competition'].items()] if endpoint=='menu_info_api.php' else [raw])
     opener=MagicMock();opener.open.return_value.__enter__.return_value.read.return_value=b'<html>changed structure</html>'
     monkeypatch.setattr(ck,'build_opener',lambda *args:opener)
     result=ck.collect_kind('competition','secret',eligible_only=True,now=NOW)
     assert result.status=='partial' and not result.items
-    assert result.parse_failures==1 and result.network_failures==0 and result.fetched_items==1
+    assert result.parse_failures==1 and result.network_failures==0 and result.fetched_items==2
     assert result.observations[0]['verification_error']=='parse_error'
     opener.open.side_effect=OSError('temporary outage')
     result=ck.collect_kind('competition','secret',eligible_only=True,now=NOW)
@@ -168,9 +168,9 @@ def test_ck_broken_structure_is_partial_zero_not_success_zero(monkeypatch):
 
 
 def test_ck_original_unknown_period_can_be_success_zero(monkeypatch):
-    raw={'STR_MEETCODE':'1','STR_MEETING':'AI','STR_MENU':'AI','STR_HOST':'기관','STR_TARGET':'대학생',
+    raw={'STR_MEETCODE':'1','STR_MEETING':'AI','STR_MENU':'학문•과학•IT','STR_HOST':'기관','STR_TARGET':'대학생',
          'STR_DATE1':'미정','STR_URL':'https://www.contestkorea.com/sub/view.php?str_no=1'}
-    monkeypatch.setattr(ck,'request_json',lambda endpoint,*args: [{'STR_BCODE':'0301'}] if endpoint=='menu_info_api.php' else [raw])
+    monkeypatch.setattr(ck,'request_json',lambda endpoint,*args: [{'STR_BCODE': code, 'STR_IDXWORD': name} for code, name in ck.CONTESTKOREA_CATEGORIES['competition'].items()] if endpoint=='menu_info_api.php' else [raw])
     opener=MagicMock();opener.open.return_value.__enter__.return_value.read.return_value='<table><tr><th>접수 기간</th><td>미정</td></tr></table>'.encode()
     monkeypatch.setattr(ck,'build_opener',lambda *args:opener)
     result=ck.collect_kind('competition','secret',eligible_only=True,now=NOW)
@@ -193,25 +193,25 @@ def test_distinct_editions_with_shared_application_url_stay_separate():
 
 
 def test_expansion_failure_keeps_previously_returned_records(monkeypatch):
-    raw={'STR_MEETCODE':'1','STR_MEETING':'AI','STR_MENU':'AI','STR_HOST':'기관','STR_TARGET':'대학생',
+    raw={'STR_MEETCODE':'1','STR_MEETING':'AI','STR_MENU':'학문•과학•IT','STR_HOST':'기관','STR_TARGET':'대학생',
          'STR_DATE1':'11.01~11.30','STR_URL':'https://www.contestkorea.com/sub/view.php?str_no=1'}
     def request(endpoint,params,key):
-        if endpoint=='menu_info_api.php':return [{'STR_BCODE':'0301'}]
+        if endpoint=='menu_info_api.php':return [{'STR_BCODE': code, 'STR_IDXWORD': name} for code, name in ck.CONTESTKOREA_CATEGORIES['competition'].items()]
         if params['limitsu']==100:return [raw]*100
         raise ck.ProviderError('provider_unavailable')
     monkeypatch.setattr(ck,'request_json',request)
     monkeypatch.setattr(ck,'verify_period',lambda item:{**item,'verified_period':record()['period']})
     result=ck.collect_kind('competition','secret',eligible_only=True,now=NOW)
-    assert result.status=='error' and result.network_failures==1
+    assert result.status=='error' and result.network_failures==2
     assert len(result.items)==1 and result.items[0]['id']=='1'
 
 
 def test_unchanged_expired_historical_detail_is_not_fetched_again(monkeypatch):
-    raw={'STR_MEETCODE':'1','STR_MEETING':'AI','STR_MENU':'AI','STR_HOST':'기관','STR_TARGET':'대학생',
+    raw={'STR_MEETCODE':'1','STR_MEETING':'AI','STR_MENU':'학문•과학•IT','STR_HOST':'기관','STR_TARGET':'대학생',
          'STR_DATE1':'10.01~10.31','STR_URL':'https://www.contestkorea.com/sub/view.php?str_no=1'}
     old={**ck.normalize(raw,'competition'),'verified_period':'2026.10.01 ~ 2026.10.31'}
     old.pop('listing_signature')  # Historical snapshots predate this field.
-    monkeypatch.setattr(ck,'request_json',lambda endpoint,*args: [{'STR_BCODE':'0301'}] if endpoint=='menu_info_api.php' else [raw])
+    monkeypatch.setattr(ck,'request_json',lambda endpoint,*args: [{'STR_BCODE': code, 'STR_IDXWORD': name} for code, name in ck.CONTESTKOREA_CATEGORIES['competition'].items()] if endpoint=='menu_info_api.php' else [raw])
     verify=MagicMock(side_effect=AssertionError('no expired historical detail HTTP'))
     monkeypatch.setattr(ck,'verify_period',verify)
     result=ck.collect_kind('competition','secret',eligible_only=True,now=NOW,known_details={'1':old})
