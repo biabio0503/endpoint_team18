@@ -10,7 +10,7 @@ from services.project_experience import current_comparison, digest, model_basis,
 from services.roadmap_validation import invalid, parse_result
 from services.job_skill_analysis import ALIASES, skill_priority
 
-RULES_VERSION = 'personalized-roadmap-v7-normalized-course-goals'
+RULES_VERSION = 'personalized-roadmap-v8-goal-mentions'
 TASK_TYPES = {
     'learn': ['practice', 'apply', 'validate', 'document'],
     'deepen': ['apply', 'validate', 'document'],

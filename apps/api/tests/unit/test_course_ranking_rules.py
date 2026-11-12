@@ -117,3 +117,30 @@ def test_explicit_goal_ranks_before_job_evidence_and_job_experience():
               {'skill_name': 'SQL', 'student_status': 'no_experience', 'job_requirement': {}}]
     result = select('JavaScript를 배우고 싶다', [python, sql, web], skills)
     assert [c['course_id'] for c in result] == ['web', 'sql', 'python']
+
+
+def test_goal_alias_spans_and_prior_learning():
+    rows = [course(name, [(name, 'learning', '공식 강의 소개.')])
+            for name in ('C', 'C++', 'C#', 'Java', 'JavaScript')]
+    def direct(goal):
+        return {c['course_id'] for c in select(goal, rows) if c['recommendation_type'] == 'direct'}
+    for goal in ('C++ 입문', 'C plus plus 입문'):
+        assert direct(goal) == {'C++'}
+    for goal in ('C# 입문', 'C sharp 입문'):
+        assert direct(goal) == {'C#'}
+    for goal in ('JavaScript 입문', 'Java script 입문', '자바스크립트 입문'):
+        assert direct(goal) == {'JavaScript'}
+    assert direct('Java와 JavaScript를 배우고 싶다') == {'Java', 'JavaScript'}
+    assert direct('C는 이미 배웠고 C++를 배우고 싶다') == {'C++'}
+    assert direct('C++는 이미 배웠고 C를 배우고 싶다') == {'C'}
+    assert direct('C와 C++를 배우고 싶다') == {'C', 'C++'}
+    assert direct('C를 이미 배웠고 C를 다시 배우고 싶다') == {'C'}
+    assert direct('C 경험 없음') == {'C'}
+
+
+def test_job_evidence_does_not_turn_explicitly_past_skill_into_learning_goal():
+    rows = [course(name, [(name, 'learning', '공식 강의 소개.')]) for name in ('C', 'C++')]
+    skills = [{'skill_name': 'C', 'student_status': 'confirmed_experience', 'job_requirement': {}},
+              {'skill_name': 'C++', 'student_status': 'no_experience', 'job_requirement': {}}]
+    result = select('C는 이미 배웠고 C++를 배우고 싶다', rows, skills)
+    assert [(c['course_id'], c['recommendation_type']) for c in result] == [('C++', 'direct'), ('C', 'exploration')]

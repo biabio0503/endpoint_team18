@@ -46,7 +46,7 @@ try {
  await send('Page.addScriptToEvaluateOnNewDocument', { source: '(' + installRoadmapMock.toString() + ')()' });
  const click = text => run(`[...document.querySelectorAll('button')].find(e=>e.textContent===${JSON.stringify(text)}).click()`);
  await send('Page.navigate', { url: `${origin}/result` });
- await wait("document.body.innerText.includes('검증된 직무 분석이 없어 제한 안내 로드맵')");
+ await wait("document.body.innerText.includes('검증된 직무 분석이 없어 진로 목표·교육과정 기준의 수강 후보와 제한 안내')");
  assert.equal(await run('mockRoadmap.posts'), 0);
  await tab(4);
  await wait("document.body.innerText.includes('현재 추천 조건에 맞는 공고가 없습니다.')");
@@ -57,6 +57,7 @@ try {
  await click('로드맵 생성');
  await wait("document.body.innerText.includes('작업 완료 0 / 3개')");
  assert.equal(await run('mockRoadmap.posts'), 1);
+ await wait("!!document.querySelector('input[type=checkbox]:not(:disabled)')");
  await run("document.querySelector('input[type=checkbox]').click()");
  await wait("document.body.innerText.includes('작업 완료 1 / 3개')");
  assert.equal(await run('mockRoadmap.revision'), 1);
@@ -73,7 +74,10 @@ try {
  assert.equal(await run('mockRoadmap.posts'), 1);
  await tab(3);
  await wait("document.body.innerText.includes('TEST-DB')");
- assert.ok(await run("document.body.innerText.includes('과목명 기반 추론') && document.body.innerText.includes('잠정 후보')"));
+ assert.ok(await run("document.body.innerText.includes('수강 전 확인: Python') && document.body.innerText.includes('잠정 후보')"));
+ assert.ok(await run("!document.body.innerText.includes('관련 학습 키워드:')"));
+ await run("[...document.querySelectorAll('summary')].find(e=>e.textContent.includes('공식 근거와 출처 쪽수')).click()");
+ assert.ok(await run("document.body.innerText.includes('과목명 기반 추론') && document.body.innerText.includes('52쪽')"));
  await run("mockRoadmap.sql='not_verified';mockRoadmap.completed=true;mockRoadmap.revision++");
  await click('저장 결과 새로고침');
  await wait("document.body.innerText.includes('이전 입력·분석 기준')");

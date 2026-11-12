@@ -43,13 +43,33 @@ try:
     assert [c['course_id'] for c in result['recommended_courses']] == [c['course_id'] for c in chosen]
     assert all('모델' not in c['personalization_reason'] for c in result['recommended_courses'])
     assert case.client.get(case.base + '/roadmaps/' + old).status_code == 200
+    # A prior roadmap basis stays readable but cannot satisfy a new request.
+    changed = case.client.patch(case.base, json={'expected_input_revision': case.revision(),
+                                'changes': {'career_goal': 'SQL 학습 희망과 심화'}})
+    assert changed.status_code == 200, changed.text
+    with patch('services.roadmap_generation.RULES_VERSION', 'personalized-roadmap-v7-normalized-course-goals'), \
+         patch('api.routes.roadmaps.generate_roadmap', side_effect=short_provider):
+        previous = case.make()
+    assert previous.status_code == 201, previous.text
+    previous_id = previous.json()['run_id']
+    assert case.client.get(case.base + '/roadmaps/' + previous_id).json()['run_id'] == previous_id
+    with patch('api.routes.roadmaps.generate_roadmap', side_effect=short_provider):
+        upgraded = case.make()
+    assert upgraded.status_code == 201 and upgraded.json()['run_id'] != previous_id, upgraded.text
+    restored = case.client.get(case.base + '/roadmaps/' + previous_id)
+    assert restored.status_code == 200 and restored.json()['run_id'] == previous_id
     # Simulate a cache entry under an earlier rule, then require a new-rule response.
     with patch('api.routes.recommendations.RULES_VERSION', 'old-course-rules'), \
          patch('api.routes.recommendations.recommend', return_value=chosen[:3]):
         legacy = case.client.post(case.base + '/course-recommendations', json={})
     assert len(legacy.json()['courses']) == 3
-    current = case.client.post(case.base + '/course-recommendations', json={})
-    assert len(current.json()['courses']) == 6
+    from services.course_recommendations import recommend
+    with patch('api.routes.recommendations.recommend', wraps=recommend) as current_recommend:
+        current = case.client.post(case.base + '/course-recommendations', json={})
+        assert current_recommend.call_count == 2  # cache miss plus post-read verification
+        repeated = case.client.post(case.base + '/course-recommendations', json={})
+        assert current_recommend.call_count == 3  # cached plus post-read verification
+    assert len(current.json()['courses']) == len(repeated.json()['courses']) == 6
     # Exercise actual HTTP responses after changing completion state, including 0.
     for remaining in (5, 4, 0):
         with closing(connect()) as db:

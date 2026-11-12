@@ -5,7 +5,7 @@ from functools import lru_cache
 
 from services.job_skill_analysis import ALIASES, normalize_skill
 
-RULES_VERSION = 'course-evidence-v3-normalized-goals'
+RULES_VERSION = 'course-evidence-v4-goal-mentions'
 
 # One vocabulary is used for explicit goals, job skills and related candidates.
 # Keep overlapping language names distinct when matching free text.
@@ -13,6 +13,7 @@ COURSE_ALIASES = {
     **ALIASES,
     **{alias.casefold(): (name, 'other', variants)
        for name, variants in (
+           ('JavaScript', ('JavaScript', 'JS', 'Java script', '자바스크립트')),
            ('C', ('C', 'C언어', 'C 언어')),
            ('C++', ('C++', 'C plus plus', '씨플플')),
            ('C#', ('C#', 'C sharp', '씨샵')),
@@ -72,15 +73,39 @@ def _matches(keyword, text):
     return len(words) >= 2 and all(word in normalized for word in words)
 
 
+@lru_cache(maxsize=512)
+def _goal_mentions(goal):
+    """Resolve overlapping known aliases by longest span, retaining separate mentions."""
+    normalized = unicodedata.normalize('NFKC', goal).casefold()
+    candidates = []
+    names = {entry[0] for entry in COURSE_ALIASES.values()}
+    for name in names:
+        for match in _pattern(name).finditer(normalized):
+            candidates.append((match.start(), match.end(), _key(name)))
+    accepted = []
+    for start, end, key in sorted(candidates, key=lambda m: (-(m[1] - m[0]), m[0], m[2])):
+        if not any(start < other_end and other_start < end for other_start, other_end, _ in accepted):
+            accepted.append((start, end, key))
+    return normalized, sorted(accepted)
+
+
 def _goal_learning_match(keyword, goal):
     if not _matches(keyword, goal):
         return False
-    normalized = unicodedata.normalize('NFKC', goal).casefold()
-    matches = list(_pattern(keyword).finditer(normalized))
-    # A single reference describing existing experience is not a request to learn it.
-    if len(matches) == 1 and re.match(r'\s*(?:을|를|의)?\s*경험(?:이|은|을)?\s*(?:있|보유)', normalized[matches[0].end():]):
-        return False
-    return True
+    normalized, mentions = _goal_mentions(goal)
+    key = _key(keyword)
+    if key not in {_key(entry[0]) for entry in COURSE_ALIASES.values()}:
+        return True
+    for index, (_, end, mention_key) in enumerate(mentions):
+        if mention_key != key:
+            continue
+        next_start = mentions[index + 1][0] if index + 1 < len(mentions) else len(normalized)
+        context = normalized[end:next_start].split('.')[0]
+        # Only past/possessed experience belongs to this mention. "경험 없음" remains a goal.
+        past = re.match(r'\s*(?:은|는|을|를|이|가|의)?\s*(?:이미\s*)?(?:배웠|학습했|공부했|익혔|알고\s*있|경험(?:이|은|을)?\s*(?:있|보유))', context)
+        if not past:
+            return True
+    return False
 
 
 def rank_courses(profile, courses, review_status, skills=()):
@@ -88,6 +113,7 @@ def rank_courses(profile, courses, review_status, skills=()):
     job = [s['skill_name'] for s in skills if s.get('job_requirement', {}).get('recommendation_eligible', True)]
     programming_goal = any(_matches(term, goal) for term in PROGRAMMING_GOALS)
     ranked = []
+    mentioned_keys = {key for _, _, key in _goal_mentions(goal)[1]}
     for course in available_courses(courses).values():
         description = course.get('description_text') or ''
         sources = course.get('_keyword_sources') or [course]
@@ -98,7 +124,9 @@ def rank_courses(profile, courses, review_status, skills=()):
                     and k['evidence_text'] in (source.get('description_text') or '')]
         learning = [k for k in evidence if k['keyword_role'] == 'learning']
         direct_goal = [k for k in learning if _goal_learning_match(k['keyword'], goal)]
-        direct_job = [k for k in learning if any(_key(k['keyword']) == _key(name) for name in job)]
+        direct_job = [k for k in learning
+                      if any(_key(k['keyword']) == _key(name) for name in job)
+                      and not (_key(k['keyword']) in mentioned_keys and not _goal_learning_match(k['keyword'], goal))]
         matching = direct_goal or direct_job
         foundation = any(_matches(k['keyword'], '프로그래밍 기초') for k in learning) and programming_goal
         if matching:

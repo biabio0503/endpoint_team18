@@ -74,11 +74,9 @@ export function CourseCandidates({ result }) {
   <ul className="skill-list">{cards.map(course => <li className="skill-card" key={course.course_id}>
    <h3>{course.course_name} <span className="badge">{course.recommendation_label || course.course_code || '코드 미제공'}</span></h3>
    <p>{course.credits == null ? '학점 미제공' : `${course.credits}학점`}{course.recommended_year ? ` · 교육과정 권장 ${course.recommended_year}학년` : ''}{course.recommended_term ? ` ${course.recommended_term}` : ''}</p>
-   <p>{course.personalization_reason || course.reason}</p><p>관련 학습 키워드: {(course.learning_keywords || course.related_skills || []).join(', ') || '확인 필요'}</p>
+   <p>{course.personalization_reason || course.reason}</p>
    {(course.keyword_evidence || []).some(item => item.keyword_role === 'prerequisite') && <p><b>수강 전 확인:</b> {(course.keyword_evidence || []).filter(item => item.keyword_role === 'prerequisite').map(item => item.keyword).join(', ')}</p>}
-   <p className="field-help">{course.completion_state === 'unconfirmed' ? '이수 여부 미확인' : '생성 당시 현재 목록에서 이수 선택하지 않은 과목'} · {course.recommendation_confidence === 'limited' ? '제한된 근거의 후보' : '제공된 설명에 근거한 후보'}</p>
-   <details><summary>공식 근거와 출처 쪽수</summary><p>{course.course_evidence}{course.evidence_page_start ? ` · ${course.evidence_page_start}쪽${course.evidence_page_end && course.evidence_page_end !== course.evidence_page_start ? `–${course.evidence_page_end}쪽` : ''}` : ''}</p>{(course.keyword_evidence || []).map((item, i) => <p key={i}>{item.keyword} · {({learning:'학습', prerequisite:'사전지식', tool:'도구', example:'예시', context:'배경'})[item.keyword_role]}: {item.evidence_text}{item.evidence_page_start ? ` · ${item.evidence_page_start}쪽` : ''}</p>)}</details>
-   <p className="field-help">{course.limitations} {course.availability_notice}</p><Evidence refs={course.evidence_refs} result={result}/>
+   <details><summary>공식 근거와 출처 쪽수</summary><p>{course.course_evidence}{course.evidence_page_start ? ` · ${course.evidence_page_start}쪽${course.evidence_page_end && course.evidence_page_end !== course.evidence_page_start ? `–${course.evidence_page_end}쪽` : ''}` : ''}</p>{(course.keyword_evidence || []).map((item, i) => <p key={i}>{item.keyword} · {({learning:'학습', prerequisite:'사전지식', tool:'도구', example:'예시', context:'배경'})[item.keyword_role]}: {item.evidence_text}{item.evidence_page_start ? ` · ${item.evidence_page_start}쪽` : ''}</p>)}<p>{course.limitations} {course.availability_notice}</p><Evidence refs={course.evidence_refs} result={result}/></details>
   </li>)}</ul>
   <p className="field-help">목록 밖에서 보존한 과거 이수 선택 {result.basis.outside_completed_courses.length}개. 현재 수강 후보에는 포함하지 않습니다.</p>
  </>;

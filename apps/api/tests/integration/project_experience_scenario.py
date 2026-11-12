@@ -203,8 +203,7 @@ class ProjectExperienceAPI(unittest.TestCase):
                 self.assertEqual(self.client.post(self.base + '/job-skill-analysis', json={'refresh': True}).status_code, 200)
                 self.assertEqual(basis(), confirmed)  # Replaced snapshot removes its SQL answer.
         self.assertEqual(self.revision(), revision)
-        with patch('api.routes.activities.catalog.get', return_value=([], [])):
-            response = self.client.get(self.base + '/activities')
+        response = self.client.get(self.base + '/activities')
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(response.json()['activity_basis'], basis())
         # A field unrelated to activity ranking must not invalidate its cache.

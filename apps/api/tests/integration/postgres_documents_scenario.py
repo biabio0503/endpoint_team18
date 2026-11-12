@@ -203,3 +203,9 @@ with psycopg.connect(url, autocommit=True) as db:
 scenario = Path(__file__).with_name("guest_guardrail_scenario.py")
 result = subprocess.run([sys.executable, str(scenario)], env=os.environ.copy(), capture_output=True, text=True, timeout=60)
 assert result.returncode == 0, result.stdout + result.stderr
+
+for name in ('course_ranking_scenario.py', 'catalog_ranking_scenario.py'):
+    scenario = Path(__file__).with_name(name)
+    result = subprocess.run([sys.executable, str(scenario)], env=os.environ.copy(), capture_output=True, text=True, timeout=120)
+    assert result.returncode == 0, result.stdout + result.stderr
+    print(result.stdout)
