@@ -10,11 +10,11 @@ from fastapi.testclient import TestClient
 import main
 
 headers = {'Origin': 'http://localhost:3000'}
-sources = [{'kind': 'competition', 'status': 'success'}, {'kind': 'extracurricular', 'status': 'error'}]
+sources = {'kind': 'competition', 'source': 'contestkorea', 'status': 'success'}
 item = {'id': 'real-contract-fixture', 'kind': 'competition', 'title': '데이터 분석 경진대회', 'category': '데이터',
         'target': '대학생', 'period': '상시 접수', 'host': '테스트', 'url': 'https://www.contestkorea.com/sub/view.php?str_no=test'}
 
-with TestClient(main.app, headers=headers) as client, patch('api.routes.activities.catalog.get', return_value=([item], sources)) as fetch, \
+with TestClient(main.app, headers=headers) as client, patch('api.routes.activities.load_contestkorea_catalog', return_value=([item], sources)) as fetch, \
         patch('services.gemini_projects.extract_project_experiences', side_effect=AssertionError('No Gemini')):
     plan = client.post('/api/roadmap-inputs').json()
     rid = plan['request_id']
@@ -33,7 +33,7 @@ with TestClient(main.app, headers=headers) as client, patch('api.routes.activiti
     assert data['activities'][0]['reasons'] and data['activities'][0]['deadline_label'] == '상시 접수'
     # No document, job analysis or generated roadmap was needed.
     assert client.get(base).json()['request_id'] == rid
-    fetch.return_value = ([], [{'kind': k, 'status': 'error'} for k in ('competition', 'extracurricular')])
+    fetch.return_value = ([], {'kind': 'competition', 'status': 'error'})
     assert client.get(path).json()['status'] == 'error'
     assert client.get(base).status_code == 200
     assert client.get(base + '/roadmap').status_code == 200
@@ -43,7 +43,7 @@ with TestClient(main.app, headers=headers) as client, patch('api.routes.activiti
         other.post('/api/roadmap-inputs')
         assert other.get(path).status_code == 404
     assert fetch.call_count == count
-    def changed_goal():
+    def changed_goal(*args, **kwargs):
         client.patch(base, json={'expected_input_revision': 1, 'changes': {'career_goal': '마케팅'}})
         return [item], sources
     fetch.side_effect = changed_goal

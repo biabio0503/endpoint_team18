@@ -1,0 +1,34 @@
+✔ tab/focus reuse activity response without depending on any roadmap endpoint (1.988583ms)
+✔ input changes, selected plan changes and Korean midnight invalidate the cache (2.385375ms)
+✔ manual retry refreshes and failure does not return stale personalized cards (0.844459ms)
+✔ overlapping tab activations share the same in-flight request (5.040042ms)
+✔ an exact event deadline expires the cache at 10:00 KST with both original links intact (0.631625ms)
+✔ an old English ID and the Korean ID resolve to the same bilingual card (1.893625ms)
+✔ duplicate historical cards and both step references display once (0.447709ms)
+✔ similar or identical names without explicit member IDs stay separate (1.794166ms)
+✔ an unavailable historical reference does not crash the roadmap (0.373ms)
+✔ tab visits, focus, new input and selected plan changes never call AI (4.909ms)
+✔ explicit concurrent runs deduplicate and saved reads are free (1.336625ms)
+✔ changed input or selected plan rejects in-flight analysis (6.324ms)
+✔ failed paid request needs another explicit action, missing plan never posts (0.981542ms)
+✔ same revision reads newly completed project evidence without AI (0.490584ms)
+✔ comparison display, actual model input and proposed activities remain distinct (0.2795ms)
+✔ new comparison order reflects server evidence/experience; legacy saved names stay intact (0.365667ms)
+✔ selected plan remains selected even when another plan is the latest (9.310917ms)
+(node:62623) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ selection is scoped to the authenticated user and the tab (2.765625ms)
+✔ session change while selecting cannot retain a previous user plan (2.298625ms)
+✔ missing, failed, and malformed resume responses stay distinct (1.461083ms)
+✔ authenticated requests use the intended user token and reject account changes (21.704541ms)
+✔ roadmap API failures retain safe diagnostic metadata for the result screen (1.556083ms)
+✔ validation failures explain preservation and give the failed run ID (0.919542ms)
+✔ history handles detailed and legacy failures without needing a schema migration (0.237292ms)
+ℹ tests 24
+ℹ suites 0
+ℹ pass 24
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 125.27625

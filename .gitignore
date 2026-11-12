@@ -47,6 +47,9 @@ test-results/
 playwright-report/
 blob-report/
 *.log
+__pycache__/
+*.py[cod]
+.playwright-browsers/
 
 # Operating system and editor files
 .DS_Store

@@ -39,3 +39,9 @@ Free 서비스는 유휴 시 중지될 수 있고 로컬 파일은 영구 보관
 기존 원본 Storage를 유지하는 OCR이 추가되었습니다. 기본값은 `ROADMAP_OCR_PROVIDER=none`이며 운영 설정은 자동 변경하지 않습니다. 새 SQL `20261110091129_document_ocr_units.sql` 적용 전 백업·격리 검증·별도 승인이 필요합니다. 인증, 월 최대 900단위 예약, Render Secret File, 재시작 보호 및 한계는 [OCR 배포 안내](google-vision-ocr.md)를 따릅니다. 사용량 ledger는 기능 비활성화/롤백 시에도 삭제하지 않습니다.
 
 OCR 비용 기간 수정: `20261111021219_document_ocr_billing_period.sql`은 기존 UTC 시각을 보존하면서 `America/Los_Angeles`(DST 포함)의 `billing_period`를 채웁니다. 기존 OCR SQL 다음에 적용해야 하며, 적용 전 provider `none`과 구버전 워커 종료가 필요합니다. 운영에는 자동 적용하지 않았습니다. 같은 결제 계정의 다른 프로젝트 사용량은 이 DB에서 추적하지 못합니다. [상세 이관·검증 안내](google-vision-ocr.md)를 확인하세요.
+
+## 데이콘·데이커 매일 수집
+
+별도 Docker Cron Job `team18-dacon-daily`의 설정은 저장소 루트 `render.yaml`에 있다. `10 0 * * *`(매일 09:10 KST), Root Directory 비움, Docker context `.`를 사용한다. 웹 서비스 Root Directory `apps/api`는 유지한다. 운영 DB 추가 테이블은 적용했지만 Cron Job 등록과 코드 배포는 아직 하지 않았다. 수동 One-off Job 명령과 정확한 대시보드 값은 [데이콘 수집 운영 인수인계](dacon-server-collection.md)를 따른다.
+
+콘테스트코리아도 같은 Cron Job에서 수집한다. Docker Command는 `python -m crawling.activities.run --mode scheduled`로 바꾸고 Cron 환경에 `CONTESTKOREA_API_KEY`를 추가한다. [조건부 저장·예정 카드 운영 안내](contestkorea-server-collection.md)를 확인한다.

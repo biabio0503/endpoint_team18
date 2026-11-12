@@ -1,0 +1,424 @@
+FFFFFFFFFFF.....FFF                                                      [100%]
+=================================== FAILURES ===================================
+_________________ test_exact_deadline_through_real_loaders[9] __________________
+
+database = (<psycopg.Connection [IDLE] (host=127.0.0.1 port=55446 user=postgres database=team18_dacon_test) at 0x111d0a900>, <function database.<locals>.another at 0x111dcb110>)
+clock = [datetime.datetime(2026, 11, 30, 9, 0, tzinfo=zoneinfo.ZoneInfo(key='Asia/Seoul'))]
+api = <function api.<locals>.get at 0x111dd1e80>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10b019350>, hour = 9
+
+    @pytest.mark.parametrize('hour', [9, 11])
+    def test_exact_deadline_through_real_loaders(database, clock, api, monkeypatch, hour):
+        db, _ = database
+        collect_pair(db, clock, monkeypatch)
+        clock[0] = datetime(2026, 11, 30, hour, tzinfo=KST)
+        # Include a classified expired row, not only an active row past deadline.
+        from crawling.activities.candidates import Candidates
+        Candidates(db, ['daker'], clock[0]).classify_history()
+        result = api()
+        assert len(result['activities']) == (1 if hour == 9 else 0)
+        if hour == 9:
+            card, = result['activities']
+>           assert len(card['source_links']) == 2
+E           AssertionError: assert 1 == 2
+E            +  where 1 = len([{'source': 'contestkorea', 'source_label': '콘테스트코리아', 'original_id': 'review', 'url': 'https://www.contestkorea.com/sub/view.php?str_no=review', ...}])
+
+apps/api/tests/integration/test_activity_review_regressions.py:105: AssertionError
+----------------------------- Captured stderr call -----------------------------
+[contestkorea] competition: success, fetched=1, eligible=1, unknown=0, parse_failures=0, network_failures=0
+[contestkorea] extracurricular: success, fetched=1, eligible=1, unknown=0, parse_failures=0, network_failures=0
+_________________ test_exact_deadline_through_real_loaders[11] _________________
+
+database = (<psycopg.Connection [IDLE] (host=127.0.0.1 port=55446 user=postgres database=team18_dacon_test) at 0x111d956d0>, <function database.<locals>.another at 0x10d4f3a00>)
+clock = [datetime.datetime(2026, 11, 30, 11, 0, tzinfo=zoneinfo.ZoneInfo(key='Asia/Seoul'))]
+api = <function api.<locals>.get at 0x111e4e980>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x111d47e10>, hour = 11
+
+    @pytest.mark.parametrize('hour', [9, 11])
+    def test_exact_deadline_through_real_loaders(database, clock, api, monkeypatch, hour):
+        db, _ = database
+        collect_pair(db, clock, monkeypatch)
+        clock[0] = datetime(2026, 11, 30, hour, tzinfo=KST)
+        # Include a classified expired row, not only an active row past deadline.
+        from crawling.activities.candidates import Candidates
+        Candidates(db, ['daker'], clock[0]).classify_history()
+        result = api()
+>       assert len(result['activities']) == (1 if hour == 9 else 0)
+E       AssertionError: assert 1 == 0
+E        +  where 1 = len([{'category': '데이터', 'host': '주최기관', 'id': 'review', 'url': 'https://www.contestkorea.com/sub/view.php?str_no=review', ...}])
+
+apps/api/tests/integration/test_activity_review_regressions.py:102: AssertionError
+----------------------------- Captured stderr call -----------------------------
+[contestkorea] competition: success, fetched=1, eligible=1, unknown=0, parse_failures=0, network_failures=0
+[contestkorea] extracurricular: success, fetched=1, eligible=1, unknown=0, parse_failures=0, network_failures=0
+___________ test_extension_survives_stale_listing_next_day[extended] ___________
+
+database = (<psycopg.Connection [IDLE] (host=127.0.0.1 port=55446 user=postgres database=team18_dacon_test) at 0x111d97610>, <function database.<locals>.another at 0x111e4e140>)
+clock = [datetime.datetime(2026, 11, 13, 9, 10, tzinfo=zoneinfo.ZoneInfo(key='Asia/Seoul'))]
+api = <function api.<locals>.get at 0x111e5de80>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x111d6e9f0>
+outcome = 'extended'
+
+    @pytest.mark.parametrize('outcome', ['extended', 'closed', 'cancelled', 'network', 'parse'])
+    def test_extension_survives_stale_listing_next_day(database, clock, api, monkeypatch, outcome):
+        db, _ = database
+        page = [detail()]
+        _, opener = transport(monkeypatch, page, period='2026.11.01 ~ 2026.11.12')
+        store = Store(db, lambda: clock[0])
+        store.run(lambda: collect(known=store.known_details()))
+        before = current(db, 'review')
+        assert len(api()['activities']) == 1
+        clock[0] += timedelta(days=1)
+        if outcome == 'closed': page[0] = detail('접수 마감되었습니다')
+        if outcome == 'cancelled': page[0] = detail('대회 취소')
+        if outcome == 'parse': page[0] = b'<html>broken structure</html>'
+        if outcome == 'network': opener.open.side_effect = OSError('offline')
+        result = store.run(lambda: collect(known=store.known_details()))
+>       assert opener.open.call_count == 2
+E       AssertionError: assert 1 == 2
+E        +  where 1 = <Mock name='mock.open' id='4595010256'>.call_count
+E        +    where <Mock name='mock.open' id='4595010256'> = <Mock id='4595009920'>.open
+
+apps/api/tests/integration/test_activity_review_regressions.py:129: AssertionError
+----------------------------- Captured stderr call -----------------------------
+[contestkorea] competition: success, fetched=1, eligible=1, unknown=0, parse_failures=0, network_failures=0
+[contestkorea] extracurricular: success, fetched=1, eligible=1, unknown=0, parse_failures=0, network_failures=0
+[contestkorea] competition: success, fetched=1, eligible=0, unknown=0, parse_failures=0, network_failures=0
+[contestkorea] extracurricular: success, fetched=1, eligible=0, unknown=0, parse_failures=0, network_failures=0
+____________ test_extension_survives_stale_listing_next_day[closed] ____________
+
+database = (<psycopg.Connection [IDLE] (host=127.0.0.1 port=55446 user=postgres database=team18_dacon_test) at 0x111e203e0>, <function database.<locals>.another at 0x111e4f690>)
+clock = [datetime.datetime(2026, 11, 13, 9, 10, tzinfo=zoneinfo.ZoneInfo(key='Asia/Seoul'))]
+api = <function api.<locals>.get at 0x111e5c670>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x111e0ebe0>
+outcome = 'closed'
+
+    @pytest.mark.parametrize('outcome', ['extended', 'closed', 'cancelled', 'network', 'parse'])
+    def test_extension_survives_stale_listing_next_day(database, clock, api, monkeypatch, outcome):
+        db, _ = database
+        page = [detail()]
+        _, opener = transport(monkeypatch, page, period='2026.11.01 ~ 2026.11.12')
+        store = Store(db, lambda: clock[0])
+        store.run(lambda: collect(known=store.known_details()))
+        before = current(db, 'review')
+        assert len(api()['activities']) == 1
+        clock[0] += timedelta(days=1)
+        if outcome == 'closed': page[0] = detail('접수 마감되었습니다')
+        if outcome == 'cancelled': page[0] = detail('대회 취소')
+        if outcome == 'parse': page[0] = b'<html>broken structure</html>'
+        if outcome == 'network': opener.open.side_effect = OSError('offline')
+        result = store.run(lambda: collect(known=store.known_details()))
+>       assert opener.open.call_count == 2
+E       AssertionError: assert 1 == 2
+E        +  where 1 = <Mock name='mock.open' id='4595013280'>.call_count
+E        +    where <Mock name='mock.open' id='4595013280'> = <Mock id='4595012944'>.open
+
+apps/api/tests/integration/test_activity_review_regressions.py:129: AssertionError
+----------------------------- Captured stderr call -----------------------------
+[contestkorea] competition: success, fetched=1, eligible=1, unknown=0, parse_failures=0, network_failures=0
+[contestkorea] extracurricular: success, fetched=1, eligible=1, unknown=0, parse_failures=0, network_failures=0
+[contestkorea] competition: success, fetched=1, eligible=0, unknown=0, parse_failures=0, network_failures=0
+[contestkorea] extracurricular: success, fetched=1, eligible=0, unknown=0, parse_failures=0, network_failures=0
+__________ test_extension_survives_stale_listing_next_day[cancelled] ___________
+
+database = (<psycopg.Connection [IDLE] (host=127.0.0.1 port=55446 user=postgres database=team18_dacon_test) at 0x111e22b10>, <function database.<locals>.another at 0x111e5c720>)
+clock = [datetime.datetime(2026, 11, 13, 9, 10, tzinfo=zoneinfo.ZoneInfo(key='Asia/Seoul'))]
+api = <function api.<locals>.get at 0x111e5dfe0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x111e0ee00>
+outcome = 'cancelled'
+
+    @pytest.mark.parametrize('outcome', ['extended', 'closed', 'cancelled', 'network', 'parse'])
+    def test_extension_survives_stale_listing_next_day(database, clock, api, monkeypatch, outcome):
+        db, _ = database
+        page = [detail()]
+        _, opener = transport(monkeypatch, page, period='2026.11.01 ~ 2026.11.12')
+        store = Store(db, lambda: clock[0])
+        store.run(lambda: collect(known=store.known_details()))
+        before = current(db, 'review')
+        assert len(api()['activities']) == 1
+        clock[0] += timedelta(days=1)
+        if outcome == 'closed': page[0] = detail('접수 마감되었습니다')
+        if outcome == 'cancelled': page[0] = detail('대회 취소')
+        if outcome == 'parse': page[0] = b'<html>broken structure</html>'
+        if outcome == 'network': opener.open.side_effect = OSError('offline')
+        result = store.run(lambda: collect(known=store.known_details()))
+>       assert opener.open.call_count == 2
+E       AssertionError: assert 1 == 2
+E        +  where 1 = <Mock name='mock.open' id='4595016304'>.call_count
+E        +    where <Mock name='mock.open' id='4595016304'> = <Mock id='4595015968'>.open
+
+apps/api/tests/integration/test_activity_review_regressions.py:129: AssertionError
+----------------------------- Captured stderr call -----------------------------
+[contestkorea] competition: success, fetched=1, eligible=1, unknown=0, parse_failures=0, network_failures=0
+[contestkorea] extracurricular: success, fetched=1, eligible=1, unknown=0, parse_failures=0, network_failures=0
+[contestkorea] competition: success, fetched=1, eligible=0, unknown=0, parse_failures=0, network_failures=0
+[contestkorea] extracurricular: success, fetched=1, eligible=0, unknown=0, parse_failures=0, network_failures=0
+___________ test_extension_survives_stale_listing_next_day[network] ____________
+
+database = (<psycopg.Connection [IDLE] (host=127.0.0.1 port=55446 user=postgres database=team18_dacon_test) at 0x111e6e330>, <function database.<locals>.another at 0x111e5eda0>)
+clock = [datetime.datetime(2026, 11, 13, 9, 10, tzinfo=zoneinfo.ZoneInfo(key='Asia/Seoul'))]
+api = <function api.<locals>.get at 0x111ee8720>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x111ed9750>
+outcome = 'network'
+
+    @pytest.mark.parametrize('outcome', ['extended', 'closed', 'cancelled', 'network', 'parse'])
+    def test_extension_survives_stale_listing_next_day(database, clock, api, monkeypatch, outcome):
+        db, _ = database
+        page = [detail()]
+        _, opener = transport(monkeypatch, page, period='2026.11.01 ~ 2026.11.12')
+        store = Store(db, lambda: clock[0])
+        store.run(lambda: collect(known=store.known_details()))
+        before = current(db, 'review')
+        assert len(api()['activities']) == 1
+        clock[0] += timedelta(days=1)
+        if outcome == 'closed': page[0] = detail('접수 마감되었습니다')
+        if outcome == 'cancelled': page[0] = detail('대회 취소')
+        if outcome == 'parse': page[0] = b'<html>broken structure</html>'
+        if outcome == 'network': opener.open.side_effect = OSError('offline')
+        result = store.run(lambda: collect(known=store.known_details()))
+>       assert opener.open.call_count == 2
+E       AssertionError: assert 1 == 2
+E        +  where 1 = <Mock name='mock.open' id='4595019328'>.call_count
+E        +    where <Mock name='mock.open' id='4595019328'> = <Mock id='4595018992'>.open
+
+apps/api/tests/integration/test_activity_review_regressions.py:129: AssertionError
+----------------------------- Captured stderr call -----------------------------
+[contestkorea] competition: success, fetched=1, eligible=1, unknown=0, parse_failures=0, network_failures=0
+[contestkorea] extracurricular: success, fetched=1, eligible=1, unknown=0, parse_failures=0, network_failures=0
+[contestkorea] competition: success, fetched=1, eligible=0, unknown=0, parse_failures=0, network_failures=0
+[contestkorea] extracurricular: success, fetched=1, eligible=0, unknown=0, parse_failures=0, network_failures=0
+____________ test_extension_survives_stale_listing_next_day[parse] _____________
+
+database = (<psycopg.Connection [IDLE] (host=127.0.0.1 port=55446 user=postgres database=team18_dacon_test) at 0x111f20050>, <function database.<locals>.another at 0x111e5ecf0>)
+clock = [datetime.datetime(2026, 11, 13, 9, 10, tzinfo=zoneinfo.ZoneInfo(key='Asia/Seoul'))]
+api = <function api.<locals>.get at 0x111ee9fe0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x111ed9f50>
+outcome = 'parse'
+
+    @pytest.mark.parametrize('outcome', ['extended', 'closed', 'cancelled', 'network', 'parse'])
+    def test_extension_survives_stale_listing_next_day(database, clock, api, monkeypatch, outcome):
+        db, _ = database
+        page = [detail()]
+        _, opener = transport(monkeypatch, page, period='2026.11.01 ~ 2026.11.12')
+        store = Store(db, lambda: clock[0])
+        store.run(lambda: collect(known=store.known_details()))
+        before = current(db, 'review')
+        assert len(api()['activities']) == 1
+        clock[0] += timedelta(days=1)
+        if outcome == 'closed': page[0] = detail('접수 마감되었습니다')
+        if outcome == 'cancelled': page[0] = detail('대회 취소')
+        if outcome == 'parse': page[0] = b'<html>broken structure</html>'
+        if outcome == 'network': opener.open.side_effect = OSError('offline')
+        result = store.run(lambda: collect(known=store.known_details()))
+>       assert opener.open.call_count == 2
+E       AssertionError: assert 1 == 2
+E        +  where 1 = <Mock name='mock.open' id='4595022352'>.call_count
+E        +    where <Mock name='mock.open' id='4595022352'> = <Mock id='4595022016'>.open
+
+apps/api/tests/integration/test_activity_review_regressions.py:129: AssertionError
+----------------------------- Captured stderr call -----------------------------
+[contestkorea] competition: success, fetched=1, eligible=1, unknown=0, parse_failures=0, network_failures=0
+[contestkorea] extracurricular: success, fetched=1, eligible=1, unknown=0, parse_failures=0, network_failures=0
+[contestkorea] competition: success, fetched=1, eligible=0, unknown=0, parse_failures=0, network_failures=0
+[contestkorea] extracurricular: success, fetched=1, eligible=0, unknown=0, parse_failures=0, network_failures=0
+_ test_status_phrase_collection_to_api[\uc811\uc218 \uc911 (\uc815\uc6d0 \ucda9\uc871 \uc2dc \uc870\uae30 \ub9c8\uac10\ub420 \uc218 \uc788\uc2b5\ub2c8\ub2e4)-False] _
+
+database = (<psycopg.Connection [IDLE] (host=127.0.0.1 port=55446 user=postgres database=team18_dacon_test) at 0x111f21590>, <function database.<locals>.another at 0x111eeac40>)
+clock = [datetime.datetime(2026, 11, 12, 9, 10, tzinfo=zoneinfo.ZoneInfo(key='Asia/Seoul'))]
+api = <function api.<locals>.get at 0x111f297a0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x111ef5130>
+phrase = '접수 중 (정원 충족 시 조기 마감될 수 있습니다)', closed = False
+
+    @pytest.mark.parametrize('phrase,closed', [
+        ('접수 중 (정원 충족 시 조기 마감될 수 있습니다)', False),
+        ('조기 마감 가능', False), ('예산 소진 시 조기 마감될 수 있습니다', False),
+        ('접수 마감 예정', False), ('접수 마감되었습니다', True), ('접수 종료', True),
+        ('조기 마감', True), ('대회 취소', True),
+        ('조기 마감 가능. 현재 접수 마감되었습니다.', True),
+    ])
+    def test_status_phrase_collection_to_api(database, clock, api, monkeypatch, phrase, closed):
+        db, _ = database
+        transport(monkeypatch, [detail(phrase)])
+        store = Store(db, lambda: clock[0])
+        assert store.run(lambda: collect(known=store.known_details()))['status'] == 'success'
+>       assert len(api()['activities']) == (0 if closed else 1)
+E       assert 0 == 1
+E        +  where 0 = len([])
+
+apps/api/tests/integration/test_activity_review_regressions.py:151: AssertionError
+----------------------------- Captured stderr call -----------------------------
+[contestkorea] competition: success, fetched=1, eligible=0, unknown=0, parse_failures=0, network_failures=0
+[contestkorea] extracurricular: success, fetched=1, eligible=0, unknown=0, parse_failures=0, network_failures=0
+_ test_status_phrase_collection_to_api[\uc870\uae30 \ub9c8\uac10 \uac00\ub2a5-False] _
+
+database = (<psycopg.Connection [IDLE] (host=127.0.0.1 port=55446 user=postgres database=team18_dacon_test) at 0x111edb650>, <function database.<locals>.another at 0x111eea980>)
+clock = [datetime.datetime(2026, 11, 12, 9, 10, tzinfo=zoneinfo.ZoneInfo(key='Asia/Seoul'))]
+api = <function api.<locals>.get at 0x111f2b110>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x111ef5f40>
+phrase = '조기 마감 가능', closed = False
+
+    @pytest.mark.parametrize('phrase,closed', [
+        ('접수 중 (정원 충족 시 조기 마감될 수 있습니다)', False),
+        ('조기 마감 가능', False), ('예산 소진 시 조기 마감될 수 있습니다', False),
+        ('접수 마감 예정', False), ('접수 마감되었습니다', True), ('접수 종료', True),
+        ('조기 마감', True), ('대회 취소', True),
+        ('조기 마감 가능. 현재 접수 마감되었습니다.', True),
+    ])
+    def test_status_phrase_collection_to_api(database, clock, api, monkeypatch, phrase, closed):
+        db, _ = database
+        transport(monkeypatch, [detail(phrase)])
+        store = Store(db, lambda: clock[0])
+        assert store.run(lambda: collect(known=store.known_details()))['status'] == 'success'
+>       assert len(api()['activities']) == (0 if closed else 1)
+E       assert 0 == 1
+E        +  where 0 = len([])
+
+apps/api/tests/integration/test_activity_review_regressions.py:151: AssertionError
+----------------------------- Captured stderr call -----------------------------
+[contestkorea] competition: success, fetched=1, eligible=0, unknown=0, parse_failures=0, network_failures=0
+[contestkorea] extracurricular: success, fetched=1, eligible=0, unknown=0, parse_failures=0, network_failures=0
+_ test_status_phrase_collection_to_api[\uc608\uc0b0 \uc18c\uc9c4 \uc2dc \uc870\uae30 \ub9c8\uac10\ub420 \uc218 \uc788\uc2b5\ub2c8\ub2e4-False] _
+
+database = (<psycopg.Connection [IDLE] (host=127.0.0.1 port=55446 user=postgres database=team18_dacon_test) at 0x111f65650>, <function database.<locals>.another at 0x111f28460>)
+clock = [datetime.datetime(2026, 11, 12, 9, 10, tzinfo=zoneinfo.ZoneInfo(key='Asia/Seoul'))]
+api = <function api.<locals>.get at 0x111f2b740>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x111f319b0>
+phrase = '예산 소진 시 조기 마감될 수 있습니다', closed = False
+
+    @pytest.mark.parametrize('phrase,closed', [
+        ('접수 중 (정원 충족 시 조기 마감될 수 있습니다)', False),
+        ('조기 마감 가능', False), ('예산 소진 시 조기 마감될 수 있습니다', False),
+        ('접수 마감 예정', False), ('접수 마감되었습니다', True), ('접수 종료', True),
+        ('조기 마감', True), ('대회 취소', True),
+        ('조기 마감 가능. 현재 접수 마감되었습니다.', True),
+    ])
+    def test_status_phrase_collection_to_api(database, clock, api, monkeypatch, phrase, closed):
+        db, _ = database
+        transport(monkeypatch, [detail(phrase)])
+        store = Store(db, lambda: clock[0])
+        assert store.run(lambda: collect(known=store.known_details()))['status'] == 'success'
+>       assert len(api()['activities']) == (0 if closed else 1)
+E       assert 0 == 1
+E        +  where 0 = len([])
+
+apps/api/tests/integration/test_activity_review_regressions.py:151: AssertionError
+----------------------------- Captured stderr call -----------------------------
+[contestkorea] competition: success, fetched=1, eligible=0, unknown=0, parse_failures=0, network_failures=0
+[contestkorea] extracurricular: success, fetched=1, eligible=0, unknown=0, parse_failures=0, network_failures=0
+_ test_status_phrase_collection_to_api[\uc811\uc218 \ub9c8\uac10 \uc608\uc815-False] _
+
+database = (<psycopg.Connection [IDLE] (host=127.0.0.1 port=55446 user=postgres database=team18_dacon_test) at 0x111f39d60>, <function database.<locals>.another at 0x111f29850>)
+clock = [datetime.datetime(2026, 11, 12, 9, 10, tzinfo=zoneinfo.ZoneInfo(key='Asia/Seoul'))]
+api = <function api.<locals>.get at 0x111f61380>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x111f31a90>
+phrase = '접수 마감 예정', closed = False
+
+    @pytest.mark.parametrize('phrase,closed', [
+        ('접수 중 (정원 충족 시 조기 마감될 수 있습니다)', False),
+        ('조기 마감 가능', False), ('예산 소진 시 조기 마감될 수 있습니다', False),
+        ('접수 마감 예정', False), ('접수 마감되었습니다', True), ('접수 종료', True),
+        ('조기 마감', True), ('대회 취소', True),
+        ('조기 마감 가능. 현재 접수 마감되었습니다.', True),
+    ])
+    def test_status_phrase_collection_to_api(database, clock, api, monkeypatch, phrase, closed):
+        db, _ = database
+        transport(monkeypatch, [detail(phrase)])
+        store = Store(db, lambda: clock[0])
+        assert store.run(lambda: collect(known=store.known_details()))['status'] == 'success'
+>       assert len(api()['activities']) == (0 if closed else 1)
+E       assert 0 == 1
+E        +  where 0 = len([])
+
+apps/api/tests/integration/test_activity_review_regressions.py:151: AssertionError
+----------------------------- Captured stderr call -----------------------------
+[contestkorea] competition: success, fetched=1, eligible=0, unknown=0, parse_failures=0, network_failures=0
+[contestkorea] extracurricular: success, fetched=1, eligible=0, unknown=0, parse_failures=0, network_failures=0
+___ test_first_failure_retries_when_missing_without_faking_success[network] ____
+
+database = (<psycopg.Connection [IDLE] (host=127.0.0.1 port=55446 user=postgres database=team18_dacon_test) at 0x111f3b890>, <function database.<locals>.another at 0x111f617a0>)
+clock = [datetime.datetime(2026, 11, 12, 9, 10, tzinfo=zoneinfo.ZoneInfo(key='Asia/Seoul'))]
+api = <function api.<locals>.get at 0x111fa6b90>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x111e685f0>
+error = 'network'
+
+    @pytest.mark.parametrize('error', ['network', 'parse'])
+    def test_first_failure_retries_when_missing_without_faking_success(database, clock, api, monkeypatch, error):
+        db, _ = database
+        page = [detail() if error == 'network' else b'<html>broken</html>']
+        listing, opener = transport(monkeypatch, page)
+        if error == 'network': opener.open.side_effect = OSError('offline')
+        store = Store(db, lambda: clock[0])
+        assert store.run(lambda: collect(known=store.known_details()))['status'] == 'partial'
+        row = current(db, 'review')
+>       assert row is not None
+E       assert None is not None
+
+apps/api/tests/integration/test_activity_review_regressions.py:163: AssertionError
+----------------------------- Captured stderr call -----------------------------
+[contestkorea] competition: partial, fetched=1, eligible=0, unknown=0, parse_failures=0, network_failures=1
+[contestkorea] extracurricular: partial, fetched=1, eligible=0, unknown=0, parse_failures=0, network_failures=1
+____ test_first_failure_retries_when_missing_without_faking_success[parse] _____
+
+database = (<psycopg.Connection [IDLE] (host=127.0.0.1 port=55446 user=postgres database=team18_dacon_test) at 0x111ef4230>, <function database.<locals>.another at 0x111f61010>)
+clock = [datetime.datetime(2026, 11, 12, 9, 10, tzinfo=zoneinfo.ZoneInfo(key='Asia/Seoul'))]
+api = <function api.<locals>.get at 0x111fa45c0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x111e68550>
+error = 'parse'
+
+    @pytest.mark.parametrize('error', ['network', 'parse'])
+    def test_first_failure_retries_when_missing_without_faking_success(database, clock, api, monkeypatch, error):
+        db, _ = database
+        page = [detail() if error == 'network' else b'<html>broken</html>']
+        listing, opener = transport(monkeypatch, page)
+        if error == 'network': opener.open.side_effect = OSError('offline')
+        store = Store(db, lambda: clock[0])
+        assert store.run(lambda: collect(known=store.known_details()))['status'] == 'partial'
+        row = current(db, 'review')
+>       assert row is not None
+E       assert None is not None
+
+apps/api/tests/integration/test_activity_review_regressions.py:163: AssertionError
+----------------------------- Captured stderr call -----------------------------
+[contestkorea] competition: partial, fetched=1, eligible=0, unknown=0, parse_failures=1, network_failures=0
+[contestkorea] extracurricular: partial, fetched=1, eligible=0, unknown=0, parse_failures=1, network_failures=0
+_______________ test_relevance_preserves_generic_original_in_api _______________
+
+database = (<psycopg.Connection [IDLE] (host=127.0.0.1 port=55446 user=postgres database=team18_dacon_test) at 0x111e17b60>, <function database.<locals>.another at 0x111fa6140>)
+clock = [datetime.datetime(2026, 11, 12, 9, 10, tzinfo=zoneinfo.ZoneInfo(key='Asia/Seoul'))]
+api = <function api.<locals>.get at 0x111f51220>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x111e47920>
+
+    def test_relevance_preserves_generic_original_in_api(database, clock, api, monkeypatch):
+        db, _ = database
+        collect_pair(db, clock, monkeypatch, generic=True)
+        card, = api()['activities']
+>       assert len(card['source_links']) == 2
+E       AssertionError: assert 1 == 2
+E        +  where 1 = len([{'source': 'contestkorea', 'source_label': '콘테스트코리아', 'original_id': 'review', 'url': 'https://www.contestkorea.com/sub/view.php?str_no=review', ...}])
+
+apps/api/tests/integration/test_activity_review_regressions.py:187: AssertionError
+----------------------------- Captured stderr call -----------------------------
+[contestkorea] competition: success, fetched=1, eligible=1, unknown=0, parse_failures=0, network_failures=0
+[contestkorea] extracurricular: success, fetched=1, eligible=1, unknown=0, parse_failures=0, network_failures=0
+=============================== warnings summary ===============================
+apps/api/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1
+  /Users/junsuk/Desktop/team18-main/apps/api/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED apps/api/tests/integration/test_activity_review_regressions.py::test_exact_deadline_through_real_loaders[9]
+FAILED apps/api/tests/integration/test_activity_review_regressions.py::test_exact_deadline_through_real_loaders[11]
+FAILED apps/api/tests/integration/test_activity_review_regressions.py::test_extension_survives_stale_listing_next_day[extended]
+FAILED apps/api/tests/integration/test_activity_review_regressions.py::test_extension_survives_stale_listing_next_day[closed]
+FAILED apps/api/tests/integration/test_activity_review_regressions.py::test_extension_survives_stale_listing_next_day[cancelled]
+FAILED apps/api/tests/integration/test_activity_review_regressions.py::test_extension_survives_stale_listing_next_day[network]
+FAILED apps/api/tests/integration/test_activity_review_regressions.py::test_extension_survives_stale_listing_next_day[parse]
+FAILED apps/api/tests/integration/test_activity_review_regressions.py::test_status_phrase_collection_to_api[\uc811\uc218 \uc911 (\uc815\uc6d0 \ucda9\uc871 \uc2dc \uc870\uae30 \ub9c8\uac10\ub420 \uc218 \uc788\uc2b5\ub2c8\ub2e4)-False]
+FAILED apps/api/tests/integration/test_activity_review_regressions.py::test_status_phrase_collection_to_api[\uc870\uae30 \ub9c8\uac10 \uac00\ub2a5-False]
+FAILED apps/api/tests/integration/test_activity_review_regressions.py::test_status_phrase_collection_to_api[\uc608\uc0b0 \uc18c\uc9c4 \uc2dc \uc870\uae30 \ub9c8\uac10\ub420 \uc218 \uc788\uc2b5\ub2c8\ub2e4-False]
+FAILED apps/api/tests/integration/test_activity_review_regressions.py::test_status_phrase_collection_to_api[\uc811\uc218 \ub9c8\uac10 \uc608\uc815-False]
+FAILED apps/api/tests/integration/test_activity_review_regressions.py::test_first_failure_retries_when_missing_without_faking_success[network]
+FAILED apps/api/tests/integration/test_activity_review_regressions.py::test_first_failure_retries_when_missing_without_faking_success[parse]
+FAILED apps/api/tests/integration/test_activity_review_regressions.py::test_relevance_preserves_generic_original_in_api
+14 failed, 5 passed, 1 warning in 1.84s
