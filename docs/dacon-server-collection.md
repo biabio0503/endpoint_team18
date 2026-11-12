@@ -19,13 +19,13 @@
 
 ## Render 대시보드 입력값
 
-변경을 저장소의 `크롤링` 브랜치에 반영한 뒤, `render.yaml`을 Blueprint로 동기화하거나 New → Cron Job에 아래 값을 입력한다. 기존 Web Service를 새로 만들지 않는다.
+변경을 저장소의 `main` 브랜치에 반영한 뒤, `render.yaml`을 Blueprint로 동기화하거나 New → Cron Job에 아래 값을 입력한다. 기존 Web Service를 새로 만들지 않는다.
 
 | 항목 | 값 |
 | --- | --- |
 | Name | `team18-dacon-daily` |
 | Repository | `https://github.com/biabio0503/endpoint_team18` |
-| Branch | `크롤링` |
+| Branch | `main` |
 | Runtime / Language | `Docker` |
 | Root Directory | **비워 둠** (저장소 루트; `apps/api`로 지정하지 않음) |
 | Docker Build Context | `.` |

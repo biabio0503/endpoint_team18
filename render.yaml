@@ -4,7 +4,7 @@ services:
     name: team18-dacon-daily
     runtime: docker
     repo: https://github.com/biabio0503/endpoint_team18
-    branch: 크롤링
+    branch: main
     plan: starter
     schedule: "10 0 * * *" # 09:10 Asia/Seoul, every day; Render uses UTC.
     # rootDir deliberately omitted: both crawling/ and apps/api/ must be present.
