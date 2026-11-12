@@ -5,7 +5,7 @@ from functools import lru_cache
 
 from services.job_skill_analysis import ALIASES, normalize_skill
 
-RULES_VERSION = 'course-evidence-v6-compound-spans'
+RULES_VERSION = 'course-evidence-v7-reviewed-compounds'
 
 # One vocabulary is used for explicit goals, job skills and related candidates.
 # Keep overlapping language names distinct when matching free text.
@@ -64,6 +64,12 @@ _CLAUSE_BOUNDARY = re.compile(
     r'[.!?。;\n]|(?:배웠|배우|학습했|학습하|공부했|공부하|익혔|익히|알고\s*있|경험(?:이|은|을)?\s*(?:있|보유))'
 )
 
+# Reviewed alternative for the catalog's machine-learning application topic.
+# Its course evidence describes applying machine-learning algorithms to data analysis.
+COMPOUND_EQUIVALENTS = {
+    '기계학습 알고리즘 적용': (('기계학습', '데이터', '분석', '적용'),),
+}
+
 
 @lru_cache(maxsize=2048)
 def _compound_patterns(keyword):
@@ -74,11 +80,7 @@ def _compound_patterns(keyword):
     def pattern(parts):
         body = r'(.{0,40}?)'.join(map(re.escape, parts))
         return re.compile(r'(?=(?<![a-z0-9_+#])(' + body + r')(?![a-z0-9_+#]))')
-    patterns = [pattern(words)]
-    # An action can be described with its object while omitting a middle modifier.
-    if len(words) >= 3:
-        patterns.append(pattern((words[0], words[-1])))
-    return tuple(patterns)
+    return tuple(pattern(parts) for parts in (tuple(words), *COMPOUND_EQUIVALENTS.get(keyword, ())))
 
 
 def _keyword_occurrences(keyword, normalized):

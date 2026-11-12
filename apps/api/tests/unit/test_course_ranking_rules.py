@@ -1,4 +1,6 @@
 from services.course_recommendations import rank_courses
+import json
+from pathlib import Path
 
 
 def course(cid, entries=(), completed=False):
@@ -188,3 +190,40 @@ def test_compound_mentions_do_not_cross_clauses_and_keep_their_own_predicate():
     assert direct('데이터 구조의 분석은 이미 배웠고 CNN을 배우고 싶다') == {'cnn': ['CNN']}
     assert direct('데이터를 이미 배웠고 CNN을 분석하고 싶다') == {'cnn': ['CNN']}
     assert direct('데이터 구조를 분석하는 방법을 배우고 싶다') == {'other': ['데이터 구조 분석']}
+
+
+def test_compounds_require_their_components_or_a_reviewed_equivalent():
+    rows = [course('vision', [('디지털 영상 해석', 'learning', '공식 소개.')]),
+            course('database', [('데이터 중복 관리', 'learning', '공식 소개.')]),
+            course('ml', [('기계학습 알고리즘 적용', 'learning', '공식 소개.')])]
+    def direct(goal):
+        return {c['course_id']: c['learning_keywords'] for c in select(goal, rows)
+                if c['recommendation_type'] == 'direct'}
+
+    assert direct('디지털 영상 해석') == {'vision': ['디지털 영상 해석']}
+    assert direct('디지털 영상을 해석하는 방법') == {'vision': ['디지털 영상 해석']}
+    assert direct('디지털 회로 해석') == {}
+    assert direct('데이터 중복 관리') == {'database': ['데이터 중복 관리']}
+    assert direct('데이터 중복을 관리하는 방법') == {'database': ['데이터 중복 관리']}
+    assert direct('데이터 품질 관리') == {}
+    assert direct('기계학습을 데이터 분석에 적용하고 싶다') == {'ml': ['기계학습 알고리즘 적용']}
+    assert direct('기계학습을 영상에 적용하고 싶다') == {}
+    assert direct('기계학습의 데이터 분석 적용은 이미 배웠다') == {}
+
+
+def test_catalog_compounds_do_not_match_replaced_middle_components():
+    from services.course_recommendations import _matches
+    path = Path(__file__).resolve().parents[1] / 'fixtures/seoultech_cse_2026_course_evidence.json'
+    snapshot = json.loads(path.read_text())
+    keywords = {k['keyword'] for c in snapshot for k in c['keywords']
+                if k['keyword_role'] == 'learning' and len(k['keyword'].split()) >= 3}
+    assert keywords
+    middle_words = {word for keyword in keywords for word in keyword.split()[1:-1]}
+    for keyword in keywords:
+        words = keyword.split()
+        assert _matches(keyword, keyword), keyword
+        for replacement in middle_words | {'무관'}:
+            if replacement in words[1] or words[1] in replacement:
+                continue
+            changed = ' '.join([words[0], replacement, *words[2:]])
+            assert not _matches(keyword, changed), (keyword, changed)

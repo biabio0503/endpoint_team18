@@ -52,7 +52,9 @@ try:
                  'CNN을 영상에 적용하고 싶다',
                  '기계학습 알고리즘 적용은 이미 배웠고 CNN을 배우고 싶다',
                  '기계학습 알고리즘의 적용은 이미 배웠고 CNN을 배우고 싶다',
-                 '기계학습 알고리즘을 적용하는 방법을 배우고 싶다'):
+                 '기계학습 알고리즘을 적용하는 방법을 배우고 싶다',
+                 '디지털 영상 해석', '디지털 회로 해석', '데이터 중복 관리', '데이터 품질 관리',
+                 '기계학습을 데이터 분석에 적용하고 싶다'):
         response = case.client.patch(case.base, json={'expected_input_revision': case.revision(),
                                                      'changes': {'career_goal': goal, 'target_role': None}})
         assert response.status_code == 200, response.text
@@ -108,6 +110,16 @@ try:
     applied = results['기계학습 알고리즘을 적용하는 방법을 배우고 싶다']
     assert {c['course_name'].split(' (')[0] for c in applied if c['recommendation_type'] == 'direct'} >= {'데이터분석', '빅데이터처리'}
     assert all('기계학습 알고리즘 적용' in c['learning_keywords'] for c in applied if c['course_name'].split(' (')[0] in ('데이터분석', '빅데이터처리'))
+    def direct_keywords(rows):
+        return {k for c in rows if c['recommendation_type'] == 'direct' for k in c['learning_keywords']}
+    assert any(c['course_name'].split(' (')[0] == '컴퓨터비전' and c['recommendation_type'] == 'direct'
+               and '디지털 영상 해석' in c['learning_keywords'] for c in results['디지털 영상 해석'])
+    assert '디지털 영상 해석' not in direct_keywords(results['디지털 회로 해석'])
+    assert any(c['course_name'].split(' (')[0] == '데이터베이스' and c['recommendation_type'] == 'direct'
+               and '데이터 중복 관리' in c['learning_keywords'] for c in results['데이터 중복 관리'])
+    assert '데이터 중복 관리' not in direct_keywords(results['데이터 품질 관리'])
+    assert {'데이터분석', '빅데이터처리'} <= {c['course_name'].split(' (')[0] for c in results['기계학습을 데이터 분석에 적용하고 싶다']
+                                           if c['recommendation_type'] == 'direct' and '기계학습 알고리즘 적용' in c['learning_keywords']}
     for goal in list(results)[-5:]:
         print(goal)
         for i, c in enumerate(results[goal], 1):
