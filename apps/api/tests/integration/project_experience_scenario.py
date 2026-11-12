@@ -119,6 +119,10 @@ class ProjectExperienceAPI(unittest.TestCase):
         from services.roadmap_generation import capture_basis, model_input
         from roadmap_scenario import fake_roadmap
         cases = {self.doc(text): (text, name, short, scope) for _, text, name, short, scope in CLAUSE_CASES}
+        merged = '제가 Python을 사용했고  SQL을 사용했습니다.'
+        did = self.doc(merged, segments=[{'start': 0, 'end': len(merged), 'page': 1,
+                                         'bbox': [0, 0, 600, 60]}])
+        cases[did] = (merged, 'SQL', 'SQL을 사용', 'unknown')
 
         def fixed(schema, prompt, doc):
             text, name, short, scope = cases[doc['document_id']]
@@ -129,7 +133,7 @@ class ProjectExperienceAPI(unittest.TestCase):
         with patch('services.gemini_projects._generate', side_effect=fixed):
             result = self.analyze()
         self.assertEqual(result['status'], 'success')
-        self.assertEqual(len(result['experiences']), 5)
+        self.assertEqual(len(result['experiences']), 6)
         for item in result['experiences']:
             text, name, short, scope = cases[item['document_id']]
             self.assertEqual(item['contribution_scope'], scope)
@@ -273,7 +277,7 @@ class ProjectExperienceAPI(unittest.TestCase):
             self.assertEqual(before['experiences'], [])
             model.assert_not_called()
             refreshed = self.analyze(refresh=True)
-            self.assertTrue(refreshed['analysis_version'].startswith('project-experience-v5:'))
+            self.assertTrue(refreshed['analysis_version'].startswith('project-experience-v6:'))
             self.assertEqual(refreshed['requested_documents'], 1)
             self.assertEqual(refreshed['reused_documents'], 0)
             self.assertEqual(refreshed['document_basis'], legacy['document_basis'])
@@ -579,7 +583,7 @@ class ProjectExperienceAPI(unittest.TestCase):
 
     def test_version_upgrade_and_failed_refresh_preserve_answer_boundaries(self):
         self.doc('제가 Python 코드를 작성했습니다.\n팀은 Docker 환경을 구성했습니다.')
-        with patch.object(project_service, 'PROJECT_VERSION', 'project-experience-v4'), \
+        with patch.object(project_service, 'PROJECT_VERSION', 'project-experience-v5'), \
              patch('services.project_experience.extract_project_experiences', side_effect=fake_extraction):
             legacy = self.analyze()
             self.answer(legacy['experiences'][0], 'confirmed')
@@ -592,7 +596,7 @@ class ProjectExperienceAPI(unittest.TestCase):
             model.assert_not_called()
             upgraded = self.analyze()
             self.assertEqual(model.call_count, 1)
-            self.assertTrue(upgraded['analysis_version'].startswith('project-experience-v5:'))
+            self.assertTrue(upgraded['analysis_version'].startswith('project-experience-v6:'))
             self.assertTrue(all(i['user_answer'] is None for i in upgraded['experiences']))
             ocr.assert_not_called()
         item = upgraded['experiences'][0]

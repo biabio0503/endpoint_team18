@@ -35,6 +35,9 @@ TECH_HEADER = re.compile(r'^기술\s*스택$')
 ROW_LABEL = re.compile(r'^(?:직접\s*(?:사용|구현|설계)|일부\s*설정|팀원\s*담당|미수행)$')
 ROLE_DESCRIPTION = re.compile(r'^담당\s*역할\s*[:：]\s*\S')
 NUMBERED = re.compile(r'^\s*(\d+)[.)]\s+')
+# Match text_cells' explicit delimiters even when OCR merges cells into one box.
+# Coordinates do not make an actor in an adjacent cell valid evidence.
+SOURCE_CELL_BREAK = re.compile(r'[\n|\t]| {2,}')
 
 
 def names_skill(name, text):
@@ -64,7 +67,7 @@ def negates_skill(name, text):
     if not negatives:
         return False
     # 진행해 본 적이 없다 / 만들어 본 적이 없다 are single negative predicates.
-    barriers = {m.end() for m in re.finditer(r'[\n|\t]', text)}
+    barriers = {m.end() for m in SOURCE_CELL_BREAK.finditer(text)}
     ends = sorted({m.end() for m in ACTIVITY_CLAUSE_END.finditer(text)
                    if not any(n.start() < m.end() < n.end() for n in negatives)} | barriers | {len(text)})
     for end in ends:
@@ -83,7 +86,7 @@ def source_clause(name, text, quote_start, quote_end):
     occurrences stay unknown instead of trusting the model's personal label.
     """
     negatives = list(NEGATIVE.finditer(text))
-    barriers = {m.end() for m in re.finditer(r'[\n|\t]', text)}
+    barriers = {m.end() for m in SOURCE_CELL_BREAK.finditer(text)}
     ends = sorted({m.end() for m in ACTIVITY_CLAUSE_END.finditer(text)
                    if not any(n.start() < m.end() < n.end() for n in negatives)} | barriers | {len(text)})
     start, inherited, matches = 0, None, []
