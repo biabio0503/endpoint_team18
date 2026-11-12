@@ -144,3 +144,25 @@ def test_job_evidence_does_not_turn_explicitly_past_skill_into_learning_goal():
               {'skill_name': 'C++', 'student_status': 'no_experience', 'job_requirement': {}}]
     result = select('C는 이미 배웠고 C++를 배우고 싶다', rows, skills)
     assert [(c['course_id'], c['recommendation_type']) for c in result] == [('C++', 'direct'), ('C', 'exploration')]
+
+
+def test_shared_predicates_catalog_terms_and_per_keyword_evidence():
+    rows = [course(name, [(name, 'learning', '공식 강의 소개.')])
+            for name in ('C', 'C++', 'JavaScript', '자료구조', 'CNN')]
+    rows.append(course('mixed', [('자료구조', 'learning', '자료구조를 가르친다.'),
+                                 ('CNN', 'learning', 'CNN을 가르친다.')]))
+    skills = [{'skill_name': name, 'student_status': 'confirmed_experience', 'job_requirement': {}}
+              for name in ('C', 'C++', '자료구조')]
+    def direct(goal, jobs=()):
+        return {c['course_id']: c['learning_keywords'] for c in select(goal, rows, jobs)
+                if c['recommendation_type'] == 'direct'}
+
+    for goal in ('C와 C++는 이미 배웠고 JavaScript를 배우고 싶다',
+                 'C는 이미 배웠고 C++도 이미 배웠고 JavaScript를 배우고 싶다'):
+        assert direct(goal, skills[:2]) == {'JavaScript': ['JavaScript']}
+    assert direct('자료구조는 이미 배웠고 CNN을 배우고 싶다', skills[2:]) == {'CNN': ['CNN'], 'mixed': ['CNN']}
+    assert direct('자료구조와 CNN을 함께 배우고 싶다') == {
+        '자료구조': ['자료구조'], 'CNN': ['CNN'], 'mixed': ['자료구조', 'CNN']}
+    assert direct('자료구조와 CNN을 이미 배웠고 자료구조를 다시 배우고 싶다') == {
+        '자료구조': ['자료구조'], 'mixed': ['자료구조']}
+    assert '자료구조' in direct('자료구조 경험 없음과 CNN 학습')
