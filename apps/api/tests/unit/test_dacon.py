@@ -85,14 +85,14 @@ def test_deadline_is_rechecked_on_every_recommendation():
     assert recommend(profile, [item], sources, datetime(2026,11,13,12,0,1,tzinfo=KST))['activities'] == []
 
 
-def test_render_schedule_and_shared_entrypoint():
+def test_manual_workflow_uses_shared_docker_entrypoint():
     root = Path(__file__).resolve().parents[4]
-    cron = (root / 'render.yaml').read_text()
-    assert 'type: cron' in cron and 'schedule: "10 0 * * *"' in cron
-    assert '\n    rootDir:' not in cron
-    assert 'runtime: docker' in cron
-    assert 'dockerContext: .' in cron
-    assert 'dockerCommand: python -m crawling.activities.run --mode scheduled' in cron
+    workflow = (root / '.github/workflows/collect-activities.yml').read_text()
+    triggers = workflow.split('on:\n', 1)[1].split('\n\n', 1)[0].strip()
+    assert triggers == 'workflow_dispatch:'
+    assert 'docker build -f crawling/dacon/Dockerfile' in workflow
+    dockerfile = (root / 'crawling/dacon/Dockerfile').read_text()
+    assert 'CMD ["python", "-m", "crawling.activities.run", "--mode", "manual"]' in dockerfile
     build = (root / 'crawling/dacon/build.sh').read_text()
     assert 'requirements-server.txt' in build and 'playwright install --with-deps chromium' in build
 

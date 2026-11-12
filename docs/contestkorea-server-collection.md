@@ -51,19 +51,18 @@ CLI와 `--status`의 `recent_runs[].metrics`에서 다음을 확인한다: `fetc
 
 ## 실행·적용
 
-예약/수동 경로는 동일하다. Render 일정 **`10 0 * * *` = 매일 09:10 KST**, Docker context `.`, Dockerfile `./crawling/dacon/Dockerfile`을 유지한다. 출처별 PostgreSQL 세션 advisory lock을 수집 시작부터 저장 종료까지 보유한다. 예약/수동 중복은 외부 요청 없이 `already_running`이다. 한 출처가 failed/partial이어도 다른 출처는 실행되며 CLI는 불완전 실행에 종료 코드 1을 반환한다.
+운영자가 수집할 때마다 출처별 PostgreSQL 세션 잠금이 중복 실행을 막는다. 한 출처가 failed/partial이어도 다른 출처는 실행되며 CLI는 불완전 실행에 종료 코드 1을 반환한다.
 
 ```bash
-python -m crawling.activities.run --mode scheduled
 python -m crawling.activities.run --mode manual
 python -m crawling.activities.run --source contestkorea --mode manual
 python -m crawling.activities.run --status
 python -m crawling.activities.run --status --date 2026-11-12
 ```
 
-Cron에 `CONTESTKOREA_API_KEY`, `ROADMAP_DB_BACKEND=postgres`, 동일 운영 DB의 `ROADMAP_DATABASE_URL`(직접/Session pooler, 6543 제외)이 필요하다. [Render 수동 실행 절차](dacon-server-collection.md#서버에서-지금-수동-실행)를 유지한다.
+수집 환경에 `CONTESTKOREA_API_KEY`, `ROADMAP_DB_BACKEND=postgres`, 동일 운영 DB의 `ROADMAP_DATABASE_URL`(직접/Session pooler, 6543 제외)이 필요하다. [수동 실행 절차](dacon-server-collection.md#서버에서-지금-수동-실행)를 유지한다.
 
-**배포 전 새 마이그레이션을 적용한 뒤 API·Cron·프론트를 배포한다.** 새 후보 테이블은 RLS를 켜고 anon/authenticated/PUBLIC 권한을 철회한 서버 전용 테이블이다. 이 작업은 저장소 수정과 격리 DB 검증까지 수행했다. 운영 DB 적용, Git push, Render 배포·09:10 실제 실행은 수행하지 않았다. 검토 시작 시 운영 두 출처 스냅샷은 모두 0건이었다. 실제 공고 검증 결과와 재현/검증 명령은 [검증 기록](activity-collection-review.md)을 참고한다.
+**배포 전 새 마이그레이션을 적용한 뒤 API·프론트를 배포한다.** 새 후보 테이블은 RLS를 켜고 anon/authenticated/PUBLIC 권한을 철회한 서버 전용 테이블이다. 이 작업은 저장소 수정과 격리 DB 검증까지 수행했다. 운영 DB 적용, Git push, Render 배포·09:10 실제 실행은 수행하지 않았다. 검토 시작 시 운영 두 출처 스냅샷은 모두 0건이었다. 실제 공고 검증 결과와 재현/검증 명령은 [검증 기록](activity-collection-review.md)을 참고한다.
 
 `044241c` 후속 로컬 수정에는 새 `20261112030228_activity_candidate_verification_retry.sql`이 필요하다. 기존 마이그레이션은 수정하지 않았으며 성공 후보와 과거 날짜 이력이 있는 DB에 추가 적용해 보존을 확인했다. 이번 독립 검수의 재현·검증 범위는 [5개 회귀 검증 기록](activity-review-044241c.md)을 참고한다.
 

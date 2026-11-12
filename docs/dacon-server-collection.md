@@ -4,76 +4,27 @@
 
 데이콘 홈과 `/competitions`의 실제 `button.bgBtn` 더보기를 끝까지 순회한다. 페이지의 반복 ID 집합·추가 결과 없음·버튼 종료 시 멈추고, 원본 ID로 합친 뒤 상세를 한 번만 확인한다. 더보기 네트워크 실패 시 이미 발견한 공고는 보존하고 partial로 기록한다. 데이커는 데이콘 홈에 연결된 공개 공고가 발견 범위이며 데이커 전체 목록은 보장하지 않는다. 로그인 전용·비공개 공고도 포함하지 않는다.
 
-새 `activity_candidates` 테이블을 추천에서 읽으며 성공한 날짜별 수집 목록은 이력으로 유지한다. 누락된 미마감 후보 재확인·성공 시각 보존·원문 중복 통합·마이그레이션 순서는 [누적 수집 운영 안내](contestkorea-server-collection.md)를 따른다. CLI/09:10 KST 예약·출처별 잠금은 유지한다. 출처 결과에 partial과 metrics가 추가됐으며 partial/failed는 종료 코드 1이다. 당일 성공 0건도 누적 유효 후보 삭제를 의미하지 않는다.
+새 `activity_candidates` 테이블을 추천에서 읽으며 성공한 날짜별 수집 목록은 이력으로 유지한다. 누락된 미마감 후보 재확인·성공 시각 보존·원문 중복 통합·마이그레이션 순서는 [누적 수집 운영 안내](contestkorea-server-collection.md)를 따른다. 수동 CLI에서 출처별 잠금을 사용한다. 출처 결과에 partial과 metrics가 추가됐으며 partial/failed는 종료 코드 1이다. 당일 성공 0건도 누적 유효 후보 삭제를 의미하지 않는다.
 
 2026-11-12 변경 후 실수집: 고유 공고 298건(데이콘 290, 데이커 8), 적격 후보 1건. 아래의 25건 기록은 **변경 전 첫 화면 수집 당시 기록**이다. 신규 검증은 [검증 기록](activity-collection-review.md)을 참고한다.
 
-## 이전 적용 상태 (2026-11-12 KST)
+## 서버에서 지금 수동 실행
 
-콘테스트코리아도 공통 09:10 수집에 추가했다. 조건부 저장·본문 중복 절약·접수 예정 카드 정책은 [콘테스트코리아 운영 안내](contestkorea-server-collection.md)를 따른다. `--source contestkorea` 또는 `--source dacon`으로 개별 실행할 수 있다. 아래 기존 데이콘 검증 기록은 당시 결과다.
+1. GitHub 저장소의 Settings → Secrets and variables → Actions에 `ROADMAP_DATABASE_URL`과 `CONTESTKOREA_API_KEY`를 등록한다. DB 주소는 운영 API와 같은 PostgreSQL의 TLS 직접 연결 또는 세션 풀러 주소를 사용한다.
+2. Actions → 공모전 수동 수집 → Run workflow에서 `main`을 선택해 실행한다. 표준 Linux 러너가 Docker 이미지로 두 출처를 수집한다. 수집하는 동안 개인 PC를 켜둘 필요는 없다.
+3. 실행 로그에서 출처별 상태와 수집 건수를 확인한다. `partial`이면 확인된 후보는 갱신됐으며 실패 항목은 로그의 지표에서 확인할 수 있다.
 
-- `크롤링` 브랜치 작업 디렉터리에 크롤러, 저장소, CLI, 추천 API/카드, Render Blueprint/Dockerfile을 작성했다. Git push와 Render 배포는 아직 수행하지 않았다.
-- 운영 Supabase 프로젝트 `htuttclopxaiyhgcakkj`에 추가 마이그레이션 `20261112012208_dacon_daily_snapshots.sql`을 적용했다. 서버 이력의 version과 파일명을 일치시켰다. 기존 테이블/행은 변경하지 않았다.
-- 새 테이블 세 개의 RLS가 활성화되어 있고 `anon`/`authenticated`의 SELECT 권한이 없음을 조회로 확인했다. 서버 PostgreSQL 연결로만 접근한다.
-- Render Cron Job **실제 등록은 미완료**다. 이 세션에는 Render API 자격 증명/서비스 연결이 없어 생성하거나 실행하지 않았다. 운영 DB에는 아직 성공 수집 스냅샷이 없다. 운영 웹 API에도 코드 재배포가 필요하다.
-
-## Render 대시보드 입력값
-
-변경을 저장소의 `main` 브랜치에 반영한 뒤, `render.yaml`을 Blueprint로 동기화하거나 New → Cron Job에 아래 값을 입력한다. 기존 Web Service를 새로 만들지 않는다.
-
-| 항목 | 값 |
-| --- | --- |
-| Name | `team18-dacon-daily` |
-| Repository | `https://github.com/biabio0503/endpoint_team18` |
-| Branch | `main` |
-| Runtime / Language | `Docker` |
-| Root Directory | **비워 둠** (저장소 루트; `apps/api`로 지정하지 않음) |
-| Docker Build Context | `.` |
-| Dockerfile Path | `./crawling/dacon/Dockerfile` |
-| Docker Command | `python -m crawling.activities.run --mode scheduled` |
-| Schedule | `10 0 * * *` |
-| Instance Type | `Starter` (Chromium 메모리 부족/OOM이면 Standard로 조정) |
-| `ROADMAP_DB_BACKEND` | `postgres` |
-| `ROADMAP_DATABASE_URL` | 기존 운영 API와 **동일 DB**의 직접/Session pooler 연결 문자열; 5432, 6543 불가 |
-| `CONTESTKOREA_API_KEY` | 콘테스트코리아 서버 API 키 |
-| `PYTHONUNBUFFERED` | `1` |
-
-Docker 방식에는 별도 Build Command 입력란이 없다. 빌드는 `docker build -f crawling/dacon/Dockerfile .`에 해당하며 Dockerfile 내부에서 다음 명령을 실행한다.
+로컬에서도 저장소 루트에서 같은 수집을 실행할 수 있다. Python과 Chromium이 설치된 환경에서 `ROADMAP_DB_BACKEND=postgres`, `ROADMAP_DATABASE_URL`, `CONTESTKOREA_API_KEY`를 설정한다.
 
 ```bash
 python -m pip install -r crawling/dacon/requirements-server.txt
-python -m playwright install --with-deps chromium
-```
-
-Python `3.13.8-slim-bookworm`, Playwright `1.56.0`, Chromium 및 Linux 시스템 라이브러리가 같은 이미지에 들어간다. 이미지에 `.env`/DB 비밀번호를 복사하지 않는다. 웹 서비스는 기존 Root Directory `apps/api`, build `pip install -r requirements.txt`, start `uvicorn app.main:app --host 0.0.0.0 --port $PORT`를 유지한다. 웹 서비스에 Playwright를 설치할 필요가 없다. 프론트엔드도 출처 표시 변경을 재배포한다.
-
-Render cron은 UTC를 사용하므로 `00:10 UTC = 09:10 Asia/Seoul`이다. 외부 Cron Job이 실행하며 PC/브라우저/FastAPI 프로세스 타이머에 의존하지 않는다. [Render Cron Jobs 공식 문서](https://render.com/docs/cronjobs)
-
-## 서버에서 지금 수동 실행
-
-Cron Job이 최초 빌드에 성공한 다음, 해당 `crn-...` 서비스를 기반으로 **One-off Job**을 만든다. 예약 작업과 동일한 이미지/DB 환경에서 아래 명령을 실행한다.
-
-```bash
+python -m playwright install chromium
 python -m crawling.activities.run --mode manual
 ```
 
-운영자의 터미널에서 Render API로 서버 작업을 시작하는 예시다. 로컬에서는 API 요청만 보내고 수집은 Render에서 실행된다. `RENDER_API_KEY`, `RENDER_DACON_SERVICE_ID`는 운영자 환경에 설정한다.
-
-```bash
-curl --fail-with-body --request POST \
-  "https://api.render.com/v1/services/${RENDER_DACON_SERVICE_ID}/jobs" \
-  --header "Authorization: Bearer ${RENDER_API_KEY}" \
-  --header 'Content-Type: application/json' \
-  --data '{"startCommand":"python -m crawling.activities.run --mode manual"}'
-```
-
-응답의 작업 ID로 Dashboard → 해당 서비스 → One-off Jobs → 로그를 확인한다. `success`, `already_running`, `failed` 등 DB 결과가 JSON 한 줄로 출력된다. 오늘 예약 성공 여부와 관계없이 manual은 다시 수집한다. 동시에 실행 중이면 사이트 요청 없이 `already_running`으로 끝난다.
-
-**Cron의 Trigger Run 버튼은 운영 수동 실행에 사용하지 않는다.** Render가 기존 실행을 먼저 취소하기 때문에 이 기능의 중복 실행 규칙을 우회한다. One-off Job은 별도 프로세스이고 DB 잠금을 공유한다. [One-off Jobs](https://render.com/docs/one-off-jobs), [Trigger Run 동작](https://render.com/docs/cronjobs#manually-triggering-a-run)
-
 ## 마지막 성공 시각·저장 건수·날짜별 이력
 
-동일한 One-off Job의 `startCommand`만 다음으로 바꾸면 수집 없이 DB 상태를 로그로 출력한다.
+같은 환경에서 다음 명령으로 DB 상태를 조회한다.
 
 ```bash
 python -m crawling.activities.run --status

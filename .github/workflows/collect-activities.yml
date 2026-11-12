@@ -1,0 +1,27 @@
+name: 공모전 수동 수집
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  collect:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: 수집 이미지 빌드
+        run: docker build -f crawling/dacon/Dockerfile -t team18-activities .
+      - name: 두 출처 수집 및 운영 DB 갱신
+        env:
+          ROADMAP_DB_BACKEND: postgres
+          ROADMAP_DATABASE_URL: ${{ secrets.ROADMAP_DATABASE_URL }}
+          CONTESTKOREA_API_KEY: ${{ secrets.CONTESTKOREA_API_KEY }}
+        run: |
+          : "${ROADMAP_DATABASE_URL:?ROADMAP_DATABASE_URL secret required}"
+          : "${CONTESTKOREA_API_KEY:?CONTESTKOREA_API_KEY secret required}"
+          docker run --rm --env ROADMAP_DB_BACKEND --env ROADMAP_DATABASE_URL --env CONTESTKOREA_API_KEY team18-activities

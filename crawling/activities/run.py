@@ -1,4 +1,4 @@
-"""One Render schedule, independently published source snapshots."""
+"""Collect activity listings on demand and publish each source independently."""
 import argparse
 from datetime import date
 import json

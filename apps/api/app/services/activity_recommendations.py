@@ -138,4 +138,4 @@ def recommend(profile, items, sources, now=None, limit=12):
     return {'status': status, 'activities': recommendations, 'sources': sources,
             'career_goal': profile['career_goal'], 'target_role': profile.get('target_role'),
             'evaluated_at': now.isoformat(), 'valid_until': valid_until.isoformat(),
-            'sample_notice': '콘테스트코리아는 Basic DEMO의 공식 limitsu 옵션으로 분야별 최근 최대 1,000건을 조회해 매일 누적합니다. 데이콘은 공개 목록의 더보기를 끝까지 확인하며 데이커는 데이콘 홈에 노출된 공개 공고를 수집합니다. 전체 공고를 보장하지 않습니다. 발견한 미마감 공고는 서버에서 원문을 재확인하며, 전체 후보 평가와 중복 통합 후 최대 12개를 추천합니다.'}
+            'sample_notice': '콘테스트코리아는 Basic DEMO의 공식 limitsu 옵션으로 분야별 최근 최대 1,000건을 조회해 운영자가 수동 수집할 때마다 누적합니다. 데이콘은 공개 목록의 더보기를 끝까지 확인하며 데이커는 데이콘 홈에 노출된 공개 공고를 수집합니다. 전체 공고를 보장하지 않습니다. 발견한 미마감 공고는 서버에서 원문을 재확인하며, 전체 후보 평가와 중복 통합 후 최대 12개를 추천합니다.'}
