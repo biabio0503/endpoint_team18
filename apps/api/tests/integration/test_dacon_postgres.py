@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import sys
 from threading import Event
+from time import monotonic, sleep
 from urllib.parse import urlsplit
 from uuid import uuid4
 from unittest.mock import Mock
@@ -114,9 +115,14 @@ def test_database_publication_failure_rolls_back_entire_snapshot(database):
 def test_disconnected_owner_recovery(database):
     db, another = database
     with another() as abandoned:
+        owner_pid = abandoned.execute('SELECT pg_backend_pid() AS pid').fetchone()['pid']
         abandoned.execute('SELECT pg_advisory_lock(%s)', (1800910,))
         old_id = str(uuid4())
         Store(abandoned)._record(old_id, datetime.now(KST).date(), 'manual', 'running', datetime.now(KST))
+    deadline = monotonic() + 5
+    while db.execute("SELECT EXISTS (SELECT 1 FROM pg_locks WHERE pid=%s AND locktype='advisory' AND granted) AS held", (owner_pid,)).fetchone()['held']:
+        assert monotonic() < deadline, 'disconnected owner did not release its advisory lock within 5 seconds'
+        sleep(0.05)
     assert Store(db).run(lambda: [])['status'] == 'success'
     assert db.execute('SELECT error_code FROM dacon_collection_runs WHERE id=%s', (old_id,)).fetchone()['error_code'] == 'interrupted'
 

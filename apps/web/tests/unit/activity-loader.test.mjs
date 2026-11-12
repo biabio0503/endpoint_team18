@@ -89,7 +89,7 @@ test('an exact event deadline expires the cache at 10:00 KST with both original 
  const load = createActivityLoader({ resolvePlanId: async () => 'plan', now: () => clock, apiRequest: async path => {
   if (!path.endsWith('/activities')) return { input_revision: 1 };
   calls++;
-  return { activities: clock < Date.parse(deadline) ? [card] : [], valid_until: deadline };
+  return { input_revision: 1, activities: clock < Date.parse(deadline) ? [card] : [], valid_until: deadline };
  } });
  const first = await load();
  assert.equal(first.activities[0].source_links.length, 2);
