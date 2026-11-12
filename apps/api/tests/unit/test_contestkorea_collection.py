@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'app'))
 from services.activity_eligibility import KST
 from services.activity_recommendations import recommend
-from crawling.contestkorea.collector import compact_records, collect, CollectionIncomplete
+from crawling.contestkorea.collector import compact_records, collect
 from providers.external import contestkorea as provider
 
 NOW = datetime(2026,11,12,9,10,tzinfo=KST)
@@ -79,17 +79,17 @@ def test_unknown_period_skipped_but_detail_transport_failure_is_failure(monkeypa
     monkeypatch.setattr(provider, 'request_json', lambda endpoint,*args: [{'STR_BCODE':'0301'}] if endpoint=='menu_info_api.php' else [raw])
     monkeypatch.setattr(provider, 'verify_period', lambda item: {**item,'period_source':'unverified'})
     result = provider.collect_kind('competition', 'secret', eligible_only=True, now=NOW)
-    assert result.status == 'success' and result.items == ()
+    assert result.status == 'partial' and result.items == () and result.parse_failures == 1
     monkeypatch.setattr(provider, 'verify_period', lambda item: {**item,'period_source':'unverified','verification_error':'provider_unavailable'})
     result = provider.collect_kind('competition', 'secret', eligible_only=True, now=NOW)
     assert result.status == 'partial' and result.failed_details == 1
 
 
-def test_either_kind_failure_aborts_publication(monkeypatch):
+def test_either_kind_failure_keeps_successful_observations(monkeypatch):
     monkeypatch.setattr('crawling.contestkorea.collector.collect_kind', Mock(side_effect=[
         provider.Collection((record(),), 'success'), provider.Collection((), 'partial', failed_categories=1)]))
-    with pytest.raises(CollectionIncomplete):
-        collect()
+    result = collect()
+    assert result.status == 'partial' and result.items == [record()]
 
 
 def test_daily_runner_continues_other_source_after_failure(monkeypatch, capsys):

@@ -24,7 +24,7 @@ from repositories.postgres import PostgresConnection
 
 
 @pytest.fixture
-def database():
+def database(request):
     url = os.environ.get('DACON_TEST_DATABASE_URL')
     if not url:
         pytest.skip('DACON_TEST_DATABASE_URL required for isolated PostgreSQL tests')
@@ -35,6 +35,11 @@ def database():
     connection.execute(sql.SQL('CREATE SCHEMA {}').format(sql.Identifier(schema)))
     migration = Path(__file__).resolve().parents[4] / 'supabase/migrations/20261112012208_dacon_daily_snapshots.sql'
     connection.execute(migration.read_text().replace('public.', schema + '.'))
+    for pattern in ('*_contestkorea_filtered_snapshots.sql', '*_activity_candidates.sql'):
+        if getattr(request, 'param', None) == 'legacy' and pattern == '*_activity_candidates.sql':
+            continue
+        path, = migration.parent.glob(pattern)
+        connection.execute(path.read_text().replace('public.', schema + '.'))
     connection.execute(sql.SQL('SET search_path TO {}').format(sql.Identifier(schema)))
     def another():
         conn = psycopg.connect(url, autocommit=True, row_factory=dict_row)
@@ -45,7 +50,8 @@ def database():
     connection.close()
 
 
-def test_daily_manual_history_failure_empty_and_schedule_idempotence(database):
+def test_daily_manual_history_failure_empty_and_schedule_idempotence(database, monkeypatch):
+    monkeypatch.setattr(Store, "recheck", lambda self, records: records)
     db, _ = database
     now = [datetime(2026,11,12,0,10,tzinfo=__import__('datetime').timezone.utc)]
     store = Store(db, lambda: now[0])
@@ -67,7 +73,7 @@ def test_daily_manual_history_failure_empty_and_schedule_idempotence(database):
     rows, meta = load_catalog(PostgresConnection(db, psycopg.Error))
     assert rows and meta['status'] == 'partial' and meta['error_code'] == 'last_collection_failed'
     assert store.run(lambda: [])['collected_count'] == 0
-    assert load_catalog(PostgresConnection(db, psycopg.Error))[0] == []
+    assert load_catalog(PostgresConnection(db, psycopg.Error))[0]  # Empty discovery retains valid candidates.
     assert store.status()['snapshot']['collected_count'] == 0
     assert store.status(datetime(2026,11,12).date())['snapshot']['collected_count'] == 1
 

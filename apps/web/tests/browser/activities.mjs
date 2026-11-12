@@ -6,10 +6,13 @@ const browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM
 const context = await browser.newContext({ viewport: { width: 1200, height: 1000 } });
 const id = '11111111-1111-1111-1111-111111111111', userId = 'fixture-user';
 let mode = 'success', activityCalls = 0, roadmapFails = true;
-const item = { id: 'fixture', kind: 'competition', status: 'open', source_label: '콘테스트코리아', title: '공공데이터 분석 경진대회', category: '데이터·통계',
+const item = { id: 'fixture', kind: 'competition', status: 'open', source_label: '콘테스트코리아 · 데이커', title: '공공데이터 분석 경진대회', category: '데이터·통계',
  host: '테스트 기관', target: '대학생', period: '2026.11.01 ~ 2026.12.01', deadline_label: '2026-12-01 (한국 시간, 당일 포함)',
  reasons: ['진로 목표 “데이터 분석가”에 맞춰, 공고 제목 “공공데이터 분석 경진대회”의 데이터 표현을 근거로 추천합니다.'],
- url: 'https://www.contestkorea.com/sub/view.php?str_no=fixture' };
+ url: 'https://www.contestkorea.com/sub/view.php?str_no=fixture', source_links: [
+  { source: 'contestkorea', source_label: '콘테스트코리아', url: 'https://www.contestkorea.com/sub/view.php?str_no=fixture', last_success_at: '2026-11-10T09:10:00+09:00', stale: true },
+  { source: 'daker', source_label: '데이커', url: 'https://daker.ai/public/hackathons/fixture', last_success_at: '2026-11-12T09:10:00+09:00', stale: false }
+ ] };
 await context.addInitScript(({ id, userId }) => {
  localStorage.setItem('sb-team18-test-auth-token', JSON.stringify({ access_token: 'fixture-token', refresh_token: 'fixture-refresh',
   expires_at: Math.floor(Date.now()/1000) + 3600, token_type: 'bearer', user: { id: userId } }));
@@ -53,8 +56,13 @@ try {
  await page.keyboard.press('End');
  await page.getByRole('heading', { name: item.title }).waitFor();
  assert.equal(activityCalls, 1);
+ assert.equal(await page.getByRole('heading', { name: item.title }).count(), 1);
+ assert.equal(await page.getByRole('link', { name: /원문 보기/ }).count(), 2);
+ assert.ok(await page.getByText('콘테스트코리아 · 데이커', { exact: true }).isVisible());
+ await page.getByText(/최근 재확인 지연/).waitFor();
+ assert.equal(await page.getByRole('link', { name: /데이커 원문 보기/ }).getAttribute('href'), item.source_links[1].url);
  const popupEvent = context.waitForEvent('page');
- await page.getByRole('link', { name: /원문 보기/ }).click();
+ await page.getByRole('link', { name: /콘테스트코리아 원문 보기/ }).click();
  const popup = await popupEvent; await popup.waitForLoadState();
  assert.equal(popup.url(), item.url); await popup.close();
  mode = 'upcoming';

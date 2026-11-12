@@ -1,63 +1,71 @@
-# 콘테스트코리아 조건부 수집·추천 운영
+# 콘테스트코리아 누적 수집·추천 운영
 
-## 저장 조건
+## 현재 범위와 공식 계약
 
-매일 09:10 KST의 공통 Render Cron Job이 콘테스트코리아와 데이콘을 각각 수집한다. 콘테스트코리아 공모전·대외활동은 아래 조건을 모두 만족한 공고만 새 스냅샷에 저장한다.
+2026-11-10 발급 메일의 **API 명세서_Basic_콘테스트코리아(261110).pdf, DEMO v1.1, 2쪽**을 확인했다. 기본 응답은 분야별 최근 10건이지만, 같은 쪽에 **`limitsu=100`으로 반환 건수를 조정하는 옵션**이 명시되어 있다. 따라서 10건이 계약상 고정 상한이라는 기존 설명을 수정한다. [발급 명세 메일](https://mail.google.com/mail/u/0/#all/1a1c4652933c2940)
 
-- 한국 시간 기준 **접수 중 또는 접수 예정**. 상시 접수는 접수 중으로 취급한다.
-- 참가 대상에 **대학생 또는 누구나**가 명시되어 있고, 제외·추가 제한 등으로 자격이 모호하지 않다. `대학원생`만 있는 공고, `누구나 (대학생 제외)`, `대학생, 해당자 ▶` 등은 제외한다.
-- 원본 ID·제목·유효한 원문 URL이 있으며 기간을 확정할 수 있다. 연도 없는 기간은 같은 공고 원문의 접수기간으로 확인한다. 현재 연도나 공고 ID로 연도를 추측하지 않는다.
+수집기는 공모전·대외활동의 메뉴 코드를 모두 조회하고 공식 `limitsu`만 100 → 200 → 400 → 800 → 1,000으로 늘린다. 요청보다 적게 반환하거나 같은 ID 집합이 반복되면 종료한다. **1,000은 이 서비스의 요청/응답 크기 보호 상한이며 공급자가 약속한 최대값이 아니다.** 분야별 결과가 상한에 도달하거나 확장이 중단되면 `limited_categories`로 표시한다. 명세에는 페이지 번호·cursor·전체 건수·전체 이력 조회 계약이 없어 전체 수집은 보장하지 않는다. 반환된 범위 안에서 ID 중복을 제거하고, 공모전/대외활동에 중복 노출된 상세도 실행당 한 번만 요청한다.
 
-확실히 대상이 아닌 공고는 상세 요청 전에도 걸러낸다. 마감·대상/기간 미확인 공고는 저장하지 않는다. 단, API 분야 조회나 상세 페이지의 네트워크 실패는 정상 0건으로 처리하지 않는다. 전체 실행을 실패로 기록하고 마지막 성공 스냅샷을 보존한다. 조건에 맞는 공고가 실제로 0개이면 success/0으로 저장한다. Basic DEMO의 분야별 최근 10건 표본 한계는 그대로다.
+명세에 없는 파라미터는 사용하지 않는다. 2026-11-12 실측에서 학문·과학·IT 분야는 기본 요청 10건, `limitsu=100` 100건, `limitsu=200` 200건을 반환했다. 키와 키가 포함된 요청 URL은 로그·문서·DB에 저장하지 않는다. 발급 메일의 사용 기한은 **2026-11-24**이며 이후 사용에는 갱신된 키가 필요하다.
 
-추천에는 **접수 중과 예정 모두** 포함한다. 예정 카드는 `접수 예정` 배지, 한국 시간의 `접수 시작`, 접수 마감을 표시한다. 응답 캐시가 `opens_at`을 넘기지 않도록 하여 시작 시각 이후 조회에서는 `접수 중`으로 재판정한다. 화면을 계속 열어 둔 경우 기존 60초 재확인 주기에 반영된다. 마감된 공고는 조회 시점에도 제외하며 진로 목표와 관련 없는 공고로 카드를 채우지 않는다.
+## 날짜 이력과 현재 후보
 
-## 저장량 절약
-
-| 테이블 | 역할 |
+| 테이블 | 용도 |
 | --- | --- |
-| `contestkorea_collection_runs` | 날짜·실행 방식·결과·건수 등 작은 운영 기록 |
-| `contestkorea_daily_snapshots` | 날짜별 마지막 성공 실행 |
-| `contestkorea_item_versions` | SHA-256으로 동일 내용을 구분한 최소 공고 JSONB. 변동 없는 공고는 날짜가 바뀌어도 한 번만 저장 |
-| `contestkorea_daily_items` | 날짜·원본 ID·32바이트 내용 해시로 연결한 이력 |
+| `contestkorea_collection_runs` | 모든 실행의 날짜·mode·success/partial/failed·건수·metrics |
+| `contestkorea_daily_snapshots`, `contestkorea_daily_items` | 날짜별 마지막 완전 성공 수집 목록. 같은 날짜만 교체하며 과거 날짜는 유지 |
+| `contestkorea_item_versions` | 동일 내용을 SHA-256으로 한 번만 저장. 과거 날짜가 참조하는 버전 보존 |
+| `activity_candidates` | 출처 + 원본 ID별 최신 확인 내용과 현재 후보 상태. 날짜 목록과 독립 |
 
-공고 JSON에는 ID, 종류, 제목, 분야, 주최, 참가 대상, 접수 기간, 원문 링크와 필요한 경우 원문 확인 기간만 저장한다. HTML·포스터·첨부파일·원본 API 응답·매일 바뀌는 파생 상태는 저장하지 않는다. 같은 날 재실행은 참조를 교체하고, 어느 날짜에서도 참조하지 않는 내용 버전은 같은 트랜잭션에서 정리한다. 이전 날짜가 참조하는 내용은 이력 보존을 위해 유지한다. 임의의 보관 만료일을 설정하거나 과거 이력을 일괄 삭제하지 않는다.
+`20261112021404_activity_candidates.sql`은 **모든 과거 날짜에서 각 ID의 최신 버전**을 가져온다. 최신 날짜에 없는 공고도 복원한다. 이관 시 과거 성공 시각을 그대로 사용하고 `historical`로 표시한다. 첫 서버 실행이 이관된 자료를 분류하며 이미 마감된 자료를 원문 조회 대상으로 보내지 않는다. 이전 날짜 이력은 삭제하지 않는다.
 
-공고 추천 경로는 이제 두 출처 모두 PostgreSQL만 조회한다. API 메모리 캐시의 만료나 학생 새로고침으로 콘테스트코리아 네트워크 요청이 발생하지 않는다.
+현재 후보는 다음 상태를 구별한다.
 
-## 명령과 Render 설정
+- `active`: 참가 대상이 대학생/누구나이고 접수 중·예정. 상시 접수 포함.
+- `expired`: 확인된 접수 마감 시각이 지남. 추천 조회 때도 재판정한다.
+- `closed`, `cancelled`: 원문에서 접수 조기 마감·취소를 확인함.
+- `unknown`, `ineligible`: 원문 기간 미정 또는 참가 대상 조건 미충족.
+- `missing_since`: 오늘 목록에 없다는 관찰. 이것만으로 제외하지 않는다.
+- `check_status=parse_error/network_error`: 재확인 실패. 기존 본문·마감·`last_success_at` 보존.
 
-기존 `team18-dacon-daily` Cron Job 하나의 Docker Command를 다음으로 바꾼다. Schedule `10 0 * * *`, Root Directory 비움, Docker context `.`, Dockerfile `./crawling/dacon/Dockerfile`은 유지한다.
+서버는 목록에서 빠진 **미마감 active 후보**만 원문을 재확인한다. 처음 빠졌을 때는 바로 확인하고 이후 성공 확인은 20시간, 실패 재시도는 1시간 간격을 둔다. 같은 날 수동 반복 실행이 누락 후보를 계속 재조회하지 않는다. 만료·취소·확인된 마감 공고는 누락 재확인 대상에서 제외한다. 목록에 다시 등장해도 API 내용 서명이 같으면 기존 상세 검증 결과를 재사용한다(`reused_details`). 목록 내용이 바뀌었을 때만 상세를 다시 확인한다. 재사용으로 마지막 원문 성공 시각을 갱신하지 않는다. `last_seen_at`(목록 발견), `last_checked_at`(시도), `last_success_at`(성공)을 구분하며 실패로 성공 시각을 앞당기지 않는다. 마지막 성공 후 26시간이 지났거나 최근 확인에 실패했으면 화면에 지연 표시와 실제 마지막 확인 시각을 보여준다. 유효 기간 내에는 후보를 유지한다.
+
+## 원문 검증과 부분 성공
+
+`접수기간`, `접수 기간`, 줄바꿈, `신청기간`, `모집기간`, `참가 신청 기간`을 정규화한다. 날짜 표기 차이는 공유 KST 파서로 처리한다. **대회 개최·제출·심사 기간으로 접수 기간을 대신하지 않는다.** 원문의 접수기간은 API의 축약 날짜보다 우선하므로 연장/변경된 마감도 반영한다. 접수 상태 표에서 조기 마감·취소를 확인한다. 단순 메뉴의 ‘마감’ 문구로 공고를 닫지 않는다.
+
+명시적인 `미정`/`추후 공지`는 정상적인 기간 미확인이다. 접수기간 표 자체가 없거나 날짜 구조가 잘못되면 파싱 실패, 연결/HTTP 실패는 네트워크 실패다. 일부 실패가 있으면 `partial`로 기록하고 **확인된 개별 공고의 갱신은 반영**한다. 마지막 성공 날짜 스냅샷은 교체하지 않는다. 신규 오류 공고를 적격 후보로 만들지 않으며, 기존 오류 공고는 마지막 성공 내용을 보존한다. 실제 적격 0건은 `success/0`이 가능하지만 누적 후보의 일괄 삭제를 뜻하지 않는다.
+
+CLI와 `--status`의 `recent_runs[].metrics`에서 다음을 확인한다: `fetched_items`(분야별 확장 응답에서 ID 중복을 제거한 건수 합), `discovered_unique`(출처 내 고유 공고), `eligible_items`, `unknown_periods`, `parse_failures`, `network_failures`, `failed_categories`, `rejected_items`, `limited_categories`, `rechecked_items`, `recheck_failures`, `reused_details`. 원본 ID가 여러 분야에 걸치면 `fetched_items`와 `discovered_unique`가 다르다. 재확인 오류는 `recheck_failures`에 별도로 집계한다.
+
+## 추천과 중복 통합
+
+학생 요청은 PostgreSQL만 읽는다. 전체 적격 후보에 목표 관련성 점수를 계산한 뒤 동일 대회를 묶고 **마지막에 상위 12개**를 선택한다. 출처 내부 원본 ID를 변경하지 않는다.
+
+명시적으로 ‘접수하기/신청하기’에 연결된 URL을 `official_application_url`로 저장하며, `url`은 각 출처 원문 링크다. 홈페이지나 콘테스트코리아 상세 링크를 공식 신청 주소로 추정하지 않는다. 공식 신청 URL이 같으면 우선 근거로 사용하되 접수 기간·명시된 회차 충돌은 별개로 유지한다. 공식 URL이 없으면 주최기관·대회명·확정 접수 기간이 모두 일치해야 한다. 확인된 공식 URL이 서로 다르면 제목만으로 합치지 않는다. 카드의 `source_links`에 출처별 원본 ID·원문 링크·마지막 확인 시각을 모두 담는다.
+
+## 실행·적용
+
+예약/수동 경로는 동일하다. Render 일정 **`10 0 * * *` = 매일 09:10 KST**, Docker context `.`, Dockerfile `./crawling/dacon/Dockerfile`을 유지한다. 출처별 PostgreSQL 세션 advisory lock을 수집 시작부터 저장 종료까지 보유한다. 예약/수동 중복은 외부 요청 없이 `already_running`이다. 한 출처가 failed/partial이어도 다른 출처는 실행되며 CLI는 불완전 실행에 종료 코드 1을 반환한다.
 
 ```bash
-# 매일 09:10 KST: 두 출처가 각각 성공/실패를 기록
 python -m crawling.activities.run --mode scheduled
-# 전체 즉시 재수집
 python -m crawling.activities.run --mode manual
-# 콘테스트코리아만 즉시 재수집
 python -m crawling.activities.run --source contestkorea --mode manual
-# 두 출처의 마지막 성공 상태 / 특정 날짜
 python -m crawling.activities.run --status
-python -m crawling.activities.run --source contestkorea --status --date 2026-11-12
+python -m crawling.activities.run --status --date 2026-11-12
 ```
 
-Cron 환경에 **`CONTESTKOREA_API_KEY`를 추가**하고 `ROADMAP_DB_BACKEND=postgres`, 운영 API와 동일 DB의 `ROADMAP_DATABASE_URL`(직접 또는 Session pooler 5432)을 설정한다. Web Service 환경에 있는 키가 Cron으로 자동 복사되지는 않는다. DB와 출처별 잠금을 공유하므로 동일 출처의 예약·수동이 겹치면 already_running으로 끝난다. 한 출처 실패가 다른 출처 실행을 막지는 않는다. 수동은 Render One-off Job의 startCommand로 위 명령을 사용한다. Trigger Run 버튼은 기존 실행을 취소하므로 사용하지 않는다. [Render 수동 실행 방법](dacon-server-collection.md#서버에서-지금-수동-실행)
+Cron에 `CONTESTKOREA_API_KEY`, `ROADMAP_DB_BACKEND=postgres`, 동일 운영 DB의 `ROADMAP_DATABASE_URL`(직접/Session pooler, 6543 제외)이 필요하다. [Render 수동 실행 절차](dacon-server-collection.md#서버에서-지금-수동-실행)를 유지한다.
 
-## 적용·검증 범위
-
-운영 Supabase에 `20261112015320_contestkorea_filtered_snapshots.sql`을 적용했다. 네 테이블 모두 RLS 활성화와 anon/authenticated 조회 권한 철회를 확인했다. 저장소 코드·Blueprint 변경은 작성했지만 이 작업에서 Git push, Render 등록/배포는 수행하지 않았다. 운영 DB의 첫 수집은 배포 후 필요하며, 검증 시점의 운영 콘테스트코리아 실행·스냅샷은 0건이고 마지막 성공 시각은 없다.
-
-2026-11-12 10:52:19 KST 실제 API 수집을 **격리된 TLS PostgreSQL**에 실행했다. 접수 중 80건·예정 5건, 합계 85건(공모전 52·대외활동 33)이 저장됐다. 전 항목의 기간·참가 대상 조건을 재검증했다. 공고 JSON의 `sum(pg_column_size(payload))`는 39,782바이트이며 인덱스·날짜 참조·운영 기록 공간은 별도다. 이 수치를 운영 DB 저장 건수로 해석하지 않는다.
-
-관련 Python 106개 테스트가 통과했다. 필터, 사전 제외로 상세 요청 감소, 같은 날 갱신, 다음 날 본문 중복 방지, 과거 이력, 참조 없는 버전 회수, 실패/DB 쓰기 롤백, 동시 실행 차단, 예정 공고의 추천 포함과 시작 시각 전환을 검사한다. DB에 저장한 실제 공고의 추천 라우트 응답과 3회 반복 조회 중 공급자 호출·HTTP 연결 0회도 확인했다. 테스트 DB의 학생 인증/목표만 대체했으며 공고 조회·점수 계산은 실제 코드다.
-
-실제 예정 공고 `2026년 제3회 AMT AI 작곡대회 – KILLING DANCE 챌린지`가 저장 → 추천 응답으로 연결됐으며 `status=upcoming`, `opens_at=2026-11-16T00:00:00+09:00`을 확인했다. 웹 프로덕션 빌드와 브라우저 회귀 테스트가 통과했고 390px 모바일에서 예정 배지·접수 시작일 표시를 확인했다. 최종 Linux Docker 이미지 빌드와 해당 이미지의 `--source contestkorea --status` 명령으로 격리 DB의 성공 85건 조회도 검증했다.
+**배포 전 새 마이그레이션을 적용한 뒤 API·Cron·프론트를 배포한다.** 새 후보 테이블은 RLS를 켜고 anon/authenticated/PUBLIC 권한을 철회한 서버 전용 테이블이다. 이 작업은 저장소 수정과 격리 DB 검증까지 수행했다. 운영 DB 적용, Git push, Render 배포·09:10 실제 실행은 수행하지 않았다. 검토 시작 시 운영 두 출처 스냅샷은 모두 0건이었다. 실제 공고 검증 결과와 재현/검증 명령은 [검증 기록](activity-collection-review.md)을 참고한다.
 
 ```sql
-SELECT collection_date, succeeded_at AT TIME ZONE 'Asia/Seoul' AS last_success_kst, collected_count
-FROM public.contestkorea_daily_snapshots ORDER BY collection_date DESC;
-SELECT collection_date, mode, status, collected_count, error_code
+SELECT source, state, count(*) FROM public.activity_candidates GROUP BY source, state;
+SELECT source, original_id, state, missing_since, last_seen_at, last_checked_at,
+       last_success_at, next_check_at, check_status
+FROM public.activity_candidates WHERE state IN ('active','pending')
+ORDER BY last_success_at;
+SELECT collection_date, mode, status, collected_count, metrics, error_code
 FROM public.contestkorea_collection_runs ORDER BY run_order DESC LIMIT 20;
-SELECT count(*) AS content_versions, sum(pg_column_size(payload)) AS json_bytes
-FROM public.contestkorea_item_versions;
 ```

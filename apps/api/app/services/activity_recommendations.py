@@ -5,6 +5,7 @@ import re
 from services.project_experience import compare_skill, current_comparison, digest
 
 from services.activity_eligibility import KST, period_status, eligible_target
+from services.activity_identity import merge_events
 # Synonyms describe a topic, never a posting's unmentioned tool requirements.
 TOPICS = {
     '데이터 분석': ('데이터', 'data', '분석', 'analytics', '통계', '시각화'),
@@ -90,9 +91,12 @@ def recommend(profile, items, sources, now=None, limit=12):
     now = (now or datetime.now(KST)).astimezone(KST)
     recommendations, seen = [], set()
     for item in items:
-        if item['id'] in seen:
+        identity = (item.get('source', 'contestkorea'), item.get('original_id', item['id']))
+        if identity in seen:
             continue
-        seen.add(item['id'])
+        seen.add(identity)
+        if item.get('application_closed') or item.get('application_cancelled'):
+            continue
         period = period_status(item.get('verified_period') or item['period'], now)  # Recheck cache hits too.
         if item.get('source') in ('dacon', 'daker'):
             try:
@@ -110,7 +114,7 @@ def recommend(profile, items, sources, now=None, limit=12):
         if relevance:
             recommendations.append({**item, **period, **relevance})
     recommendations.sort(key=lambda item: (-item['score'], item['deadline'] or '9999', item['id']))
-    recommendations = recommendations[:limit]
+    recommendations = merge_events(recommendations)[:limit]
     status = 'error' if all(s['status'] == 'error' for s in sources) else 'partial' if any(s['status'] != 'success' for s in sources) else 'success'
     valid_until = now + timedelta(minutes=5)
     for item in recommendations:
@@ -121,4 +125,4 @@ def recommend(profile, items, sources, now=None, limit=12):
     return {'status': status, 'activities': recommendations, 'sources': sources,
             'career_goal': profile['career_goal'], 'target_role': profile.get('target_role'),
             'evaluated_at': now.isoformat(), 'valid_until': valid_until.isoformat(),
-            'sample_notice': '콘테스트코리아는 Basic DEMO 분야별 최근 등록 10건, 데이콘·데이커는 서버가 마지막으로 수집에 성공한 공개 목록 표본입니다. 전체 공고가 아니며 접수 기간과 참가 자격을 확인한 공고만 추천합니다. 변경 사항은 원문을 확인해 주세요.'}
+            'sample_notice': '콘테스트코리아는 Basic DEMO의 공식 limitsu 옵션으로 분야별 최근 최대 1,000건을 조회해 매일 누적합니다. 데이콘은 공개 목록의 더보기를 끝까지 확인하며 데이커는 데이콘 홈에 노출된 공개 공고를 수집합니다. 전체 공고를 보장하지 않습니다. 발견한 미마감 공고는 서버에서 원문을 재확인하며, 전체 후보 평가와 중복 통합 후 최대 12개를 추천합니다.'}

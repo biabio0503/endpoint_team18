@@ -23,7 +23,8 @@ def run_source(source, mode, status=False, day=None):
             from crawling.dacon.crawler import collect
         db = connect_postgres(DATABASE_URL)
         store = Store(db.connection)
-        result = store.status(day) if status else store.run(collect, mode)
+        discover = (lambda: collect(known=store.known_details())) if source == 'contestkorea' else collect
+        result = store.status(day) if status else store.run(discover, mode)
         return {'source': source, **result}
     except Exception as error:
         return {'source': source, 'status': 'failed', 'error_code': type(error).__name__}
@@ -50,7 +51,7 @@ def main():
     for source in sources:
         result = run_source(source, args.mode, args.status, args.date)
         print(json.dumps(result, ensure_ascii=False, default=str), flush=True)
-        failed |= result.get('status') == 'failed'
+        failed |= result.get('status') in ('failed', 'partial')
     return int(failed)
 
 
