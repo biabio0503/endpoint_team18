@@ -92,7 +92,7 @@ def test_render_schedule_and_shared_entrypoint():
     assert '\n    rootDir:' not in cron
     assert 'runtime: docker' in cron
     assert 'dockerContext: .' in cron
-    assert 'dockerCommand: python -m crawling.dacon.run --mode scheduled' in cron
+    assert 'dockerCommand: python -m crawling.activities.run --mode scheduled' in cron
     build = (root / 'crawling/dacon/build.sh').read_text()
     assert 'requirements-server.txt' in build and 'playwright install --with-deps chromium' in build
 

@@ -6,7 +6,7 @@ const browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM
 const context = await browser.newContext({ viewport: { width: 1200, height: 1000 } });
 const id = '11111111-1111-1111-1111-111111111111', userId = 'fixture-user';
 let mode = 'success', activityCalls = 0, roadmapFails = true;
-const item = { id: 'fixture', kind: 'competition', title: '공공데이터 분석 경진대회', category: '데이터·통계',
+const item = { id: 'fixture', kind: 'competition', status: 'open', source_label: '콘테스트코리아', title: '공공데이터 분석 경진대회', category: '데이터·통계',
  host: '테스트 기관', target: '대학생', period: '2026.11.01 ~ 2026.12.01', deadline_label: '2026-12-01 (한국 시간, 당일 포함)',
  reasons: ['진로 목표 “데이터 분석가”에 맞춰, 공고 제목 “공공데이터 분석 경진대회”의 데이터 표현을 근거로 추천합니다.'],
  url: 'https://www.contestkorea.com/sub/view.php?str_no=fixture' };
@@ -24,9 +24,11 @@ await context.route('**/api/**', async route => {
   body = { status: mode === 'partial' ? 'partial' : mode === 'error' ? 'error' : 'success',
    request_id: id, input_revision: 1, career_goal: '데이터 분석가', evaluated_at: new Date().toISOString(),
    valid_until: new Date(Date.now()+300000).toISOString(), sample_notice: '브라우저 회귀 테스트용 고정 공고입니다.',
-   activities: ['success','partial'].includes(mode) ? [item] : [], sources: [
-    { kind: 'competition', status: mode === 'error' ? 'error' : 'success' },
-    { kind: 'extracurricular', status: ['partial','error'].includes(mode) ? 'error' : 'success' }] };
+   activities: mode === 'upcoming' ? [{ ...item, status: 'upcoming', opens_at: '2026-12-01T09:00:00+09:00',
+      period: '2026.12.01 09:00 ~ 2026.12.31', deadline_label: '2026-12-31 (한국 시간, 당일 포함)' }]
+     : ['success','partial'].includes(mode) ? [item] : [], sources: [
+    { source: 'contestkorea', kind: 'competition', status: mode === 'error' ? 'error' : 'success' },
+    { source: 'dacon_daker', kind: 'competition', status: ['partial','error'].includes(mode) ? 'error' : 'success' }] };
  } else if (path.endsWith('/roadmap') || path.endsWith('/roadmaps')) {
   status = roadmapFails ? 503 : 200;
   body = roadmapFails ? { error: 'roadmap_failed', message: '로드맵 조회 테스트 실패' } : { runs: [], status: 'needs_job_analysis' };
@@ -55,9 +57,18 @@ try {
  await page.getByRole('link', { name: /원문 보기/ }).click();
  const popup = await popupEvent; await popup.waitForLoadState();
  assert.equal(popup.url(), item.url); await popup.close();
+ mode = 'upcoming';
+ await page.getByRole('button', { name: '활동 추천 다시 확인' }).click();
+ await page.getByText('접수 예정', { exact: true }).waitFor();
+ assert.ok(await page.getByText('접수 시작', { exact: true }).isVisible());
+ assert.match(await page.locator('.skill-summary').innerText(), /2026.*12.*01.*09:00/);
+ await page.setViewportSize({ width: 390, height: 844 });
+ assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
+ await page.screenshot({ path: '/tmp/team18-activities-upcoming.png', fullPage: true });
  mode = 'partial';
  await page.getByRole('button', { name: '활동 추천 다시 확인' }).click();
- await page.getByText('대외활동: 공급자에서 공고를 가져오지 못했습니다.').waitFor();
+ await page.getByText('데이콘·데이커: 공급자에서 공고를 가져오지 못했습니다.').waitFor();
+ assert.ok(await page.getByText('접수 중', { exact: true }).isVisible());
  assert.ok(await page.getByRole('heading', { name: item.title }).isVisible());
  await page.setViewportSize({ width: 390, height: 844 });
  await page.screenshot({ path: process.env.WEB_TEST_SCREENSHOT || '/tmp/team18-activities-mobile.png', fullPage: true });

@@ -43,3 +43,5 @@ OCR 비용 기간 수정: `20261111021219_document_ocr_billing_period.sql`은 �
 ## 데이콘·데이커 매일 수집
 
 별도 Docker Cron Job `team18-dacon-daily`의 설정은 저장소 루트 `render.yaml`에 있다. `10 0 * * *`(매일 09:10 KST), Root Directory 비움, Docker context `.`를 사용한다. 웹 서비스 Root Directory `apps/api`는 유지한다. 운영 DB 추가 테이블은 적용했지만 Cron Job 등록과 코드 배포는 아직 하지 않았다. 수동 One-off Job 명령과 정확한 대시보드 값은 [데이콘 수집 운영 인수인계](dacon-server-collection.md)를 따른다.
+
+콘테스트코리아도 같은 Cron Job에서 수집한다. Docker Command는 `python -m crawling.activities.run --mode scheduled`로 바꾸고 Cron 환경에 `CONTESTKOREA_API_KEY`를 추가한다. [조건부 저장·예정 카드 운영 안내](contestkorea-server-collection.md)를 확인한다.

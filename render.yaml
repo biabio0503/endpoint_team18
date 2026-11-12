@@ -10,11 +10,13 @@ services:
     # rootDir deliberately omitted: both crawling/ and apps/api/ must be present.
     dockerContext: .
     dockerfilePath: ./crawling/dacon/Dockerfile
-    dockerCommand: python -m crawling.dacon.run --mode scheduled
+    dockerCommand: python -m crawling.activities.run --mode scheduled
     envVars:
       - key: ROADMAP_DB_BACKEND
         value: postgres
       - key: ROADMAP_DATABASE_URL
+        sync: false
+      - key: CONTESTKOREA_API_KEY
         sync: false
       - key: PYTHONUNBUFFERED
         value: "1"

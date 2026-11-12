@@ -1,6 +1,8 @@
-# 데이콘 서버 수집 운영 인수인계
+# 공모전 서버 수집 운영 인수인계
 
 ## 적용 상태 (2026-11-12 KST)
+
+콘테스트코리아도 공통 09:10 수집에 추가했다. 조건부 저장·본문 중복 절약·접수 예정 카드 정책은 [콘테스트코리아 운영 안내](contestkorea-server-collection.md)를 따른다. `--source contestkorea` 또는 `--source dacon`으로 개별 실행할 수 있다. 아래 기존 데이콘 검증 기록은 당시 결과다.
 
 - `크롤링` 브랜치 작업 디렉터리에 크롤러, 저장소, CLI, 추천 API/카드, Render Blueprint/Dockerfile을 작성했다. Git push와 Render 배포는 아직 수행하지 않았다.
 - 운영 Supabase 프로젝트 `htuttclopxaiyhgcakkj`에 추가 마이그레이션 `20261112012208_dacon_daily_snapshots.sql`을 적용했다. 서버 이력의 version과 파일명을 일치시켰다. 기존 테이블/행은 변경하지 않았다.
@@ -20,11 +22,12 @@
 | Root Directory | **비워 둠** (저장소 루트; `apps/api`로 지정하지 않음) |
 | Docker Build Context | `.` |
 | Dockerfile Path | `./crawling/dacon/Dockerfile` |
-| Docker Command | `python -m crawling.dacon.run --mode scheduled` |
+| Docker Command | `python -m crawling.activities.run --mode scheduled` |
 | Schedule | `10 0 * * *` |
 | Instance Type | `Starter` (Chromium 메모리 부족/OOM이면 Standard로 조정) |
 | `ROADMAP_DB_BACKEND` | `postgres` |
 | `ROADMAP_DATABASE_URL` | 기존 운영 API와 **동일 DB**의 직접/Session pooler 연결 문자열; 5432, 6543 불가 |
+| `CONTESTKOREA_API_KEY` | 콘테스트코리아 서버 API 키 |
 | `PYTHONUNBUFFERED` | `1` |
 
 Docker 방식에는 별도 Build Command 입력란이 없다. 빌드는 `docker build -f crawling/dacon/Dockerfile .`에 해당하며 Dockerfile 내부에서 다음 명령을 실행한다.
@@ -43,7 +46,7 @@ Render cron은 UTC를 사용하므로 `00:10 UTC = 09:10 Asia/Seoul`이다. 외�
 Cron Job이 최초 빌드에 성공한 다음, 해당 `crn-...` 서비스를 기반으로 **One-off Job**을 만든다. 예약 작업과 동일한 이미지/DB 환경에서 아래 명령을 실행한다.
 
 ```bash
-python -m crawling.dacon.run --mode manual
+python -m crawling.activities.run --mode manual
 ```
 
 운영자의 터미널에서 Render API로 서버 작업을 시작하는 예시다. 로컬에서는 API 요청만 보내고 수집은 Render에서 실행된다. `RENDER_API_KEY`, `RENDER_DACON_SERVICE_ID`는 운영자 환경에 설정한다.
@@ -53,7 +56,7 @@ curl --fail-with-body --request POST \
   "https://api.render.com/v1/services/${RENDER_DACON_SERVICE_ID}/jobs" \
   --header "Authorization: Bearer ${RENDER_API_KEY}" \
   --header 'Content-Type: application/json' \
-  --data '{"startCommand":"python -m crawling.dacon.run --mode manual"}'
+  --data '{"startCommand":"python -m crawling.activities.run --mode manual"}'
 ```
 
 응답의 작업 ID로 Dashboard → 해당 서비스 → One-off Jobs → 로그를 확인한다. `success`, `already_running`, `failed` 등 DB 결과가 JSON 한 줄로 출력된다. 오늘 예약 성공 여부와 관계없이 manual은 다시 수집한다. 동시에 실행 중이면 사이트 요청 없이 `already_running`으로 끝난다.
@@ -65,8 +68,8 @@ curl --fail-with-body --request POST \
 동일한 One-off Job의 `startCommand`만 다음으로 바꾸면 수집 없이 DB 상태를 로그로 출력한다.
 
 ```bash
-python -m crawling.dacon.run --status
-python -m crawling.dacon.run --status --date 2026-11-12
+python -m crawling.activities.run --status
+python -m crawling.activities.run --status --date 2026-11-12
 ```
 
 `snapshot.succeeded_at`, `snapshot.collected_count`, `snapshot.collection_date`가 마지막 성공 시각·건수·한국 날짜다. `recent_runs`에 mode, status, started_at, finished_at, collected_count, error_code가 담긴다. 실패의 count는 null이고 정상 0건은 success/0이다. 첫 수집 전 snapshot은 null이다.
@@ -117,7 +120,7 @@ PostgreSQL 테스트는 위 전용 DB 이름과 localhost만 허용하며 테스
 
 보안 advisor의 새 테이블 `RLS enabled, no policy` INFO는 의도한 서버 전용 설정이다. 공개 역할의 테이블 권한도 철회했으며 공개 정책을 추가하지 않는다. [Supabase RLS 점검 기준](https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy)
 
-실제 명령 검증: `python -m crawling.dacon.run --mode manual`로 2026-11-12 10:28:58 KST에 **격리된 TLS PostgreSQL**에 25건 저장했다. 동일 DB를 읽는 기존 추천 라우트에서 제주 AI Agent 공고가 HTTP 200, 출처 데이커, 신청 마감 11/20 10:00, 학생의 데이터 분석 목표에 연결된 근거와 함께 반환됐다. 라우트 3회 반복 조회 중 HTTP 연결과 크롤러 호출은 모두 0회였다. 인증/학생 프로필과 콘테스트코리아 응답만 테스트에서 대체했으며 데이콘 DB 읽기와 공고·점수 계산은 실제 코드를 사용했다. 이는 운영 Render에서 실행한 결과가 아니다.
+실제 명령 검증: `python -m crawling.activities.run --mode manual`로 2026-11-12 10:28:58 KST에 **격리된 TLS PostgreSQL**에 25건 저장했다. 동일 DB를 읽는 기존 추천 라우트에서 제주 AI Agent 공고가 HTTP 200, 출처 데이커, 신청 마감 11/20 10:00, 학생의 데이터 분석 목표에 연결된 근거와 함께 반환됐다. 라우트 3회 반복 조회 중 HTTP 연결과 크롤러 호출은 모두 0회였다. 인증/학생 프로필과 콘테스트코리아 응답만 테스트에서 대체했으며 데이콘 DB 읽기와 공고·점수 계산은 실제 코드를 사용했다. 이는 운영 Render에서 실행한 결과가 아니다.
 
 최종 자동 테스트는 관련 Python 85개와 프론트엔드 로더 4개가 통과했다. Next.js 프로덕션 빌드도 통과했다(검증용 `ROADMAP_API_ORIGIN` 사용). Dockerfile의 Python·OS 의존성·Chromium 설치 빌드는 Linux arm64에서 통과했으며 Render의 실제 인스턴스/아키텍처 빌드는 아직 확인하지 않았다.
 
