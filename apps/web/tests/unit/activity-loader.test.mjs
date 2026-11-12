@@ -3,26 +3,48 @@ import assert from 'node:assert/strict';
 import { createActivityLoader } from '../../src/features/roadmap/activityLoader.mjs';
 
 function setup() {
- let id = 'plan-a', revision = 1, clock = Date.parse('2026-11-12T14:59:00Z'), error = null;
+ let id = 'plan-a', revision = 1, basis = 'profile-1', clock = Date.parse('2026-11-12T14:59:00Z'), error = null;
  const calls = [];
  const apiRequest = async path => {
   calls.push(path);
   if (path.endsWith('/activities')) {
    if (error) throw error;
-   return { request_id: id, input_revision: revision, activities: [], valid_until: '2026-11-12T14:59:59.999Z' };
+   return { request_id: id, input_revision: revision, activity_basis: basis, activities: [], valid_until: '2026-11-12T14:59:59.999Z' };
   }
-  return { input_revision: revision };
+  return { input_revision: revision, activity_basis: basis };
  };
  return { load: createActivityLoader({ apiRequest, resolvePlanId: async () => id, now: () => clock }), calls,
-  setId: value => { id = value; }, setRevision: value => { revision = value; },
+  setId: value => { id = value; }, setRevision: value => { revision = value; basis = 'profile-' + value; },
+  setBasis: value => { basis = value; },
   setTime: value => { clock = Date.parse(value); }, setError: value => { error = value; } };
 }
+
+test('reanalysis with unchanged input revision invalidates only when recommendation evidence changes', async () => {
+ const s = setup();
+ const initial = await s.load();
+ s.setBasis('project-without-confirmation');
+ assert.notEqual((await s.load()).activity_basis, initial.activity_basis);
+ assert.equal(s.calls.filter(path => path.endsWith('/activities')).length, 2);
+ // Failed refresh preserves the profile; successful equivalent analysis does too.
+ await s.load(); await s.load();
+ assert.equal(s.calls.filter(path => path.endsWith('/activities')).length, 2);
+ s.setBasis('job-without-gap');
+ assert.equal((await s.load()).activity_basis, 'job-without-gap');
+ assert.equal(s.calls.filter(path => path.endsWith('/activities')).length, 3);
+});
 
 test('tab/focus reuse activity response without depending on any roadmap endpoint', async () => {
  const s = setup();
  await s.load(); await s.load(); await s.load();
  assert.equal(s.calls.filter(path => path.endsWith('/activities')).length, 1);
  assert.ok(s.calls.every(path => !/\/roadmaps?$/.test(path)));
+});
+
+test('unrelated input revision updates the displayed revision without refetching activities', async () => {
+ const s = setup(); const first = await s.load();
+ s.setRevision(2); s.setBasis(first.activity_basis);
+ assert.equal((await s.load()).input_revision, 2);
+ assert.equal(s.calls.filter(path => path.endsWith('/activities')).length, 1);
 });
 
 test('input changes, selected plan changes and Korean midnight invalidate the cache', async () => {

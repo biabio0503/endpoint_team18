@@ -16,7 +16,7 @@ from services.gemini import GeminiError
 from services.gemini_projects import extract_project_experiences
 from services.project_experience_schemas import DocumentExperience, ExperienceAnswer
 from experience_activity_regressions import (EXPERIENCES, PROJECT_TEXT, fixed_extraction,
-                                            NEGATION_CASES, negation_extraction)
+                                            NEGATION_CASES, negation_extraction, CLAUSE_CASES)
 
 
 def document(text='제가 Python으로 전처리 코드를 작성했습니다.'):
@@ -28,6 +28,63 @@ def extraction(doc, scope='personal', **changes):
     item = {'skill_name': 'Python 3', 'category': 'programming_language', 'activity': '전처리 코드 작성',
             'contribution_scope': scope, 'evidence_text': doc['extracted_text'], **changes}
     return DocumentExperience(document_id=doc['document_id'], extraction_revision=doc['extraction_revision'], experiences=[item])
+
+
+@pytest.mark.parametrize('case,text,name,short,scope', CLAUSE_CASES, ids=[c[0] for c in CLAUSE_CASES])
+@pytest.mark.parametrize('geometry', [False, True], ids=['text', 'ocr_cell'])
+def test_source_clause_not_quote_length_determines_performance(case, text, name, short, scope, geometry):
+    doc = document(text)
+    if geometry:
+        doc['segments'][0]['bbox'] = [0, 0, 600, 20]
+    results = []
+    for quote in (text, short):
+        with patch('services.gemini_projects._generate', return_value=response(doc, [candidate(name, quote)])):
+            result = service.analyze_document(doc)
+        assert result['status'] == 'success' and result['errors'] == []
+        item, = result['experiences']
+        assert item['evidence_text'] == quote
+        assert text[item['evidence_start']:item['evidence_end']] == quote
+        assert item['contribution_scope'] == scope
+        assert service.compare_skill([{**item, 'user_answer': None}])[0] == (
+            'document_supported' if scope == 'personal' else 'needs_confirmation')
+        results.append(item)
+    assert results[0]['contribution_basis'] == results[1]['contribution_basis']
+
+
+@pytest.mark.parametrize('geometry', [False, True])
+def test_short_quote_does_not_borrow_actor_or_negation_from_another_cell(geometry):
+    text = '제가 Python을 사용했습니다. | SQL을 사용했습니다. | 팀원은 Docker를 사용하지 않았습니다.'
+    doc = document(text)
+    if geometry:
+        doc['segments'] = []
+        start = 0
+        for i, cell in enumerate(text.split(' | ')):
+            doc['segments'].append({'start': start, 'end': start + len(cell), 'page': 1,
+                                    'bbox': [i * 200, 0, i * 200 + 180, 20]})
+            start += len(cell) + 3
+    items, errors = service.verify_experiences(doc, response(doc, [candidate('SQL', 'SQL을 사용')]), 'a')
+    assert errors == []
+    assert items[0]['contribution_scope'] == 'unknown'
+    assert items[0]['contribution_basis']['reason'] == 'actor_unspecified'
+
+
+@pytest.mark.parametrize('separator', ['\n', ' | ', '\t', '  '])
+@pytest.mark.parametrize('geometry', [False, True], ids=['text', 'merged_ocr_box'])
+def test_merged_ocr_box_does_not_carry_subject_across_rows_or_cells(separator, geometry):
+    text = '제가 Python을 사용했고' + separator + 'SQL을 사용했습니다.'
+    doc = document(text)
+    if geometry:
+        doc['segments'][0]['bbox'] = [0, 0, 600, 60]
+    for quote in (text, 'SQL을 사용'):
+        items, errors = service.verify_experiences(doc, response(doc, [candidate('SQL', quote)]), 'a')
+        assert errors == []
+        item, = items
+        assert item['evidence_text'] == quote
+        assert text[item['evidence_start']:item['evidence_end']] == quote
+        assert item['locations'] == doc['segments']
+        assert item['contribution_scope'] == 'unknown'
+        assert item['contribution_basis']['reason'] == 'actor_unspecified'
+        assert service.compare_skill([{**item, 'user_answer': None}])[0] == 'needs_confirmation'
 
 
 @pytest.mark.parametrize('text,scopes', NEGATION_CASES,

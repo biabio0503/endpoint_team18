@@ -49,8 +49,9 @@ try {
  await wait("document.body.innerText.includes('검증된 직무 분석이 없어 제한 안내 로드맵')");
  assert.equal(await run('mockRoadmap.posts'), 0);
  await tab(4);
- await wait("document.body.innerText.includes('공모전·대외활동 · 준비 중')");
- assert.ok(await run("document.body.innerText.includes('추천은 제공하지 않습니다')"));
+ await wait("document.body.innerText.includes('현재 추천 조건에 맞는 공고가 없습니다.')");
+ assert.equal(await run("document.querySelectorAll('.activity-recommendations .skill-card').length"), 0);
+ assert.equal(await run('mockRoadmap.posts'), 0);
  await tab(0);
  await run('mockRoadmap.jobAvailable=true');
  await click('로드맵 생성');

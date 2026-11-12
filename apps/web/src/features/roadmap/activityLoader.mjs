@@ -8,12 +8,15 @@ export function createActivityLoader({ apiRequest, resolvePlanId, now = Date.now
   const base = `/roadmap-inputs/${encodeURIComponent(id)}`;
   // Independent of Result's roadmap requests; failed/generated roadmaps are irrelevant.
   const plan = await apiRequest(base);
-  const key = `${id}:${plan.input_revision}`;
-  if (!refresh && cached?.key === key && now() < cached.expires) return cached.data;
+  // Analysis refreshes can replace confirmations without changing input_revision.
+  // This fingerprint covers only the evidence used by activity recommendations.
+  const key = `${id}:${plan.activity_basis ?? plan.input_revision}`;
+  if (!refresh && cached?.key === key && now() < cached.expires) return { ...cached.data, input_revision: plan.input_revision };
   if (pending.has(key)) return pending.get(key);
   const request = apiRequest(`${base}/activities`).then(data => {
    const expiry = Date.parse(data.valid_until);
-   cached = { key, data, expires: Number.isFinite(expiry) ? Math.min(expiry, now() + 300000) : now() };
+   const responseKey = `${id}:${data.activity_basis ?? plan.activity_basis ?? plan.input_revision}`;
+   cached = { key: responseKey, data, expires: Number.isFinite(expiry) ? Math.min(expiry, now() + 300000) : now() };
    return data;
   }).catch(error => { cached = null; throw error; }).finally(() => pending.delete(key));
   pending.set(key, request);
