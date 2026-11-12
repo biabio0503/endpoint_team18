@@ -1,0 +1,1 @@
+Browser regression passed: goal-only, roadmap failure isolation, keyboard tabs, cache reuse, partial/empty/failure, original link, mobile layout.

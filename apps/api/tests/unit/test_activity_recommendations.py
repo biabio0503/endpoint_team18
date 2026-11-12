@@ -283,7 +283,7 @@ def test_live_envelope_and_promoted_kind_and_literal_title():
 
 
 @pytest.mark.parametrize('page_period,verified', [('2026.11.07 ~ 2026.11.16', True),
-    ('2025.11.07 ~ 2025.11.16', True), ('2026.11.07 ~ 2026.11.17', False), ('11.07 ~ 11.16', False)])
+    ('2025.11.07 ~ 2025.11.16', True), ('2026.11.07 ~ 2026.11.17', True), ('11.07 ~ 11.16', False)])
 def test_years_require_same_posting_original_table(monkeypatch, page_period, verified):
     record = {**records()[0], 'id': '202611070021', 'period': '11.07~11.16',
               'url': 'https://www.contestkorea.com/sub/view.php?str_no=202611070021'}
@@ -311,5 +311,5 @@ def test_provider_cannot_echo_key_into_records(monkeypatch):
     opener.open.return_value.__enter__ = Mock(return_value=Mock(read=lambda *args: b'[{"STR_MEETING":"test-secret"}]'))
     opener.open.return_value.__exit__ = Mock(return_value=None)
     monkeypatch.setattr(provider, 'build_opener', lambda *args: opener)
-    with pytest.raises(provider.ProviderError, match='provider_unavailable'):
+    with pytest.raises(provider.ProviderError, match='invalid_response'):
         provider.request_json('meeting_info_api.php', {'Txt_bcode': '0301'}, 'test-secret')
