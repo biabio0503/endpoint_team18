@@ -55,7 +55,7 @@ class RoadmapStep(StrictModel):
     purpose: Text
     reason: Text
     skill_targets: list[SkillTarget] = Field(min_length=1, max_length=20)
-    related_course_ids: list[Identifier] = Field(max_length=5, description='0-5 unique IDs from this output recommended_courses, sharing at least one target skill.')
+    related_course_ids: list[Identifier] = Field(description='Unique IDs from this output recommended_courses, sharing at least one target skill.')
     depends_on: list[LocalId] = Field(max_length=4, description='0-4 unique step_ids from earlier steps only; no cycles or task IDs.')
     evidence_refs: list[Identifier] = Field(min_length=1, max_length=40, description='Exactly the comparison_ref for every skill_target; input allowed_evidence_refs only.')
     limitations: Text
@@ -63,5 +63,5 @@ class RoadmapStep(StrictModel):
 
 
 class GeneratedRoadmap(StrictModel):
-    recommended_courses: list[CourseSuggestion] = Field(max_length=5, description='0-5 eligible, unique, non-equivalent courses.')
+    recommended_courses: list[CourseSuggestion] = Field(description='Eligible, unique, non-equivalent courses.')
     roadmap: list[RoadmapStep] = Field(min_length=1, max_length=5, description='1-5 steps; globally unique step_id, contiguous order, no dates/durations.')

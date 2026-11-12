@@ -39,3 +39,8 @@ test('an unavailable historical reference does not crash the roadmap', () => {
  const { byId } = coursePresentation([card(ko)]);
  assert.deepEqual(relatedCourseNames(['missing', en], byId), [name]);
 });
+
+test('preserves all server-ranked cards in order beyond five', () => {
+ const input = Array.from({ length: 6 }, (_, i) => ({ course_id: String(i), course_name: String(i) }));
+ assert.deepEqual(coursePresentation(input).cards.map(c => c.course_id), input.map(c => c.course_id));
+});

@@ -5,12 +5,12 @@ import unicodedata
 
 from api.domain import FIELDS, payload, json_value
 from repositories.courses import CourseRepository
-from services.course_recommendations import available_courses, selected_courses
+from services.course_recommendations import available_courses, selected_courses, rank_courses
 from services.project_experience import current_comparison, digest, model_basis, skill_key
 from services.roadmap_validation import invalid, parse_result
 from services.job_skill_analysis import ALIASES, skill_priority
 
-RULES_VERSION = 'personalized-roadmap-v5'
+RULES_VERSION = 'personalized-roadmap-v6-course-evidence'
 TASK_TYPES = {
     'learn': ['practice', 'apply', 'validate', 'document'],
     'deepen': ['apply', 'validate', 'document'],
@@ -56,7 +56,7 @@ def capture_basis(db, row):
     if jobs.get('previous_analysis_version'):
         limits.append('이전 기준의 직무 분석입니다. 직무 역량 비교에서 분석을 다시 실행하면 개선된 공고·기술 기준을 적용합니다.')
     if not jobs.get('snapshot_id') or not focused_skills({'skills': skills}):
-        limits.append('검증된 직무 기술 근거가 없어 기술별 준비 상태와 수강 후보를 판단하지 않았습니다.')
+        limits.append('검증된 직무 기술 근거가 없어 기술별 준비 상태는 판단하지 않았습니다. 수강 후보는 진로 목표·교육과정 기준입니다.')
     elif jobs['status'] != 'success':
         limits.append('직무 분석이 일부 미완료되어 검증된 기술과 근거만 사용했습니다.')
     if project['status'] != 'success':
@@ -124,7 +124,9 @@ def model_input(basis):
     fields = ('course_id', 'course_name', 'course_code', 'description_text', 'category', 'credits', 'recommended_year', 'recommended_term')
     skills, evidence = [], {}
     focused = focused_skills(basis)
-    allowed_courses = available_courses(basis['courses'])
+    ranked = rank_courses(basis['profile'], basis['courses'], basis['review_status'], basis['skills'])
+    originals = available_courses(basis['courses'])
+    allowed_courses = {c['course_id']: {**originals[c['course_id']], **c, 'description_text': originals[c['course_id']].get('description_text')} for c in ranked}
     for skill in focused:
         # Counts/status use ALL verified evidence; a small exact-quote sample suffices for generation.
         job_refs = [r for r in skill.get('job_refs', []) if basis['evidence'][r].get('recommendation_eligible', True)]
@@ -143,6 +145,7 @@ def model_input(basis):
         'evidence_scope': {'verified_skill_count': len(basis['skills']), 'included_skill_count': len(skills),
                            'selection': 'Role relevance, independent job support, requirement level, then verified experience; up to 12 explicit no-experience/confirmed skills and 3 unverified skills. Context-only evidence is excluded.'},
         'eligible_courses': [{**{k: c.get(k) for k in fields},
+                              'recommendation_type': c['recommendation_type'], 'keyword_evidence': c['keyword_evidence'],
                               'verified_equivalent_ids': [cid for cid in c.get('verified_equivalent_ids', []) if cid in allowed_courses]}
                              for c in allowed_courses.values()],
         'completed_courses': [{k: c.get(k) for k in ('course_id', 'course_name')} for c in basis['courses'] if c['is_completed']],
@@ -154,7 +157,7 @@ def validate_result(raw, basis):
     result = parse_result(raw)
     sent = model_input(basis)
     skills = {s['skill_name']: s for s in sent['skills']}
-    allowed = available_courses(basis['courses'])
+    allowed = {c['course_id']: c for c in sent['eligible_courses']}
 
     def verify_refs(names, refs, location, names_field='related_skills'):
         if len(set(names)) != len(names):
@@ -198,8 +201,6 @@ def validate_result(raw, basis):
         verify_refs(suggestion.related_skills, suggestion.evidence_refs, location)
         course = allowed[suggestion.course_id]
         description = (course.get('description_text') or '').strip()
-        if (description and suggestion.course_evidence not in description) or (not description and suggestion.course_evidence != course['course_name']):
-            invalid('course_evidence_mismatch', (*location, 'course_evidence'))
         limited = (not description or basis['review_status'] != 'confirmed' or basis['job_status'] != 'success'
                    or basis['project_status'] != 'success' or basis['catalog'].get('completeness_status') != 'complete'
                    or any(skills[n]['student_status'] not in ('no_experience', 'confirmed_experience') for n in suggestion.related_skills))
@@ -289,7 +290,8 @@ def validate_result(raw, basis):
                 if any(pattern.search(remaining) for pattern in excluded_patterns):
                     invalid('skill_not_allowed_in_prose', location)
 
-    check_prose(result.model_dump())
+    # Course prose is discarded and replaced with source-grounded server text.
+    check_prose({'roadmap': result.model_dump()['roadmap']})
     summary = {key: [s['skill_name'] for s in basis['skills'] if s['student_status'] in states] for key, states in (
         ('confirmed_skills', {'confirmed_experience'}),
         ('skills_to_verify', {'document_supported', 'needs_confirmation', 'not_verified'}),
@@ -297,10 +299,14 @@ def validate_result(raw, basis):
     # These statuses/summary are computed by the server, never accepted from Gemini.
     partial = basis['job_status'] != 'success' or basis['project_status'] != 'success' or basis['review_status'] != 'confirmed'
     scope = {'verified_skill_count': len(basis['skills']), 'included_skills': [s['skill_name'] for s in focused_skills(basis)]}
+    ranked_courses = rank_courses(basis['profile'], basis['courses'], basis['review_status'], basis['skills'])
+    valid_ids = {c['course_id'] for c in ranked_courses}
+    for step in steps:
+        step['related_course_ids'] = [cid for cid in step['related_course_ids'] if cid in valid_ids]
     return {'status': 'partial' if partial else 'success', 'career_goal': basis['profile']['career_goal'],
             'target_role': basis['profile']['target_role'], 'preparation_summary': summary,
             'preparation_items': basis['skills'], 'evidence': basis['evidence'],
-            'recommended_courses': courses, 'roadmap': steps, 'limitations': basis['limitations'], 'generation_scope': scope,
+            'recommended_courses': ranked_courses, 'roadmap': steps, 'limitations': basis['limitations'], 'generation_scope': scope,
             'course_status': 'catalog_unavailable' if basis['review_status'] == 'unavailable' else 'provisional' if basis['review_status'] == 'unconfirmed' else 'available',
             'basis': {k: basis[k] for k in ('catalog', 'review_status', 'course_selection_revision', 'reviewed_at',
                 'outside_completed_courses', 'job_snapshot_id', 'job_status', 'job_analyzed_at', 'job_summary',

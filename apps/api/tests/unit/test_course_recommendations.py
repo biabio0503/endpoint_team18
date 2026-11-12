@@ -31,23 +31,19 @@ class RecommendationTest(unittest.TestCase):
         self.courses = [course('data', '데이터 분석', description='통계 분석'), course('ml', '머신러닝'), course('math', '선형대수')]
 
     def test_goals_descriptions_and_completion(self):
-        def model(profile, courses):
-            self.assertIn('description_text', courses[0])
-            self.assertIsNone(courses[1]['description_text'])
-            return ['data'] if profile['career_goal'] == '데이터 분석' else ['ml', 'math']
-        self.assertEqual([c['course_id'] for c in recommend({'career_goal':'데이터 분석'}, self.courses, 'unconfirmed', model)], ['data'])
-        self.assertEqual([c['course_id'] for c in recommend({'career_goal':'머신러닝'}, self.courses, 'confirmed', model)], ['ml', 'math'])
+        self.assertEqual(len(recommend({'career_goal':'데이터 분석'}, self.courses, 'unconfirmed')), 3)
+        self.assertEqual(len(recommend({'career_goal':'머신러닝'}, self.courses, 'confirmed')), 3)
         self.courses[1]['is_completed'] = True
-        result = recommend({'career_goal':'머신러닝'}, self.courses, 'confirmed', lambda p, c: ['ml', 'math'])
-        self.assertEqual([c['course_id'] for c in result], ['math'])
+        result = recommend({'career_goal':'머신러닝'}, self.courses, 'confirmed')
+        self.assertEqual({c['course_id'] for c in result}, {'data', 'math'})
 
     def test_validation_dedup_limit_and_empty(self):
         courses = self.courses + [course(str(i), str(i)) for i in range(6)]
         result = recommend({}, courses, 'unconfirmed', lambda p, c: ['missing', 'data', 'data', 'ml', 'math', '0', '1', '2'])
-        self.assertEqual([c['course_id'] for c in result], ['data', 'ml', 'math', '0', '1'])
+        self.assertEqual([c['course_id'] for c in result], ['0', '1', '2', '3', '4'])
         self.assertEqual(result[0]['completion_state'], 'unconfirmed')
         self.assertEqual(recommend({}, [], 'unconfirmed', lambda *a: self.fail('model called')), [])
-        self.assertEqual(recommend({}, self.courses, 'confirmed', lambda *a: []), [])
+        self.assertEqual(len(recommend({}, self.courses, 'confirmed', lambda *a: [])), 3)
 
     def test_sdk_schema_and_errors(self):
         client = Mock()

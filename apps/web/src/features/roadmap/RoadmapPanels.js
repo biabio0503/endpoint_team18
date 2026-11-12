@@ -69,13 +69,15 @@ export function CourseCandidates({ result }) {
    {result.basis.review_status === 'unconfirmed' && <p className="notice">이수 선택 확인 전의 잠정 후보입니다. 미이수로 확정하지 않습니다. <Link href="/input/courses">이수 선택 확인 →</Link></p>}
    {result.basis.review_status === 'partial' && <p className="notice">현재 목록에 누락된 과목이 있습니다. 이수 선택 확인은 현재 목록 안에 한정됩니다.</p>}
    {result.recommended_courses.length === 0 && <p>현재 근거와 미선택 과목에서 추천할 후보를 찾지 못했습니다.</p>}
+   {result.recommended_courses.length > 0 && result.recommended_courses.length < 5 && <p className="notice">이수 및 대체과목을 제외하면 추천 가능한 고유 과목이 {result.recommended_courses.length}개입니다.</p>}
   </>}
   <ul className="skill-list">{cards.map(course => <li className="skill-card" key={course.course_id}>
-   <h3>{course.course_name} <span className="badge">{course.course_code || '코드 미제공'}</span></h3>
+   <h3>{course.course_name} <span className="badge">{course.recommendation_label || course.course_code || '코드 미제공'}</span></h3>
    <p>{course.credits == null ? '학점 미제공' : `${course.credits}학점`}{course.recommended_year ? ` · 교육과정 권장 ${course.recommended_year}학년` : ''}{course.recommended_term ? ` ${course.recommended_term}` : ''}</p>
-   <p>{course.reason}</p><p>{course.personalization_reason}</p><p>관련 기술: {course.related_skills.join(', ')}</p>
+   <p>{course.personalization_reason || course.reason}</p><p>관련 학습 키워드: {(course.learning_keywords || course.related_skills || []).join(', ') || '확인 필요'}</p>
+   {(course.keyword_evidence || []).some(item => item.keyword_role === 'prerequisite') && <p><b>수강 전 확인:</b> {(course.keyword_evidence || []).filter(item => item.keyword_role === 'prerequisite').map(item => item.keyword).join(', ')}</p>}
    <p className="field-help">{course.completion_state === 'unconfirmed' ? '이수 여부 미확인' : '생성 당시 현재 목록에서 이수 선택하지 않은 과목'} · {course.recommendation_confidence === 'limited' ? '제한된 근거의 후보' : '제공된 설명에 근거한 후보'}</p>
-   <p><b>{course.description_basis === 'name_inference' ? '과목명 기반 추론' : '과목 설명 근거'}</b> {course.course_evidence}</p>
+   <details><summary>공식 근거와 출처 쪽수</summary><p>{course.course_evidence}{course.evidence_page_start ? ` · ${course.evidence_page_start}쪽${course.evidence_page_end && course.evidence_page_end !== course.evidence_page_start ? `–${course.evidence_page_end}쪽` : ''}` : ''}</p>{(course.keyword_evidence || []).map((item, i) => <p key={i}>{item.keyword} · {({learning:'학습', prerequisite:'사전지식', tool:'도구', example:'예시', context:'배경'})[item.keyword_role]}: {item.evidence_text}{item.evidence_page_start ? ` · ${item.evidence_page_start}쪽` : ''}</p>)}</details>
    <p className="field-help">{course.limitations} {course.availability_notice}</p><Evidence refs={course.evidence_refs} result={result}/>
   </li>)}</ul>
   <p className="field-help">목록 밖에서 보존한 과거 이수 선택 {result.basis.outside_completed_courses.length}개. 현재 수강 후보에는 포함하지 않습니다.</p>

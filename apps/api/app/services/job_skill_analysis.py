@@ -16,9 +16,9 @@ MAX_BATCH_CHARS = 120000
 
 # Explicit aliases only; no stemming or substring merging (Java != JavaScript, SQL != PostgreSQL).
 TECHNOLOGIES = (
-    ('Python', 'programming_language', ('Python3', 'Python 3')),
+    ('Python', 'programming_language', ('Python3', 'Python 3', '파이썬')),
     ('Java', 'programming_language', ()),
-    ('JavaScript', 'programming_language', ('JS',)),
+    ('JavaScript', 'programming_language', ('JS', 'Java script')),
     ('TypeScript', 'programming_language', ('TS',)),
     ('SQL', 'database_query_language', ()),
     ('PostgreSQL', 'database', ('Postgres',)),

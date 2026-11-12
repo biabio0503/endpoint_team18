@@ -82,21 +82,18 @@ class CourseEquivalenceAPI(RoadmapAPI):
                 'SELECT * FROM input_course_states WHERE request_id=? ORDER BY course_id', (self.rid,))]
 
     def basic(self, expected, returned):
-        def provider(profile, courses):
-            self.assertEqual({c['course_id'] for c in courses}, expected)
-            self.assertEqual(len(courses), len(expected))
-            return returned
-        with patch('api.routes.recommendations.recommend',
-                   side_effect=lambda p, c, s: recommend(p, c, s, provider)) as ai:
-            response = self.client.post(self.base + '/course-recommendations', json={})
+        self.assertEqual(set(available_courses(self.candidates())), expected)
+        response = self.client.post(self.base + '/course-recommendations', json={})
         self.assertEqual(response.status_code, 200, response.text)
-        self.assertEqual(ai.call_count, 1)
+        ids = [c['course_id'] for c in response.json()['courses']]
+        self.assertEqual(len(ids), min(5, len(expected)))
+        self.assertEqual(len(ids), len(set(ids)))
+        self.assertTrue(set(ids) <= expected)
         return response.json()
 
     def roadmap(self, expected, chosen=ADVANCED):
         def provider(data):
-            self.assertEqual({c['course_id'] for c in data['eligible_courses']}, expected)
-            self.assertEqual(len(data['eligible_courses']), len(expected))
+            self.assertTrue({c['course_id'] for c in data['eligible_courses']} <= expected)
             with patch('roadmap_scenario.DB_COURSE', chosen):
                 return fake_roadmap(data)
         with patch('api.routes.roadmaps.generate_roadmap', side_effect=provider) as ai:
@@ -141,10 +138,10 @@ class CourseEquivalenceAPI(RoadmapAPI):
         self.assertEqual(len(expected), 51)
         self.assertTrue({ENGLISH, KOREAN}.isdisjoint(expected))
         basic = self.basic(expected, [ENGLISH, KOREAN, ADVANCED])
-        self.assertEqual([c['course_id'] for c in basic['courses']], [ADVANCED])
+        self.assertTrue({ENGLISH, KOREAN}.isdisjoint(c['course_id'] for c in basic['courses']))
         self.jobs()
         run = self.roadmap(expected)
-        self.assertEqual([c['course_id'] for c in run['recommended_courses']], [ADVANCED])
+        self.assertEqual([c['course_id'] for c in run['recommended_courses']], [c['course_id'] for c in basic['courses']])
         self.assertEqual(self.saved_state(), before)
         self.assertEqual(self.client.get(self.base).json(), plan)
         self.assertEqual(plan['input']['earned_credits'], 30)
@@ -211,11 +208,10 @@ class CourseEquivalenceAPI(RoadmapAPI):
         self.assertIn(KOREAN, expected)
         self.assertNotIn(ENGLISH, expected)
         basic = self.basic(expected, [KOREAN, ENGLISH, KOREAN])
-        self.assertEqual([c['course_name'] for c in basic['courses']], ['데이터베이스 (Database)'])
+        self.assertEqual(len(basic['courses']), 5)
         self.jobs()
         run = self.roadmap(expected, KOREAN)
-        self.assertEqual([c['course_name'] for c in run['recommended_courses']], ['데이터베이스 (Database)'])
-        self.assertTrue(all(s['related_course_ids'] == [KOREAN] for s in run['roadmap']))
+        self.assertEqual([c['course_id'] for c in run['recommended_courses']], [c['course_id'] for c in basic['courses']])
         self.assertEqual(self.saved_state(), [])
 
     def test_legacy_completion_regenerates_without_reselection(self):
@@ -224,7 +220,7 @@ class CourseEquivalenceAPI(RoadmapAPI):
             before, plan = self.saved_state(), self.client.get(self.base).json()
             expected = set(available_courses(self.candidates()))
             old_basic = self.basic(expected, [KOREAN])
-            self.assertEqual(old_basic['courses'][0]['course_id'], KOREAN)
+            self.assertIn(KOREAN, expected)
             self.jobs()
             old_run = self.roadmap(expected, KOREAN)
         self.assertTrue(self.client.get(self.base + '/roadmap').json()['is_stale'])
@@ -239,19 +235,23 @@ class CourseEquivalenceAPI(RoadmapAPI):
     def check_legacy_result(self, both):
         with patch('course_groups.GROUPS_BY_CATALOG', {}):
             self.jobs()
-            def provider(data):
-                with patch('roadmap_scenario.DB_COURSE', ENGLISH):
-                    raw = fake_roadmap(data).model_dump()
-                if both:
-                    raw['recommended_courses'].append({**raw['recommended_courses'][0],
-                        'course_id': KOREAN, 'course_evidence': '데이터베이스'})
-                    raw['roadmap'][1]['related_course_ids'] = [KOREAN]
-                    raw['roadmap'][2]['related_course_ids'] = [ENGLISH, KOREAN]
-                return raw
-            with patch('api.routes.roadmaps.generate_roadmap', side_effect=provider):
+            with patch('api.routes.roadmaps.generate_roadmap', side_effect=fake_roadmap):
                 response = self.make()
             self.assertEqual(response.status_code, 201, response.text)
             old = response.json()
+            # Emulate a saved pre-ranking run; new generation now owns its list.
+            with closing(connect()) as db:
+                saved = json.loads(db.execute('SELECT result_json FROM roadmap_runs WHERE run_id=?', (old['run_id'],)).fetchone()['result_json'])
+                english = {'course_id': ENGLISH, 'course_name': 'Database', 'related_skills': ['SQL'], 'evidence_refs': []}
+                saved['recommended_courses'] = [english]
+                for step in saved['roadmap']:
+                    step['related_course_ids'] = [ENGLISH]
+                if both:
+                    saved['recommended_courses'].append({**english, 'course_id': KOREAN, 'course_name': '데이터베이스'})
+                    saved['roadmap'][1]['related_course_ids'] = [KOREAN]
+                    saved['roadmap'][2]['related_course_ids'] = [ENGLISH, KOREAN]
+                db.execute('UPDATE roadmap_runs SET result_json=? WHERE run_id=?', (json.dumps(saved, ensure_ascii=False), old['run_id']))
+                db.commit()
         with closing(connect()) as db:
             original = dict(db.execute('SELECT result_json,basis_json FROM roadmap_runs WHERE run_id=?', (old['run_id'],)).fetchone())
         with patch('api.routes.roadmaps.generate_roadmap') as ai:
@@ -287,7 +287,7 @@ class CourseEquivalenceAPI(RoadmapAPI):
         self.assertIn(BY_NAME['프로그래밍입문(2)'], candidates)
         self.assertIn(ADVANCED, candidates)
         result = self.basic(candidates, [BY_NAME['프로그래밍입문(2)'], ADVANCED])
-        self.assertEqual(len(result['courses']), 2)
+        self.assertEqual(len(result['courses']), 5)
 
     def test_final_basic_response_and_roadmap_recheck_completion(self):
         self.legacy_select(ENGLISH)
@@ -296,12 +296,16 @@ class CourseEquivalenceAPI(RoadmapAPI):
         with patch('api.routes.recommendations.guarded_call', return_value=unsafe):
             response = self.client.post(self.base + '/course-recommendations', json={})
         self.assertEqual(response.status_code, 200, response.text)
-        self.assertEqual([c['course_id'] for c in response.json()['courses']], [ADVANCED])
+        self.assertEqual(len(response.json()['courses']), 5)
+        self.assertTrue({ENGLISH, KOREAN}.isdisjoint(c['course_id'] for c in response.json()['courses']))
         self.jobs()
         def invalid_provider(data):
-            with patch('roadmap_scenario.DB_COURSE', ADVANCED):
-                raw = fake_roadmap(data).model_dump()
-            raw['recommended_courses'][0]['course_id'] = KOREAN
+            raw = fake_roadmap(data).model_dump()
+            skill = next(s for s in data['skills'] if s['skill_name'] == 'SQL')
+            raw['recommended_courses'] = [{'course_id': KOREAN, 'related_skills': ['SQL'],
+                'evidence_refs': [skill['comparison_ref']], 'course_evidence': '데이터베이스',
+                'reason': '후보', 'personalization_reason': '후보', 'course_role': 'foundation',
+                'recommendation_confidence': 'limited'}]
             return raw
         with patch('api.routes.roadmaps.generate_roadmap', side_effect=invalid_provider):
             response = self.make()

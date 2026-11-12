@@ -99,7 +99,7 @@ export default function Result() {
     {phase === 'loading' && <p role="status">저장된 결과를 불러오고 있습니다…</p>}
     {phase === 'generating' && <p role="status">확인된 경험과 과목 정보를 바탕으로 로드맵을 생성하고 있습니다…</p>}
     {message && <p role="alert">{message}</p>}
-    {(result?.limited_guidance_available || result?.status === 'needs_job_analysis') && <div className="notice">검증된 직무 분석이 없어 제한 안내 로드맵을 제공합니다. 기술·수강 추천은 직무 분석 후 확인할 수 있습니다. <button onClick={() => changeTab(1)}>직무 역량 비교에서 분석하기</button></div>}
+    {(result?.limited_guidance_available || result?.status === 'needs_job_analysis') && <div className="notice">검증된 직무 분석이 없어 진로 목표·교육과정 기준의 수강 후보와 제한 안내를 제공합니다. 기술별 준비 상태는 판단하지 않습니다. <button onClick={() => changeTab(1)}>직무 역량 비교에서 분석하기</button></div>}
     {pending && phase !== 'generating' && <p role="status">진행 중인 생성 요청이 있습니다. 저장 결과를 확인하고 있습니다.</p>}
     {result?.generation_expired && <p role="status">이전 생성 요청의 유효 시간이 지났습니다. 다시 생성할 수 있습니다.</p>}
     {history.length > 0 && <label className="field">결과 이력<select aria-label="결과 이력" value={selectedRun.current} disabled={busy} onChange={e => { selectedRun.current = e.target.value; load(e.target.value); }}>

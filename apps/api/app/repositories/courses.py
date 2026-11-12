@@ -19,6 +19,7 @@ class CourseRepository:
             if getattr(self.db, 'backend', 'sqlite') == 'postgres':
                 has_description = bool(self.db.execute("SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='catalog_courses' AND column_name='description_text'").fetchone())
             description = ',cc.description_text' if has_description else ',NULL AS description_text'
+            description += ',cc.description_page_start,cc.description_page_end'
         return [dict(r) for r in self.db.execute('''SELECT cc.course_id,cc.course_name,cc.course_code,cc.credits,cc.category,cc.recommended_year,cc.recommended_term,''' + hours + description + ''',COALESCE(s.is_completed,FALSE) AS is_completed
           FROM catalog_courses cc LEFT JOIN input_course_states s ON s.request_id=? AND s.course_id=cc.course_id WHERE cc.catalog_id=? ORDER BY cc.course_name,cc.course_id''',(rid,cid))]
     def outside(self, rid, cid):
@@ -27,6 +28,12 @@ class CourseRepository:
         return sorted(grouped_courses(self.courses(rid, cid), cid), key=lambda c: (c['course_name'], c['course_id']))
     def recommendation_courses(self, rid, cid):
         courses = self.courses(rid, cid, include_description=True)
+        keywords = {}
+        for row in self.db.execute('SELECT course_id,keyword,keyword_role,evidence_text,evidence_page_start,evidence_page_end FROM catalog_course_keywords WHERE catalog_id=? ORDER BY course_id,keyword,keyword_role,evidence_text', (cid,)):
+            item = dict(row)
+            keywords.setdefault(item.pop('course_id'), []).append(item)
+        for course in courses:
+            course['keywords'] = keywords.get(course['course_id'], [])
         completed = {r['course_id'] for r in self.db.execute('SELECT course_id FROM input_course_states WHERE request_id=? AND is_completed=TRUE', (rid,))}
         verified_pairs = equivalent_pairs(cid)
         for row in self.db.execute('''SELECT e.course_id,e.equivalent_course_id FROM verified_course_equivalences e
