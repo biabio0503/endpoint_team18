@@ -36,7 +36,9 @@ INSTRUCTION = '''대학생을 위한 개인화 수강 후보와 실행 로드맵
   예: related_skills=['SQL']이면 SQL의 comparison_ref만, ['Python','SQL']이면 두 기술의
   comparison_ref를 모두 사용하세요. job:/experience: 참조는 출력하지 마세요.
   allowed_evidence_refs가 출력 가능한 전체 범위입니다. 근거 원문은 판단용이며 출력 참조가 아닙니다.
-- 과목은 eligible_courses에서 적합한 ID를 최대 5개 고르세요. 이미 이수한 과목은 없습니다.
+- 과목 후보와 순서는 서버가 확정했습니다. eligible_courses의 순서를 유지하고 ID를 변경하지 마세요.
+  keyword_evidence의 learning만 학습 내용이며 prerequisite는 사전지식, tool은 도구,
+  example과 context는 예시와 배경입니다. 이를 학습 내용으로 바꾸지 마세요.
   관련성이 약하면 빈 배열이 더 적절합니다. 다른 과목 ID를 만들지 마세요.
   이수 과목 및 이수한 과목의 검증된 대체과목은 이미 제외되어 있습니다.
   verified_equivalent_ids로 연결된 후보는 같은 추천에 함께 넣지 말고 하나만 선택하세요.

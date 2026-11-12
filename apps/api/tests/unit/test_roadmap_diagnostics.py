@@ -56,14 +56,20 @@ def test_schema_missing_and_untrusted_extra_field_never_logged():
     ('related_skills', ['Excel'], 'skill_not_allowed'),
     ('evidence_refs', ['comparison:sql', 'comparison:sql'], 'evidence_duplicate'),
     ('evidence_refs', ['private-token'], 'evidence_not_provided'),
-    ('course_evidence', 'Database', 'course_evidence_mismatch'),
-    ('reason', '반드시 공부', 'prohibited_expression'),
 ])
 def test_course_failure_codes(field, value, code):
     raw = output()
     raw['recommended_courses'][0][field] = value
     indexed = field in ('related_skills', 'evidence_refs') and code not in ('skill_duplicate', 'evidence_duplicate')
     check(raw, basis(), code, f'$.recommended_courses[0].{field}' + ('[0]' if indexed else ''))
+
+
+def test_untrusted_course_prose_is_replaced():
+    raw = output()
+    raw['recommended_courses'][0].update(course_evidence='invented', reason='반드시 공부')
+    course = validate_result(raw, basis())['recommended_courses'][0]
+    assert course['course_evidence'] != 'invented'
+    assert '반드시' not in course['reason']
 
 
 @pytest.mark.parametrize('field,value,code', [
@@ -112,7 +118,7 @@ def test_duplicate_codes(kind):
             b['courses'].append({**b['courses'][0], 'course_id': 'db-alt', 'verified_equivalent_ids': ['db']})
             course['course_id'] = 'db-alt'
         raw['recommended_courses'].append(course)
-        code, path = ('course_duplicate' if kind == 'course' else 'course_equivalent_duplicate'), '$.recommended_courses[1].course_id'
+        code, path = ('course_duplicate' if kind == 'course' else 'course_not_allowed'), '$.recommended_courses[1].course_id'
     check(raw, b, code, path)
 
 
@@ -142,7 +148,8 @@ def test_model_receives_verified_equivalents_and_explicit_task_contract():
     b['courses'][0]['verified_equivalent_ids'] = ['db-alt']
     b['courses'].append({**b['courses'][0], 'course_id': 'db-alt', 'verified_equivalent_ids': ['db']})
     data = model_input(b)
-    assert data['eligible_courses'][0]['verified_equivalent_ids'] == ['db-alt']
+    assert len(data['eligible_courses']) == 1
+    assert data['eligible_courses'][0]['verified_equivalent_ids'] == []
     assert data['skills'][0]['allowed_task_types'] == ['verify_experience']
     assert data['skills'][0]['action_required_terms'] == ['경험', '확인']
 

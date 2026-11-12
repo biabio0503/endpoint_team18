@@ -48,7 +48,8 @@ class RoadmapAPI(ProjectExperienceAPI):
             response = self.make()
             self.assertEqual(response.status_code, 201, response.text)
             self.assertEqual(response.json()['generation_mode'], 'limited_guidance')
-            self.assertEqual(response.json()['recommended_courses'], [])
+            self.assertEqual([c['course_id'] for c in response.json()['recommended_courses']], [DB_COURSE])
+            self.assertEqual(response.json()['recommended_courses'][0]['recommendation_type'], 'exploration')
             ai.assert_not_called()
 
     def test_previous_rules_preserve_reads_evidence_progress_and_explicit_upgrade(self):
@@ -104,7 +105,7 @@ class RoadmapAPI(ProjectExperienceAPI):
             self.assertIn(original_snapshot, AnalysisRepository(db).job_history(self.rid))
         new, _ = self.generated()
         self.assertNotEqual(new['run_id'], old['run_id'])
-        self.assertEqual(new['rules_version'], 'personalized-roadmap-v5')
+        self.assertEqual(new['rules_version'], 'personalized-roadmap-v6-course-evidence')
         self.assertEqual(new['progress']['completed'], 0)
         self.assertEqual(self.client.get(f'{self.base}/roadmaps/{old["run_id"]}').json()['progress']['completed'], 1)
 
@@ -184,7 +185,7 @@ class RoadmapAPI(ProjectExperienceAPI):
             limited = self.make().json()
             self.assertEqual(limited['generation_mode'], 'limited_guidance'); ai.assert_not_called()
             self.assertEqual(limited['status'], 'partial')
-            self.assertEqual(limited['recommended_courses'], [])
+            self.assertEqual([c['course_id'] for c in limited['recommended_courses']], [DB_COURSE])
             self.assertEqual(limited['preparation_items'], [])
             self.assertTrue(self.make(refresh=True).json()['reused'])
             task = limited['roadmap'][0]['tasks'][0]['task_id']
@@ -420,7 +421,7 @@ class RoadmapAPI(ProjectExperienceAPI):
         new, calls = self.generated(True)
         self.assertEqual(calls, 1)
         self.assertNotEqual(new['run_id'], old['run_id'])
-        self.assertEqual(new['rules_version'], 'personalized-roadmap-v5')
+        self.assertEqual(new['rules_version'], 'personalized-roadmap-v6-course-evidence')
         self.assertEqual(new['progress']['completed'], 0)
         self.assertEqual(self.client.get(f'{self.base}/roadmaps/{old["run_id"]}').json()['progress'], checked['progress'])
         self.assertEqual(len(self.client.get(self.base + '/roadmaps').json()['runs']), 3)
