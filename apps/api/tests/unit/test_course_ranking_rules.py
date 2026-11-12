@@ -166,3 +166,25 @@ def test_shared_predicates_catalog_terms_and_per_keyword_evidence():
     assert direct('자료구조와 CNN을 이미 배웠고 자료구조를 다시 배우고 싶다') == {
         '자료구조': ['자료구조'], 'mixed': ['자료구조']}
     assert '자료구조' in direct('자료구조 경험 없음과 CNN 학습')
+
+
+def test_compound_mentions_do_not_cross_clauses_and_keep_their_own_predicate():
+    rows = [course('compound', [('기계학습 알고리즘 적용', 'learning', '공식 소개.')]),
+            course('cnn', [('CNN', 'learning', '공식 소개.')]),
+            course('other', [('데이터 구조 분석', 'learning', '공식 소개.')])]
+    def direct(goal, skills=()):
+        return {c['course_id']: c['learning_keywords'] for c in select(goal, rows, skills)
+                if c['recommendation_type'] == 'direct'}
+
+    assert direct('기계학습을 이미 배웠고 CNN을 영상에 적용하고 싶다') == direct('CNN을 영상에 적용하고 싶다') == {'cnn': ['CNN']}
+    past = '기계학습 알고리즘 적용은 이미 배웠고 CNN을 배우고 싶다'
+    particles = '기계학습 알고리즘의 적용은 이미 배웠고 CNN을 배우고 싶다'
+    assert direct(past) == direct(particles) == {'cnn': ['CNN']}
+    assert direct(particles, [{'skill_name': '기계학습 알고리즘 적용', 'job_requirement': {}}]) == {'cnn': ['CNN']}
+    assert direct('기계학습 알고리즘을 적용하는 방법을 배우고 싶다') == {'compound': ['기계학습 알고리즘 적용']}
+    assert direct('기계학습 알고리즘을 CNN에 적용하는 방법을 배우고 싶다') == {
+        'compound': ['기계학습 알고리즘 적용'], 'cnn': ['CNN']}
+    assert direct('기계학습을 이미 배웠고 기계학습 알고리즘을 적용하는 방법을 배우고 싶다') == {'compound': ['기계학습 알고리즘 적용']}
+    assert direct('데이터 구조의 분석은 이미 배웠고 CNN을 배우고 싶다') == {'cnn': ['CNN']}
+    assert direct('데이터를 이미 배웠고 CNN을 분석하고 싶다') == {'cnn': ['CNN']}
+    assert direct('데이터 구조를 분석하는 방법을 배우고 싶다') == {'other': ['데이터 구조 분석']}

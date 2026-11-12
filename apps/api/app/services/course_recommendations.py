@@ -5,7 +5,7 @@ from functools import lru_cache
 
 from services.job_skill_analysis import ALIASES, normalize_skill
 
-RULES_VERSION = 'course-evidence-v5-keyword-experience'
+RULES_VERSION = 'course-evidence-v6-compound-spans'
 
 # One vocabulary is used for explicit goals, job skills and related candidates.
 # Keep overlapping language names distinct when matching free text.
@@ -60,17 +60,46 @@ def _pattern(keyword):
     return re.compile(r'(?<![a-z0-9_+#])(?:' + '|'.join(terms) + r')(?![a-z0-9_+#])')
 
 
+_CLAUSE_BOUNDARY = re.compile(
+    r'[.!?。;\n]|(?:배웠|배우|학습했|학습하|공부했|공부하|익혔|익히|알고\s*있|경험(?:이|은|을)?\s*(?:있|보유))'
+)
+
+
+@lru_cache(maxsize=2048)
+def _compound_patterns(keyword):
+    """Find ordered Korean components with particles or short intervening phrases."""
+    words = keyword.split()
+    if len(words) < 2 or not all(re.fullmatch(r'[가-힣]{2,}', word) for word in words):
+        return ()
+    def pattern(parts):
+        body = r'(.{0,40}?)'.join(map(re.escape, parts))
+        return re.compile(r'(?=(?<![a-z0-9_+#])(' + body + r')(?![a-z0-9_+#]))')
+    patterns = [pattern(words)]
+    # An action can be described with its object while omitting a middle modifier.
+    if len(words) >= 3:
+        patterns.append(pattern((words[0], words[-1])))
+    return tuple(patterns)
+
+
+def _keyword_occurrences(keyword, normalized):
+    occurrences = {(match.start(), match.end(), ((match.start(), match.end()),))
+                   for match in _pattern(keyword).finditer(normalized)}
+    for pattern in _compound_patterns(keyword):
+        for match in pattern.finditer(normalized):
+            if all(not _CLAUSE_BOUNDARY.search(gap) for gap in match.groups()[1:]):
+                start, end = match.span(1)
+                boundaries = [start]
+                for group in range(2, len(match.groups()) + 1):
+                    boundaries.extend(match.span(group))
+                boundaries.append(end)
+                parts = tuple((boundaries[i], boundaries[i + 1])
+                              for i in range(0, len(boundaries), 2) if boundaries[i] < boundaries[i + 1])
+                occurrences.add((start, end, parts))
+    return sorted(occurrences)
+
+
 def _matches(keyword, text):
-    if not keyword or not text:
-        return False
-    normalized = unicodedata.normalize('NFKC', text).casefold()
-    if keyword == '기계학습 알고리즘 적용' and '기계학습' in normalized and '적용' in normalized:
-        return True
-    if _pattern(keyword).search(normalized):
-        return True
-    # Multiword Korean course topics may be written with particles between terms.
-    words = re.findall(r'[가-힣]{2,}', keyword)
-    return len(words) >= 2 and all(word in normalized for word in words)
+    return bool(keyword and text and _keyword_occurrences(keyword, unicodedata.normalize('NFKC', text).casefold()))
 
 
 @lru_cache(maxsize=512)
@@ -80,20 +109,20 @@ def _goal_mentions(goal, keywords=()):
     candidates = []
     names = {entry[0] for entry in COURSE_ALIASES.values()} | set(keywords)
     for name in names:
-        for match in _pattern(name).finditer(normalized):
-            candidates.append((match.start(), match.end(), _key(name)))
+        for start, end, parts in _keyword_occurrences(name, normalized):
+            candidates.append((start, end, _key(name), parts))
     accepted = []
-    for start, end, key in sorted(candidates, key=lambda m: (-(m[1] - m[0]), m[0], m[2])):
-        if not any(start < other_end and other_start < end for other_start, other_end, _ in accepted):
-            accepted.append((start, end, key))
-    return normalized, sorted(accepted)
+    for start, end, key, parts in sorted(candidates, key=lambda m: (-(m[1] - m[0]), -sum(b - a for a, b in m[3]), m[0], m[2])):
+        if not any(a < d and c < b for a, b in parts for _, _, _, other_parts in accepted for c, d in other_parts):
+            accepted.append((start, end, key, parts))
+    return normalized, sorted((start, end, key) for start, end, key, _ in accepted)
 
 
 def _goal_mention_states(goal, keywords):
     normalized, mentions = _goal_mentions(goal, tuple(sorted(set(keywords))))
     past = []
     for index, (_, end, _) in enumerate(mentions):
-        next_start = mentions[index + 1][0] if index + 1 < len(mentions) else len(normalized)
+        next_start = next((start for start, _, _ in mentions[index + 1:] if start >= end), len(normalized))
         context = normalized[end:next_start].split('.')[0]
         # A negated experience ("경험 없음") is not past experience.
         past.append(bool(re.match(r'\s*(?:은|는|을|를|이|가|의|도)?\s*(?:이미\s*)?(?:배웠|학습했|공부했|익혔|알고\s*있|경험(?:이|은|을)?\s*(?:있|보유))', context)))
@@ -112,10 +141,7 @@ def _goal_learning_match(keyword, goal, states):
     if not _matches(keyword, goal):
         return False
     key = _key(keyword)
-    # Preserve the existing multiword topic fallback when there is no literal span.
-    if key in states:
-        return not all(states[key])
-    return not _pattern(keyword).search(unicodedata.normalize('NFKC', goal).casefold())
+    return key in states and not all(states[key])
 
 
 def rank_courses(profile, courses, review_status, skills=()):
