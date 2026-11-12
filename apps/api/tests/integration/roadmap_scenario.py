@@ -105,7 +105,7 @@ class RoadmapAPI(ProjectExperienceAPI):
             self.assertIn(original_snapshot, AnalysisRepository(db).job_history(self.rid))
         new, _ = self.generated()
         self.assertNotEqual(new['run_id'], old['run_id'])
-        self.assertEqual(new['rules_version'], 'personalized-roadmap-v10-compound-spans')
+        self.assertEqual(new['rules_version'], 'personalized-roadmap-v11-reviewed-compounds')
         self.assertEqual(new['progress']['completed'], 0)
         self.assertEqual(self.client.get(f'{self.base}/roadmaps/{old["run_id"]}').json()['progress']['completed'], 1)
 
@@ -421,7 +421,7 @@ class RoadmapAPI(ProjectExperienceAPI):
         new, calls = self.generated(True)
         self.assertEqual(calls, 1)
         self.assertNotEqual(new['run_id'], old['run_id'])
-        self.assertEqual(new['rules_version'], 'personalized-roadmap-v10-compound-spans')
+        self.assertEqual(new['rules_version'], 'personalized-roadmap-v11-reviewed-compounds')
         self.assertEqual(new['progress']['completed'], 0)
         self.assertEqual(self.client.get(f'{self.base}/roadmaps/{old["run_id"]}').json()['progress'], checked['progress'])
         self.assertEqual(len(self.client.get(self.base + '/roadmaps').json()['runs']), 3)
