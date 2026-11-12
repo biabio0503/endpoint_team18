@@ -16,6 +16,12 @@ def test_minimum_and_all_direct():
         result = select('JavaScript 배우고 싶다', [course(str(i), [('JavaScript', 'learning', 'Java script를 배운다.')]) for i in range(count)])
         assert len(result) == count
         assert all(c['recommendation_type'] == 'direct' for c in result)
+    rows = [course('direct' + str(i), [('SQL', 'learning', 'SQL을 배운다.')]) for i in range(3)]
+    rows += [course('other' + str(i)) for i in range(4)]
+    result = select('SQL 학습', rows)
+    assert len(result) == 5
+    assert [c['recommendation_type'] for c in result[:3]] == ['direct'] * 3
+    assert all(c['recommendation_type'] != 'direct' for c in result[3:])
 
 
 def test_roles_priority_aliases_and_boundaries():
@@ -49,9 +55,58 @@ def test_verified_equivalence_and_invalid_evidence():
     fake = course('fake', [('SQL', 'learning', '다른 문서의 문장')]); fake['description_text'] = 'DBMS 소개'
     unsupported = course('unsupported', [('SQL', 'learning', 'DBMS를 학습한다.')])
     result = select('SQL 배우기', [a, b, excluded, fake, unsupported])
-    assert [c['course_id'] for c in result] == ['a', 'fake', 'unsupported']
-    assert result[1]['recommendation_type'] != 'direct'
+    assert [c['course_id'] for c in result] == ['a', 'unsupported', 'fake']
+    assert result[1]['recommendation_type'] == 'direct'  # reviewed mapping and exact source quote
     assert result[2]['recommendation_type'] != 'direct'
+
+
+def test_technology_boundaries_aliases_and_korean_particles():
+    rows = [course(name, [(name, 'learning', '공식 강의 소개.')])
+            for name in ('C', 'C++', 'C#', 'Java', 'JavaScript', 'CNN')]
+    def direct(goal):
+        return {c['course_id'] for c in select(goal, rows) if c['recommendation_type'] == 'direct'}
+    assert direct('C++를 배우고 싶다') == {'C++'}
+    assert direct('C와 C++를 둘 다 배우고 싶다') == {'C', 'C++'}
+    assert direct('C#을 배우고 싶다.') == {'C#'}
+    assert direct('JavaScript를 배우기') == {'JavaScript'}
+    assert direct('Java, C를 배우기') == {'Java', 'C'}
+    assert direct('convolutional neural network를 배우기') == direct('CNN을 배우기') == {'CNN'}
+
+
+def test_aliases_apply_to_the_whole_order_and_all_direct_are_first():
+    rows = [course('basic', [('프로그래밍 기초', 'learning', '기초 학습.'), ('C', 'learning', 'C언어 학습.')]),
+            course('application', [('객체지향 프로그래밍', 'learning', '객체지향 학습.')]),
+            *[course(str(i), [('Python', 'learning', '파이썬 학습.')]) for i in range(6)]]
+    english, korean = select('Python 입문', rows), select('파이썬 입문', rows)
+    assert [(c['course_id'], c['recommendation_type']) for c in english] == [(c['course_id'], c['recommendation_type']) for c in korean]
+    assert len(english) == 6 and all(c['recommendation_type'] == 'direct' for c in english)
+    assert all(c['availability_status'] == 'not_verified' for c in english)
+
+
+def test_unreviewed_roles_and_wrong_course_quotes_are_not_direct():
+    rows = [course(role, [('CNN', role, '합성곱 신경망을 다룬다.')])
+            for role in ('prerequisite', 'tool', 'example', 'context')]
+    wrong = course('wrong', [('CNN', 'learning', '다른 과목의 문장.')])
+    wrong['description_text'] = '이 과목의 소개.'
+    rows.append(wrong)
+    assert all(c['recommendation_type'] != 'direct' for c in select('CNN 학습', rows))
+
+
+def test_bilingual_member_evidence_stays_with_its_own_description():
+    from course_groups import GROUPS_BY_CATALOG, grouped_courses
+    group = GROUPS_BY_CATALOG['seoultech-cse-2026-major-v1'][0]
+    korean, english = (m['course_id'] for m in group['members'])
+    rows = [course(korean, []), course(english, [('CNN', 'learning', 'Convolutional networks are covered.')])]
+    grouped = grouped_courses(rows, 'seoultech-cse-2026-major-v1')
+    result = select('CNN', grouped)[0]
+    assert result['recommendation_type'] == 'direct'
+    assert result['evidence_course_id'] == english
+    assert '_keyword_sources' not in result
+    grouped[0]['_keyword_sources'][1]['description_text'] = 'Unrelated description.'
+    assert select('CNN', grouped)[0]['recommendation_type'] != 'direct'
+    grouped[0]['_keyword_sources'].append({'course_id': 'foreign', 'description_text': 'foreign quote',
+        'keywords': [{'keyword': 'CNN', 'keyword_role': 'learning', 'evidence_text': 'foreign quote'}]})
+    assert select('CNN', grouped)[0]['recommendation_type'] != 'direct'
 
 
 def test_explicit_goal_ranks_before_job_evidence_and_job_experience():

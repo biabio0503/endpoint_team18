@@ -10,7 +10,7 @@ from services.project_experience import current_comparison, digest, model_basis,
 from services.roadmap_validation import invalid, parse_result
 from services.job_skill_analysis import ALIASES, skill_priority
 
-RULES_VERSION = 'personalized-roadmap-v6-course-evidence'
+RULES_VERSION = 'personalized-roadmap-v7-normalized-course-goals'
 TASK_TYPES = {
     'learn': ['practice', 'apply', 'validate', 'document'],
     'deepen': ['apply', 'validate', 'document'],
@@ -299,7 +299,10 @@ def validate_result(raw, basis):
     # These statuses/summary are computed by the server, never accepted from Gemini.
     partial = basis['job_status'] != 'success' or basis['project_status'] != 'success' or basis['review_status'] != 'confirmed'
     scope = {'verified_skill_count': len(basis['skills']), 'included_skills': [s['skill_name'] for s in focused_skills(basis)]}
-    ranked_courses = rank_courses(basis['profile'], basis['courses'], basis['review_status'], basis['skills'])
+    original_courses = {c['course_id']: c for c in basis['courses']}
+    ranked_courses = [{**c, 'source': basis['catalog'],
+                       'description_text': original_courses[c['course_id']].get('description_text') or None}
+                      for c in rank_courses(basis['profile'], basis['courses'], basis['review_status'], basis['skills'])]
     valid_ids = {c['course_id'] for c in ranked_courses}
     for step in steps:
         step['related_course_ids'] = [cid for cid in step['related_course_ids'] if cid in valid_ids]
