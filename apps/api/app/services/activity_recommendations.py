@@ -4,8 +4,8 @@ import re
 
 from services.project_experience import compare_skill, current_comparison, digest
 
-from services.activity_eligibility import KST, period_status, eligible_target
-from services.activity_identity import merge_events
+from services.activity_eligibility import KST, period_status, eligible_target, application_period
+from services.activity_identity import group_events, source_links
 # Synonyms describe a topic, never a posting's unmentioned tool requirements.
 TOPICS = {
     '데이터 분석': ('데이터', 'data', '분석', 'analytics', '통계', '시각화'),
@@ -89,32 +89,45 @@ def match(profile, item):
 
 def recommend(profile, items, sources, now=None, limit=12):
     now = (now or datetime.now(KST)).astimezone(KST)
-    recommendations, seen = [], set()
-    for item in items:
+    recommendations, seen, candidates = [], set(), []
+    for item in sorted(items, key=lambda x: (x.get('source', 'contestkorea'), x.get('original_id') or x['id'])):
         identity = (item.get('source', 'contestkorea'), item.get('original_id', item['id']))
         if identity in seen:
             continue
         seen.add(identity)
-        if item.get('application_closed') or item.get('application_cancelled'):
+        period = application_period(item, now)
+        candidates.append({**item, 'source': item.get('source', 'contestkorea'), **period, '_registration': period,
+                           'application_closed': item.get('application_closed') or item.get('status') in ('종료', '마감', '연습')})
+    # Identity and provenance are resolved before eligibility or relevance can
+    # discard a source. Expired precise evidence must still close its date-only peer.
+    for group in group_events(candidates):
+        if any(i.get('application_closed') or i.get('application_cancelled') or
+               i.get('candidate_state') in ('closed', 'cancelled') for i in group):
             continue
-        period = period_status(item.get('verified_period') or item['period'], now)  # Recheck cache hits too.
-        if item.get('source') in ('dacon', 'daker'):
-            try:
-                start = datetime.fromisoformat(item['application_start_at']).astimezone(KST)
-                end = datetime.fromisoformat(item['application_end_at']).astimezone(KST)
-                period = {'status': 'upcoming' if now < start else 'closed' if now > end else 'open',
-                          'opens_at': start.isoformat(),
-                          'deadline': end.date().isoformat(), 'closes_at': end.isoformat(),
-                          'deadline_label': end.strftime('%Y-%m-%d %H:%M (한국 시간)')}
-            except (KeyError, TypeError, ValueError):
-                continue
-        if period['status'] not in ('open', 'upcoming') or not eligible_target(item['target']):
+        periods = [i['_registration'] for i in group]
+        exact = [p for p in periods if p.get('deadline_precision') == 'time']
+        period = min(exact or periods, key=lambda p: p.get('closes_at') or '9999')
+        if period['status'] not in ('open', 'upcoming'):
             continue
-        relevance = match(profile, item)
-        if relevance:
-            recommendations.append({**item, **period, **relevance})
+        relevant = []
+        for item in group:
+            if eligible_target(item.get('target') or ''):
+                relevance = match(profile, item)
+                if relevance:
+                    relevant.append((item, relevance))
+        if not relevant:
+            continue
+        item, relevance = min(relevant, key=lambda pair: (-pair[1]['score'], pair[0]['source'], pair[0]['id']))
+        label = item.get('source_label', '콘테스트코리아')
+        evidence = [{**e, 'source': item.get('source', 'contestkorea'), 'source_label': label,
+                     'source_url': item.get('url'), 'original_id': item.get('original_id', item['id'])}
+                    for e in relevance['evidence']]
+        links = source_links(group)
+        recommendations.append({**{k: v for k, v in item.items() if k != '_registration'}, **period, **relevance,
+                                'evidence': evidence, 'reasons': [f'{label}: {r}' for r in relevance['reasons']],
+                                'source_links': links, 'source_label': ' · '.join(x['source_label'] for x in links)})
     recommendations.sort(key=lambda item: (-item['score'], item['deadline'] or '9999', item['id']))
-    recommendations = merge_events(recommendations)[:limit]
+    recommendations = recommendations[:limit]
     status = 'error' if all(s['status'] == 'error' for s in sources) else 'partial' if any(s['status'] != 'success' for s in sources) else 'success'
     valid_until = now + timedelta(minutes=5)
     for item in recommendations:

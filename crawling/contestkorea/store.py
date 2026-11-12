@@ -16,10 +16,12 @@ class Store(DailyStore):
         super().__init__(connection, clock, lock_key)
 
     def known_details(self):
-        # The run owner classifies backfilled history before discovery. Reuse only
-        # terminal records; open/upcoming pages are still checked every discovery.
-        return {r['original_id']: r['payload'] for r in self.db.execute("""SELECT original_id,payload
-            FROM activity_candidates WHERE source='contestkorea' AND state IN ('expired','closed','cancelled')""").fetchall()}
+        # Include successful active details so an old listing cannot erase an
+        # extension. The provider decides which terminal details can be reused.
+        return {r['original_id']: {**r['payload'], '_needs_verification': r['last_success_at'] is None,
+                                  '_retry_at': r['next_check_at']}
+                for r in self.db.execute("""SELECT original_id,payload,last_success_at,next_check_at
+                    FROM activity_candidates WHERE source='contestkorea'""").fetchall()}
 
     def observations(self, records):
         # Validate identity and URLs even for closed/unknown/error observations.

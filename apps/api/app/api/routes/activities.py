@@ -20,8 +20,10 @@ def activities(rid: str, ctx=Depends(owned_context)):
     profile, basis = capture_profile(db, row)
     revision = row['input_revision']
     db.commit()
-    items, contestkorea_source = load_contestkorea_catalog(db)
-    dacon_items, dacon_source = load_catalog(db)
+    # Keep verified event witnesses even when a source has expired or has no
+    # career keywords. The event-level decision needs both publishers' evidence.
+    items, contestkorea_source = load_contestkorea_catalog(db, include_event_context=True)
+    dacon_items, dacon_source = load_catalog(db, include_event_context=True)
     items, sources = [*items, *dacon_items], [contestkorea_source, dacon_source]
     current = repo.plan(rid, owner['owner_id'])
     if not current or current['input_revision'] != revision or capture_profile(db, current)[1] != basis:
