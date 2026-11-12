@@ -4,6 +4,7 @@ from api.dependencies import owned_context, respond
 from api.domain import Problem
 from services.activity_catalog import catalog
 from services.activity_recommendations import capture_profile, recommend
+from repositories.dacon import load_catalog
 
 router = APIRouter(prefix='/api')
 
@@ -20,6 +21,8 @@ def activities(rid: str, ctx=Depends(owned_context)):
     revision = row['input_revision']
     db.commit()  # Never hold a transaction while waiting for the supplier.
     items, sources = catalog.get()
+    dacon_items, dacon_source = load_catalog(db)
+    items, sources = [*items, *dacon_items], [*sources, dacon_source]
     current = repo.plan(rid, owner['owner_id'])
     if not current or current['input_revision'] != revision or capture_profile(db, current)[1] != basis:
         raise Problem(409, 'revision_conflict', '조회 중 입력이나 경험 근거가 변경되었습니다. 다시 조회해 주세요.')

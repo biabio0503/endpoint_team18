@@ -1,0 +1,12 @@
+.git
+**/.env
+**/.env.*
+**/.venv
+**/node_modules
+**/__pycache__
+**/*.pyc
+**/.next
+**/var
+**/*.crt
+**/*.pem
+.playwright-browsers
