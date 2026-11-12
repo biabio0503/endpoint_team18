@@ -14,7 +14,8 @@ from urllib.parse import urlencode, urljoin, urlsplit, parse_qsl
 from urllib.request import Request, build_opener, HTTPRedirectHandler
 from lxml import html
 from datetime import datetime
-from services.activity_eligibility import KST, eligible_target, period_status
+from services.activity_eligibility import (KST, eligible_target, period_status, CONTESTKOREA_CATEGORIES,
+                                           category_name, contestkorea_in_scope)
 from services.activity_identity import official_url
 
 BASE = 'https://www.contestkorea.com'
@@ -206,6 +207,9 @@ class Collection:
     observations: tuple = ()
     limited_categories: int = 0
     reused_details: int = 0
+    missing_categories: tuple = ()
+    skipped_closed: int = 0
+    detail_requests: int = 0
 
 
 def collect_kind(kind, key, *, eligible_only=False, now=None, detail_cache=None, known_details=None):
@@ -214,17 +218,18 @@ def collect_kind(kind, key, *, eligible_only=False, now=None, detail_cache=None,
         return Collection((), 'error', error_code='not_configured')
     try:
         menu = rows(request_json('menu_info_api.php', {'int_gbn': KINDS[kind]}, key))
+        expected = CONTESTKOREA_CATEGORIES[kind]
         codes = []
         for item in menu:
             fields = {k.upper(): v for k, v in item.items()}
-            # Explicit code-field aliases; never infer codes from names or URLs.
-            code = str(fields.get('STR_BCODE', '')).strip()
-            if not re.fullmatch(r'\d{1,20}', code):
-                raise ProviderError('invalid_menu')
-            if code not in codes:
-                codes.append(code)
-        if not codes or len(codes) > 64:
-            raise ProviderError('invalid_menu')
+            code = fields.get('STR_BCODE')
+            name = fields.get('STR_IDXWORD', fields.get('STR_MENU', ''))
+            if isinstance(code, str) and code in expected and category_name(name) == category_name(expected[code]):
+                if code not in codes:
+                    codes.append(code)
+        missing = tuple(code for code in expected if code not in codes)
+        if not codes:
+            return Collection((), 'error', error_code='missing_categories', missing_categories=missing)
     except ProviderError as error:
         return Collection((), 'error', error_code=str(error),
                           network_failures=int(str(error) == 'provider_unavailable'),
@@ -248,6 +253,7 @@ def collect_kind(kind, key, *, eligible_only=False, now=None, detail_cache=None,
 
     unique, failed, rejected, fetched, limited = {}, 0, 0, 0, 0
     skipped = {}
+    skipped_closed = set()
     category_network, category_parse = 0, 0
     with ThreadPoolExecutor(max_workers=4) as pool:
         for records in pool.map(category, codes):
@@ -261,20 +267,26 @@ def collect_kind(kind, key, *, eligible_only=False, now=None, detail_cache=None,
             for item in records:
                 try:
                     record = normalize(item, kind)
+                    if not contestkorea_in_scope(record):
+                        continue
                     old = (known_details or {}).get(record['id'])
                     unverified = old and old.get('_needs_verification')
                     # An authoritative unexpired detail must be checked even if
                     # the API listing still advertises its pre-extension date.
                     detail_active = old and not (old.get('application_closed') or old.get('application_cancelled')) and period_status(
                         old.get('verified_period') or old.get('period') or '', now)['status'] in ('open', 'upcoming')
-                    if eligible_only and not detail_active and not unverified and (not eligible_target(record['target'])
-                            or (period_status(record['period'], now)['status'] == 'closed' and not old)):
+                    newly_closed = not old and period_status(record['period'], now)['status'] == 'closed'
+                    if newly_closed or (eligible_only and not detail_active and not unverified
+                                        and not eligible_target(record['target'])):
+                        if newly_closed:
+                            skipped_closed.add(record['id'])
                         skipped.setdefault(record['id'], record)
                         continue
                     unique.setdefault(record['id'], record)
                 except (ValueError, TypeError):
                     rejected += 1
     cache = detail_cache if detail_cache is not None else {}
+    detail_requests = set()
     def verify(record):
         if record['id'] not in cache:
             old = (known_details or {}).get(record['id'])
@@ -284,6 +296,7 @@ def collect_kind(kind, key, *, eligible_only=False, now=None, detail_cache=None,
             if waiting or (terminal and (old.get('listing_signature') or listing_signature(old)) == record.get('listing_signature')):
                 cache[record['id']] = {**{k: v for k, v in old.items() if not k.startswith('_')}, 'detail_reused': True}
             else:
+                detail_requests.add(record['id'])
                 cache[record['id']] = verify_period(record)
         return cache[record['id']]
     checked = []
@@ -306,8 +319,9 @@ def collect_kind(kind, key, *, eligible_only=False, now=None, detail_cache=None,
                      and period_status(item.get('verified_period') or item['period'], now)['status'] in ('open', 'upcoming'))
     network += category_network
     parse += category_parse + rejected
-    incomplete = failed or rejected or network or parse
+    incomplete = failed or rejected or network or parse or missing
     status = 'error' if failed == len(codes) or (rejected and not unique) else 'partial' if incomplete else 'success'
     return Collection(eligible if eligible_only else items, status, len(codes), failed, rejected,
                       'collection_incomplete' if incomplete else None, unverified, network + parse,
-                      fetched, len(eligible), unknown, parse, network, observations, limited, sum(bool(i.get('detail_reused')) for i in items))
+                      fetched, len(eligible), unknown, parse, network, observations, limited, sum(bool(i.get('detail_reused')) for i in items),
+                      missing, len(skipped_closed), len(detail_requests))

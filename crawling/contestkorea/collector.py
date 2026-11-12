@@ -4,7 +4,7 @@ import os
 import sys
 
 from providers.external.contestkorea import KINDS, collect_kind, original_url
-from services.activity_eligibility import KST, eligible_target, period_status
+from services.activity_eligibility import KST, eligible_target, period_status, contestkorea_in_scope
 import re
 from crawling.activities.batch import Batch
 
@@ -18,12 +18,15 @@ def collect(*, known=None):
         result = collect_kind(kind, key, eligible_only=True, now=now, detail_cache=detail_cache, known_details=known)
         statuses.append(result.status)
         for field in ('categories', 'failed_categories', 'rejected_items', 'fetched_items', 'eligible_items',
-                      'unknown_periods', 'parse_failures', 'network_failures', 'limited_categories', 'reused_details'):
+                      'unknown_periods', 'parse_failures', 'network_failures', 'limited_categories', 'reused_details',
+                      'skipped_closed', 'detail_requests'):
             metrics[field] = metrics.get(field, 0) + getattr(result, field)
+        metrics.setdefault('missing_categories', {})[kind] = list(result.missing_categories)
         for item in result.observations or result.items:
             items.setdefault(item['id'], item)
         print(f'[contestkorea] {kind}: {result.status}, fetched={result.fetched_items}, '
-              f'eligible={result.eligible_items}, unknown={result.unknown_periods}, '
+              f'skipped_closed={result.skipped_closed}, detail_requests={result.detail_requests}, '
+              f'eligible={result.eligible_items}, missing_categories={list(result.missing_categories)}, unknown={result.unknown_periods}, '
               f'parse_failures={result.parse_failures}, network_failures={result.network_failures}',
               file=sys.stderr, flush=True)
     status = 'error' if all(s == 'error' for s in statuses) else 'partial' if any(s != 'success' for s in statuses) else 'success'
@@ -43,7 +46,7 @@ def compact_records(records, now):
                 or not record['title'].strip()):
             raise ValueError('invalid_record')
         original_url(record['url'])
-        if (record.get('verification_error') or record.get('period_source') in ('unknown', 'unverified')
+        if (not contestkorea_in_scope(record) or record.get('verification_error') or record.get('period_source') in ('unknown', 'unverified')
                 or record.get('application_closed') or record.get('application_cancelled')
                 or not eligible_target(record['target']) or
                 period_status(record.get('verified_period') or record['period'], now)['status'] not in ('open', 'upcoming')):

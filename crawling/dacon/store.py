@@ -65,6 +65,8 @@ class Store:
                        'discovered_unique': len(seen),
                        'eligible_items': sum(state(i, current.now)[0] == 'active' for i in records),
                        'unknown_periods': batch.metrics.get('unknown_periods', sum(state(i, current.now)[0] == 'unknown' for i in records))}
+            if self.sources == ('contestkorea',):
+                metrics['total_detail_requests'] = batch.metrics.get('detail_requests', 0) + len(rechecked)
             status = 'partial' if failures or batch.status != 'success' else 'success'
             if batch.status == 'error' and not records and not rechecked:
                 status = 'failed'

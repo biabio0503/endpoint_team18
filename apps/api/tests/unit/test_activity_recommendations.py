@@ -171,16 +171,21 @@ def test_real_adapter_contract_auth_params_dedupe_and_partial(monkeypatch):
     def request(endpoint, params, key):
         calls.append((endpoint, params, key))
         if endpoint == 'menu_info_api.php':
-            return [{'resultcode': '1', 'resultmsg': '성공', 'Data': FIXTURE['menus']}]
-        if params['Txt_bcode'] == '0302':
+            kind = 'competition' if params['int_gbn'] == '1' else 'extracurricular'
+            return [{'resultcode': '1', 'resultmsg': '성공', 'Data': [
+                {'STR_BCODE': code, 'STR_IDXWORD': name}
+                for code, name in provider.CONTESTKOREA_CATEGORIES[kind].items()]}]
+        if params['Txt_bcode'] == '031410001':
             raise provider.ProviderError('provider_unavailable')
-        return [{'resultcode': '1', 'resultmsg': '성공', 'Data': FIXTURE['meetings'] + FIXTURE['meetings'][:1]}]
+        return [{'resultcode': '1', 'resultmsg': '성공', 'Data': [
+            {**row, 'STR_MENU': '학문•과학•IT'} for row in FIXTURE['meetings']]}]
     monkeypatch.setattr(provider, 'request_json', request)
-    result = provider.collect_kind('competition', 'test-secret')
+    monkeypatch.setattr(provider, 'verify_period', lambda item: item)
+    result = provider.collect_kind('competition', 'test-secret', now=NOW)
     assert result.status == 'partial' and len(result.items) == 4
     assert result.failed_categories == 1
     assert calls[0] == ('menu_info_api.php', {'int_gbn': '1'}, 'test-secret')
-    assert {c[1]['Txt_bcode'] for c in calls[1:]} == {'0301', '0302'}
+    assert {c[1]['Txt_bcode'] for c in calls[1:]} == {'030310001', '031410001'}
     calls.clear()
     provider.collect_kind('extracurricular', 'test-secret')
     assert calls[0][1] == {'int_gbn': '2'}
@@ -222,7 +227,7 @@ def test_transport_no_redirect_and_no_secret_errors(monkeypatch, caplog):
 
 def test_missing_key_and_empty_catalog_are_distinct(monkeypatch):
     assert provider.collect_kind('competition', '').error_code == 'not_configured'
-    monkeypatch.setattr(provider, 'request_json', lambda endpoint, *args: FIXTURE['menus'] if endpoint == 'menu_info_api.php' else [])
+    monkeypatch.setattr(provider, 'request_json', lambda endpoint, *args: [{'STR_BCODE': code, 'STR_IDXWORD': name} for code, name in provider.CONTESTKOREA_CATEGORIES['competition'].items()] if endpoint == 'menu_info_api.php' else [])
     assert provider.collect_kind('competition', 'test-secret').status == 'success'
     assert recommend(DATA, [], SOURCES, NOW)['status'] == 'success'
     assert recommend(DATA, [], [{'status': 'error'}, {'status': 'error'}], NOW)['status'] == 'error'

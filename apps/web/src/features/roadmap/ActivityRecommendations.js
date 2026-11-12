@@ -40,6 +40,7 @@ export default function ActivityRecommendations({ active, inputRevision, onResul
  return <div hidden={!active} className="activity-recommendations" aria-busy={phase === 'loading'}>
   <h2>공모전·대외활동 추천</h2>
   <p>저장한 진로 목표를 바탕으로, 한국 시간 기준 접수 중이거나 접수 예정이고 대학생 또는 누구나 참여 대상으로 안내된 공고를 추천합니다. 문서나 직무 분석 없이도 이용할 수 있습니다.</p>
+  <p className="field-help">콘테스트코리아는 대회·공모전의 학문·과학·IT, 아이디어·건축·창업과 대외활동의 교육·강연·멘토링·세미나, 전시·박람·행사·축제 분야를 확인합니다. 데이콘·데이커는 별도로 수집합니다.</p>
   <button disabled={phase === 'loading'} onClick={() => { refresh.current = true; setRetry(v => v + 1); }}>활동 추천 다시 확인</button>
   {phase === 'loading' && <p role="status">접수 기간과 목표에 맞는 실제 공고를 확인하고 있습니다…</p>}
   {phase === 'error' && <p role="alert">{message}</p>}

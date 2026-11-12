@@ -2,6 +2,7 @@
 from datetime import datetime, timedelta, timezone
 import json
 from zoneinfo import ZoneInfo
+from services.activity_eligibility import contestkorea_in_scope
 
 
 def read(db, source, *, include_event_context=False):
@@ -19,6 +20,8 @@ def read(db, source, *, include_event_context=False):
         if not include_event_context and row['deadline_at'] and row['deadline_at'] <= now:
             continue
         payload = json.loads(row['payload']) if isinstance(row['payload'], str) else row['payload']
+        if row['source'] == 'contestkorea' and not contestkorea_in_scope(payload):
+            continue
         items.append({**payload, 'source': row['source'], 'original_id': row['original_id'], 'candidate_state': row['state'],
                       'last_seen_at': row['last_seen_at'].isoformat(),
                       'last_checked_at': row['last_checked_at'].isoformat() if row['last_checked_at'] else None,

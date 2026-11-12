@@ -75,3 +75,23 @@ def eligible_target(value):
     known = {'누구나', '대학생', '대학원생', '일반인', '외국인', '유치원', '초등학생', '중학생', '고등학생'}
     return bool(set(tokens) & {'대학생', '누구나'}) and all(t in known for t in tokens)
 
+
+
+# Official Basic DEMO v1.1 menu names; the listing STR_MENU is the posting's
+# own representative field, not the category used to request the list.
+CONTESTKOREA_CATEGORIES = {
+    'competition': {'030310001': '학문•과학•IT', '031410001': '아이디어•건축•창업'},
+    'extracurricular': {'040410001': '교육 • 강연 • 멘토링 • 세미나',
+                        '040510001': '전시 • 박람 • 행사 • 축제'},
+}
+
+
+def category_name(value):
+    return re.sub(r'[\s•·ㆍ.]+', '', str(value or '')).casefold()
+
+
+def contestkorea_in_scope(item):
+    names = {category_name(name) for name in CONTESTKOREA_CATEGORIES.get(item.get('kind'), {}).values()}
+    # A field may contain multiple complete representative categories. Never
+    # accept a partial word or a substring of another category.
+    return any(category_name(part) in names for part in re.split(r'[,;|/\n]+', item.get('category') or ''))

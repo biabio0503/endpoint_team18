@@ -1,7 +1,7 @@
 """Server-only current catalog. Daily discovery history is owned by source stores."""
 from datetime import datetime, timedelta
 from psycopg.types.json import Jsonb
-from services.activity_eligibility import eligible_target, period_status
+from services.activity_eligibility import eligible_target, period_status, contestkorea_in_scope
 
 
 def identity(item):
@@ -49,7 +49,8 @@ class Candidates:
             AND (missing_since IS NULL OR next_check_at <= %s))) ORDER BY next_check_at,source,original_id""",
             (self.sources, self.now, self.now, self.now)).fetchall()
         return [{**row['payload'], 'source': row['source'], 'original_id': row['original_id']}
-                for row in rows if (row['source'], row['original_id']) not in observed]
+                for row in rows if (row['source'], row['original_id']) not in observed
+                and (row['source'] != 'contestkorea' or contestkorea_in_scope(row['payload']))]
 
     def mark_missing(self, observed):
         for row in self.db.execute("SELECT source,original_id FROM activity_candidates WHERE source=ANY(%s) AND state='active' AND missing_since IS NULL", (self.sources,)).fetchall():
