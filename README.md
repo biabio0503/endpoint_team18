@@ -75,7 +75,7 @@ npm run dev
 
 백엔드 테스트는 임시 SQLite와 모킹을 기본으로 사용합니다. 선택적 PostgreSQL 문서 테스트는 명시적인 로컬 전용 DB와 초기화 보호 조건을 요구합니다. 운영 DB나 Storage를 초기화하지 마세요. 브라우저 E2E 스크립트 `apps/web/tests/e2e/p5-flow.mjs`는 별도로 실행한 격리 API·웹 서버와 Brave가 필요합니다.
 
-Render Root Directory는 `apps/api`, Build는 `pip install -r requirements.txt`, Start는 `uvicorn app.main:app --host 0.0.0.0 --port $PORT`입니다. Vercel Root Directory는 `apps/web`이며 기존 Next.js `/api/*` rewrite를 사용합니다. 현재 PostgreSQL TLS `sslmode=require`는 암호화하지만 서버 인증서를 검증하지 않는 임시 기술 부채입니다. 연결 정책은 별도 검토가 필요합니다. 실제 운영 이력과 저장소 마이그레이션 버전 차이는 [배포 안내](docs/render-deployment.md)에 기록되어 있으며 자동 수정하지 않습니다.
+Render Root Directory는 `apps/api`, Build는 `pip install -r requirements.txt`, Start는 `uvicorn app.main:app --host 0.0.0.0 --port $PORT`입니다. Vercel Root Directory는 `apps/web`이며 기존 Next.js `/api/*` rewrite를 사용합니다. `front/`의 스텝업 React 시안을 `apps/web`의 운영 화면에 적용했습니다. 상단 메뉴·사이드바·대시보드와 반응형 카드 UI는 새 디자인을 사용하며, Google/게스트 인증과 문서 처리·경험 분석·과목 선택·로드맵 저장은 기존 API 연결을 유지합니다. `front/`는 독립 실행 가능한 디자인 참고본으로 남아 있으며 Vercel 배포 경로는 변경하지 않습니다. 현재 PostgreSQL TLS `sslmode=require`는 암호화하지만 서버 인증서를 검증하지 않는 임시 기술 부채입니다. 연결 정책은 별도 검토가 필요합니다. 실제 운영 이력과 저장소 마이그레이션 버전 차이는 [배포 안내](docs/render-deployment.md)에 기록되어 있으며 자동 수정하지 않습니다.
 
 ## Gemini 채용공고 기술 스택 분석
 

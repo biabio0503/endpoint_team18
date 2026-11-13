@@ -100,16 +100,18 @@ def roadmap(data):
 roadmaps.generate_roadmap = roadmap
 
 
-class Catalog:
-    def get(self):
-        counters['provider_fixture'] += 1
-        return [dict(id='review-post', kind='competition', title='SQL 공공데이터 분석 경진대회',
-                     category='데이터 분석', host='로컬 고정 기관', target='대학생', period='상시 접수',
-                     url='https://www.contestkorea.com/sub/view.php?str_no=review-post')], [
-                         dict(kind=k, status='success') for k in ('competition', 'extracurricular')]
+def fixed_catalog(db, *, include_event_context=False):
+    # Recommendations now read cached DB catalogs, not the removed live catalog object.
+    counters['provider_fixture'] += 1
+    return [dict(id='review-post', kind='competition', title='SQL 공공데이터 분석 경진대회',
+                 category='데이터 분석', host='로컬 고정 기관', target='대학생', period='상시 접수',
+                 url='https://www.contestkorea.com/sub/view.php?str_no=review-post')], dict(
+                     source='contestkorea', kind='competition', status='success')
 
 
-activities.catalog = Catalog()
+activities.load_contestkorea_catalog = fixed_catalog
+activities.load_catalog = lambda db, **kwargs: ([], dict(
+    source='dacon_daker', kind='competition', status='success'))
 
 
 @app.get('/api/review-counters')

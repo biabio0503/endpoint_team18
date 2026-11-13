@@ -103,7 +103,7 @@ try {
  await tab(2); await wait("document.body.innerText.includes('작업 완료 1 / 3개')");
  await tab(1); await wait("document.querySelector('.job-skills').getAttribute('aria-busy')==='false'");
  assert.equal(await run("auditRequests.filter(r=>r.method==='POST'&&/job-skill-analysis|project-experience-analysis/.test(r.url)).length"),0);
- await tab(3); await wait("document.body.innerText.includes('수강 후보 추천을 보류')");
+ await tab(3); await wait("document.body.innerText.includes('추가 탐색 후보') && document.body.innerText.includes('공식 근거와 출처 쪽수')");
  await tab(4); await wait("document.querySelector('.activity-recommendations')?.getAttribute('aria-busy')==='false' && document.body.innerText.includes('공급자 연결이 아직 설정되지 않았습니다.')");
  await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
  assert.ok(await run('document.documentElement.scrollWidth<=window.innerWidth'));

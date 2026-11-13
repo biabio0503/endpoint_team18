@@ -71,8 +71,8 @@ try {
  ` });
  await send('Page.navigate', { url: origin + '/input/courses' });
  await wait("document.body.innerText.includes('검색 결과 52개') && document.querySelectorAll('[role=switch]').length===20 && !document.querySelector('[role=switch]').disabled");
- assert.ok(await run("document.querySelector('aside').innerText.includes('2개 과목') && document.querySelector('aside').innerText.includes('자료구조 (Data Structure)') && document.querySelector('aside').innerText.includes('데이터베이스 (Database)')"));
- assert.equal(await run("document.querySelector('aside').querySelectorAll('strong')[1].textContent"), '6');
+ assert.ok(await run("document.querySelector('main aside.wire-box').innerText.includes('2개 과목') && document.querySelector('main aside.wire-box').innerText.includes('자료구조 (Data Structure)') && document.querySelector('main aside.wire-box').innerText.includes('데이터베이스 (Database)')"));
+ assert.equal(await run("document.querySelector('main aside.wire-box').querySelectorAll('strong')[1].textContent"), '6');
  const names = [];
  for (let pageNumber = 1; pageNumber <= 3; pageNumber++) {
   await wait(`document.querySelector('.pagination').innerText.includes('${pageNumber} / 3') && !document.querySelector('[role=switch]').disabled`);
@@ -93,7 +93,7 @@ try {
  await wait("document.body.innerText.includes('검색 결과 52개') && !document.querySelector('[role=switch]').disabled");
  await search('database');
  assert.equal(await run("document.querySelector('[role=switch]').getAttribute('aria-checked')"), 'false');
- assert.ok(await run("document.querySelector('aside').innerText.includes('1개 과목')"));
+ assert.ok(await run("document.querySelector('main aside.wire-box').innerText.includes('1개 과목')"));
  let saved = await (await fetch(origin + '/api/course-groups-qa')).json();
  const dbIds = ['stcse-2026-ac66832f2c533c700dde1354', 'stcse-2026-56e5e2a1aedbfd4d2e87404c'];
  assert.ok(saved.states.filter(s => dbIds.includes(s.course_id)).every(s => !s.is_completed));
