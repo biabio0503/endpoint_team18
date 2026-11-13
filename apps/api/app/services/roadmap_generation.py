@@ -19,6 +19,16 @@ TASK_TYPES = {
 MARKET_LIMIT = '해외 원격근무 채용공고의 제한된 표본입니다. 국내 대학생의 필수 기술이나 학습 우선순위를 뜻하지 않습니다.'
 
 
+def roadmap_context(basis):
+    """Use the same catalog status and recorded basis for AI and limited results."""
+    return {
+        'course_status': 'catalog_unavailable' if basis['review_status'] == 'unavailable' else 'provisional' if basis['review_status'] == 'unconfirmed' else 'available',
+        'basis': {k: basis[k] for k in ('catalog', 'review_status', 'course_selection_revision', 'reviewed_at',
+            'outside_completed_courses', 'job_snapshot_id', 'job_status', 'job_analyzed_at', 'job_summary',
+            'project_status', 'project_version', 'project_documents', 'excluded_documents', 'document_basis')},
+    }
+
+
 def capture_basis(db, row):
     """Caller holds the owner's plan lock in a consistent DB snapshot. No external I/O."""
     comparison = current_comparison(db, row)
@@ -199,18 +209,8 @@ def validate_result(raw, basis):
     for index, suggestion in enumerate(result.recommended_courses):
         location = ('recommended_courses', index)
         verify_refs(suggestion.related_skills, suggestion.evidence_refs, location)
-        course = allowed[suggestion.course_id]
-        description = (course.get('description_text') or '').strip()
-        limited = (not description or basis['review_status'] != 'confirmed' or basis['job_status'] != 'success'
-                   or basis['project_status'] != 'success' or basis['catalog'].get('completeness_status') != 'complete'
-                   or any(skills[n]['student_status'] not in ('no_experience', 'confirmed_experience') for n in suggestion.related_skills))
-        courses.append({**suggestion.model_dump(), **server_courses[suggestion.course_id],
-                        'description_text': description or None, 'description_basis': 'description' if description else 'name_inference',
-                        'recommendation_confidence': 'limited' if limited else suggestion.recommendation_confidence,
-                        'availability_status': 'not_verified', 'source': basis['catalog'],
-                        'recommendation_kind': 'opinion',
-                        'limitations': '과목명 기반 추론입니다. 실제 강의 내용을 확인해 주세요.' if not description else '설명과의 관련성에 대한 추천 의견입니다.',
-                        'availability_notice': '교육과정 수강 후보입니다. 실제 개설·수강 가능 여부·졸업요건·공식 선수과목은 학교에서 확인해 주세요.'})
+        # Only course/skill links are used below; displayed metadata comes from rank_courses.
+        courses.append({**suggestion.model_dump(), **server_courses[suggestion.course_id]})
     seen_steps, seen_tasks, seen_actions, steps = set(), set(), set(), []
     for order, step in enumerate(result.roadmap, 1):
         location = ('roadmap', order - 1)
@@ -235,7 +235,7 @@ def validate_result(raw, basis):
             invalid('step_action_types_mixed', (*location, 'skill_targets'))
         for index, target in enumerate(step.skill_targets):
             status = skills[target.skill_name]['student_status']
-            expected_action = 'deepen' if status == 'confirmed_experience' else 'learn' if status == 'no_experience' else 'verify_experience'
+            expected_action = skills[target.skill_name]['allowed_action_type']
             if target.student_status != status:
                 invalid('experience_status_mismatch', (*location, 'skill_targets', index, 'student_status'))
             if target.action_type != expected_action:
@@ -310,7 +310,4 @@ def validate_result(raw, basis):
             'target_role': basis['profile']['target_role'], 'preparation_summary': summary,
             'preparation_items': basis['skills'], 'evidence': basis['evidence'],
             'recommended_courses': ranked_courses, 'roadmap': steps, 'limitations': basis['limitations'], 'generation_scope': scope,
-            'course_status': 'catalog_unavailable' if basis['review_status'] == 'unavailable' else 'provisional' if basis['review_status'] == 'unconfirmed' else 'available',
-            'basis': {k: basis[k] for k in ('catalog', 'review_status', 'course_selection_revision', 'reviewed_at',
-                'outside_completed_courses', 'job_snapshot_id', 'job_status', 'job_analyzed_at', 'job_summary',
-                'project_status', 'project_version', 'project_documents', 'excluded_documents', 'document_basis')}}
+            **roadmap_context(basis)}

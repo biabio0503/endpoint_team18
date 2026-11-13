@@ -1,5 +1,6 @@
 """No provider call or invented job/course claims when external evidence is absent."""
 from services.course_recommendations import rank_courses
+from services.roadmap_generation import roadmap_context
 
 
 def limited_roadmap(basis):
@@ -32,8 +33,5 @@ def limited_roadmap(basis):
             'tasks': [{'task_id': key + '-review', 'task_type': 'document', 'title': title, 'action': action,
                        'completion_criteria': criteria, 'deliverable': deliverable}],
         } for i, (key, title, action, criteria, deliverable) in enumerate(items, 1)],
-        'limitations': [limitation, *basis['limitations']], 'course_status': 'catalog_unavailable' if basis['review_status'] == 'unavailable' else 'provisional' if basis['review_status'] == 'unconfirmed' else 'available',
-        'basis': {k: basis[k] for k in ('catalog', 'review_status', 'course_selection_revision', 'reviewed_at',
-            'outside_completed_courses', 'job_snapshot_id', 'job_status', 'job_analyzed_at', 'job_summary',
-            'project_status', 'project_version', 'project_documents', 'excluded_documents', 'document_basis')},
+        'limitations': [limitation, *basis['limitations']], **roadmap_context(basis),
     }
