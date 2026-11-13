@@ -1,0 +1,28 @@
+{
+  "source": "공공데이터포털 전국대학별학과정보표준데이터 미리보기 499건",
+  "source_sha256": "213b5633d47dba662e21f9bf8593d9156ea44a74b3b67c64bf0cf14c74b83832",
+  "base": "ai\\models\\ocr-v2",
+  "augmentation": true,
+  "split_seed": 42,
+  "train": 270,
+  "validation": 60,
+  "test": 60,
+  "training_fonts": [
+    "맑은 고딕",
+    "맑은 고딕 Bold"
+  ],
+  "heldout_font": "바탕",
+  "trained_parameters": "CTC output projection only",
+  "best_epoch": 1,
+  "baseline": {
+    "count": 60,
+    "character_error_rate": 0.0,
+    "exact_match_rate": 1.0
+  },
+  "trained": {
+    "count": 60,
+    "character_error_rate": 0.0,
+    "exact_match_rate": 1.0
+  },
+  "note": "합성 단일 줄 이미지 평가. 스캔·손글씨·페이지 검출 성능 아님."
+}

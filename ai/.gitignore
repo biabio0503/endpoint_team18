@@ -1,0 +1,17 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+deps/
+models/*
+!models/ocr-detector/
+!models/ocr-v2/
+storage/
+local/data/
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.gguf
+!models/ocr-detector/*.safetensors
+!models/ocr-v2/*.safetensors

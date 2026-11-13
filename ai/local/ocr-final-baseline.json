@@ -1,0 +1,72 @@
+{
+  "dataset": "ONTHEIT/KDoc-OCRBench-V2",
+  "split": "final",
+  "padding": 0,
+  "layout": "rows",
+  "orientation": "none",
+  "candidate": null,
+  "selection": "sorted eligible documents: validation index 0, development index 1, final index 2; first 8 verified checks per document",
+  "method": "exact substring after NFKC, whitespace removal and case folding; stricter than benchmark tolerance, no table or reading-order checks",
+  "results": [
+    {
+      "model": "open-source",
+      "category": "Notices",
+      "document": "(대량) 경상북도_포항시_열린포항소식지 15.pdf",
+      "license": "이용허락범위 제한없음",
+      "source_url": "https://www.data.go.kr/data/15035888/fileData.do#",
+      "attribution": "",
+      "checks": 8,
+      "passed": 4
+    },
+    {
+      "model": "open-source",
+      "category": "Manuals",
+      "document": "(제1유형) 식품의약품안전처_식중독예방 대국민 홍보자료 서비스(수시)_2.pdf",
+      "license": "공공저작물 : 출처표시 (제 1유형)",
+      "source_url": "https://www.data.go.kr/data/15047683/fileData.do#",
+      "attribution": "본 저작물은 '식품의약품안전처'에서 '2025년' 작성하여 공공누리 제 1유형으로 개방한 '식중독 주의 정보 알림(25년 12월).pdf, 식중독 주의 정보 알림(25년 8월).pdf'을 이용하였으며, 해당 저작물은 '식품의약품안전처, https://www.foodsafetykorea.go.kr/portal/board/boardDetail.do, https://www.foodsafetykorea.go.kr/portal/board/boardDetail.do'에서 무료로 다운받으실 수 있습니다.",
+      "checks": 8,
+      "passed": 4
+    },
+    {
+      "model": "open-source",
+      "category": "Reports",
+      "document": "(제1유형)_행정안전부_정책연구과제 96.pdf",
+      "license": "공공저작물 : 출처표시 (제 1유형)",
+      "source_url": "https://www.data.go.kr/data/3045577/fileData.do",
+      "attribution": "본 저작물은 '행정안전부'에서 작성하여 공공누리 제 1유형으로 개방한 '행정안전부_정책연구과제'을 이용하였으며, 해당 저작물은 '행정안전부, https://www.prism.go.kr/homepage/asmt/list'에서 무료로 다운받으실 수 있습니다.",
+      "checks": 8,
+      "passed": 5
+    },
+    {
+      "model": "local",
+      "category": "Notices",
+      "document": "(대량) 경상북도_포항시_열린포항소식지 15.pdf",
+      "license": "이용허락범위 제한없음",
+      "source_url": "https://www.data.go.kr/data/15035888/fileData.do#",
+      "attribution": "",
+      "checks": 8,
+      "passed": 4
+    },
+    {
+      "model": "local",
+      "category": "Manuals",
+      "document": "(제1유형) 식품의약품안전처_식중독예방 대국민 홍보자료 서비스(수시)_2.pdf",
+      "license": "공공저작물 : 출처표시 (제 1유형)",
+      "source_url": "https://www.data.go.kr/data/15047683/fileData.do#",
+      "attribution": "본 저작물은 '식품의약품안전처'에서 '2025년' 작성하여 공공누리 제 1유형으로 개방한 '식중독 주의 정보 알림(25년 12월).pdf, 식중독 주의 정보 알림(25년 8월).pdf'을 이용하였으며, 해당 저작물은 '식품의약품안전처, https://www.foodsafetykorea.go.kr/portal/board/boardDetail.do, https://www.foodsafetykorea.go.kr/portal/board/boardDetail.do'에서 무료로 다운받으실 수 있습니다.",
+      "checks": 8,
+      "passed": 4
+    },
+    {
+      "model": "local",
+      "category": "Reports",
+      "document": "(제1유형)_행정안전부_정책연구과제 96.pdf",
+      "license": "공공저작물 : 출처표시 (제 1유형)",
+      "source_url": "https://www.data.go.kr/data/3045577/fileData.do",
+      "attribution": "본 저작물은 '행정안전부'에서 작성하여 공공누리 제 1유형으로 개방한 '행정안전부_정책연구과제'을 이용하였으며, 해당 저작물은 '행정안전부, https://www.prism.go.kr/homepage/asmt/list'에서 무료로 다운받으실 수 있습니다.",
+      "checks": 8,
+      "passed": 5
+    }
+  ]
+}

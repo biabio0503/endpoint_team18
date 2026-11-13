@@ -1,0 +1,908 @@
+{
+  "dataset": "ocr-v2-student-projects-20261110",
+  "note": "개발 자료에 조건을 맞춘 동일 표본 평가; 역할은 기존 규칙 채점기 사용",
+  "baseline": "기존 저장 출력",
+  "candidate": "자동 열 정렬 재실행",
+  "pages": [
+    {
+      "id": "p01_intro",
+      "layout": "intro_prose",
+      "baseline": {
+        "errors": 7,
+        "chars": 347,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "candidate": {
+        "errors": 7,
+        "chars": 347,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "seconds": 0.88
+    },
+    {
+      "id": "p01_slide_bullets",
+      "layout": "slide_bullets",
+      "baseline": {
+        "errors": 6,
+        "chars": 172,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "candidate": {
+        "errors": 6,
+        "chars": 172,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "seconds": 0.39
+    },
+    {
+      "id": "p01_slide_compare",
+      "layout": "slide_compare",
+      "baseline": {
+        "errors": 65,
+        "chars": 156,
+        "roles": {
+          "preserved": 0,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 2
+        }
+      },
+      "candidate": {
+        "errors": 36,
+        "chars": 156,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "seconds": 0.38
+    },
+    {
+      "id": "p02_intro",
+      "layout": "intro_prose",
+      "baseline": {
+        "errors": 7,
+        "chars": 332,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "candidate": {
+        "errors": 7,
+        "chars": 332,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "seconds": 0.51
+    },
+    {
+      "id": "p02_slide_bullets",
+      "layout": "slide_bullets",
+      "baseline": {
+        "errors": 2,
+        "chars": 149,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "candidate": {
+        "errors": 2,
+        "chars": 149,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "seconds": 0.33
+    },
+    {
+      "id": "p02_slide_compare",
+      "layout": "slide_compare",
+      "baseline": {
+        "errors": 52,
+        "chars": 129,
+        "roles": {
+          "preserved": 0,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 2
+        }
+      },
+      "candidate": {
+        "errors": 37,
+        "chars": 129,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "seconds": 0.31
+    },
+    {
+      "id": "p03_intro",
+      "layout": "intro_prose",
+      "baseline": {
+        "errors": 4,
+        "chars": 345,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "candidate": {
+        "errors": 4,
+        "chars": 345,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "seconds": 0.51
+    },
+    {
+      "id": "p03_slide_bullets",
+      "layout": "slide_bullets",
+      "baseline": {
+        "errors": 7,
+        "chars": 165,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "candidate": {
+        "errors": 7,
+        "chars": 165,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "seconds": 0.29
+    },
+    {
+      "id": "p03_slide_compare",
+      "layout": "slide_compare",
+      "baseline": {
+        "errors": 57,
+        "chars": 147,
+        "roles": {
+          "preserved": 0,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 2
+        }
+      },
+      "candidate": {
+        "errors": 65,
+        "chars": 147,
+        "roles": {
+          "preserved": 0,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 2
+        }
+      },
+      "seconds": 0.39
+    },
+    {
+      "id": "p04_intro",
+      "layout": "intro_prose",
+      "baseline": {
+        "errors": 3,
+        "chars": 326,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "candidate": {
+        "errors": 3,
+        "chars": 326,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "seconds": 0.51
+    },
+    {
+      "id": "p04_slide_bullets",
+      "layout": "slide_bullets",
+      "baseline": {
+        "errors": 3,
+        "chars": 154,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "candidate": {
+        "errors": 3,
+        "chars": 154,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "seconds": 0.33
+    },
+    {
+      "id": "p04_slide_compare",
+      "layout": "slide_compare",
+      "baseline": {
+        "errors": 55,
+        "chars": 135,
+        "roles": {
+          "preserved": 0,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 2
+        }
+      },
+      "candidate": {
+        "errors": 34,
+        "chars": 135,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "seconds": 0.34
+    },
+    {
+      "id": "p05_intro",
+      "layout": "intro_prose",
+      "baseline": {
+        "errors": 4,
+        "chars": 336,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "candidate": {
+        "errors": 4,
+        "chars": 336,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "seconds": 0.47
+    },
+    {
+      "id": "p05_slide_bullets",
+      "layout": "slide_bullets",
+      "baseline": {
+        "errors": 4,
+        "chars": 145,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "candidate": {
+        "errors": 4,
+        "chars": 145,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "seconds": 0.29
+    },
+    {
+      "id": "p05_slide_results",
+      "layout": "slide_results",
+      "baseline": {
+        "errors": 56,
+        "chars": 140,
+        "roles": {
+          "preserved": 0,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "candidate": {
+        "errors": 19,
+        "chars": 140,
+        "roles": {
+          "preserved": 0,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "seconds": 0.37
+    },
+    {
+      "id": "p06_intro",
+      "layout": "intro_prose",
+      "baseline": {
+        "errors": 8,
+        "chars": 328,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "candidate": {
+        "errors": 8,
+        "chars": 328,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "seconds": 0.51
+    },
+    {
+      "id": "p06_slide_bullets",
+      "layout": "slide_bullets",
+      "baseline": {
+        "errors": 4,
+        "chars": 151,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "candidate": {
+        "errors": 4,
+        "chars": 151,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "seconds": 0.37
+    },
+    {
+      "id": "p06_slide_results",
+      "layout": "slide_results",
+      "baseline": {
+        "errors": 30,
+        "chars": 126,
+        "roles": {
+          "preserved": 0,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "candidate": {
+        "errors": 20,
+        "chars": 126,
+        "roles": {
+          "preserved": 0,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "seconds": 0.33
+    },
+    {
+      "id": "p07_intro",
+      "layout": "intro_bullets",
+      "baseline": {
+        "errors": 8,
+        "chars": 300,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "candidate": {
+        "errors": 8,
+        "chars": 300,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "seconds": 0.45
+    },
+    {
+      "id": "p07_slide_bullets",
+      "layout": "slide_bullets",
+      "baseline": {
+        "errors": 6,
+        "chars": 152,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "candidate": {
+        "errors": 6,
+        "chars": 152,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "seconds": 0.26
+    },
+    {
+      "id": "p07_slide_results",
+      "layout": "slide_results",
+      "baseline": {
+        "errors": 77,
+        "chars": 151,
+        "roles": {
+          "preserved": 0,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "candidate": {
+        "errors": 39,
+        "chars": 151,
+        "roles": {
+          "preserved": 0,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "seconds": 0.34
+    },
+    {
+      "id": "p08_intro",
+      "layout": "intro_bullets",
+      "baseline": {
+        "errors": 9,
+        "chars": 304,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "candidate": {
+        "errors": 9,
+        "chars": 304,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "seconds": 0.44
+    },
+    {
+      "id": "p08_slide_bullets",
+      "layout": "slide_bullets",
+      "baseline": {
+        "errors": 2,
+        "chars": 144,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "candidate": {
+        "errors": 2,
+        "chars": 144,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "seconds": 0.28
+    },
+    {
+      "id": "p08_slide_results",
+      "layout": "slide_results",
+      "baseline": {
+        "errors": 32,
+        "chars": 128,
+        "roles": {
+          "preserved": 0,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "candidate": {
+        "errors": 20,
+        "chars": 128,
+        "roles": {
+          "preserved": 0,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "seconds": 0.3
+    },
+    {
+      "id": "p09_intro",
+      "layout": "intro_bullets",
+      "baseline": {
+        "errors": 9,
+        "chars": 312,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "candidate": {
+        "errors": 9,
+        "chars": 312,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "seconds": 0.49
+    },
+    {
+      "id": "p09_slide_compare",
+      "layout": "slide_compare",
+      "baseline": {
+        "errors": 52,
+        "chars": 136,
+        "roles": {
+          "preserved": 0,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 2
+        }
+      },
+      "candidate": {
+        "errors": 41,
+        "chars": 136,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "seconds": 0.32
+    },
+    {
+      "id": "p09_slide_results",
+      "layout": "slide_results",
+      "baseline": {
+        "errors": 58,
+        "chars": 144,
+        "roles": {
+          "preserved": 0,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "candidate": {
+        "errors": 20,
+        "chars": 144,
+        "roles": {
+          "preserved": 0,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "seconds": 0.31
+    },
+    {
+      "id": "p10_intro",
+      "layout": "intro_bullets",
+      "baseline": {
+        "errors": 6,
+        "chars": 295,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "candidate": {
+        "errors": 6,
+        "chars": 295,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "seconds": 0.45
+    },
+    {
+      "id": "p10_slide_compare",
+      "layout": "slide_compare",
+      "baseline": {
+        "errors": 51,
+        "chars": 142,
+        "roles": {
+          "preserved": 0,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 2
+        }
+      },
+      "candidate": {
+        "errors": 38,
+        "chars": 142,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "seconds": 0.28
+    },
+    {
+      "id": "p10_slide_results",
+      "layout": "slide_results",
+      "baseline": {
+        "errors": 67,
+        "chars": 141,
+        "roles": {
+          "preserved": 0,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "candidate": {
+        "errors": 30,
+        "chars": 141,
+        "roles": {
+          "preserved": 0,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "seconds": 0.32
+    },
+    {
+      "id": "p11_intro",
+      "layout": "intro_bullets",
+      "baseline": {
+        "errors": 6,
+        "chars": 304,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "candidate": {
+        "errors": 6,
+        "chars": 304,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "seconds": 0.43
+    },
+    {
+      "id": "p11_slide_compare",
+      "layout": "slide_compare",
+      "baseline": {
+        "errors": 55,
+        "chars": 144,
+        "roles": {
+          "preserved": 0,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 2
+        }
+      },
+      "candidate": {
+        "errors": 40,
+        "chars": 144,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "seconds": 0.28
+    },
+    {
+      "id": "p11_slide_results",
+      "layout": "slide_results",
+      "baseline": {
+        "errors": 49,
+        "chars": 136,
+        "roles": {
+          "preserved": 0,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "candidate": {
+        "errors": 19,
+        "chars": 136,
+        "roles": {
+          "preserved": 0,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "seconds": 0.29
+    },
+    {
+      "id": "p12_intro",
+      "layout": "intro_bullets",
+      "baseline": {
+        "errors": 8,
+        "chars": 302,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "candidate": {
+        "errors": 8,
+        "chars": 302,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "seconds": 0.44
+    },
+    {
+      "id": "p12_slide_compare",
+      "layout": "slide_compare",
+      "baseline": {
+        "errors": 60,
+        "chars": 148,
+        "roles": {
+          "preserved": 0,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 2
+        }
+      },
+      "candidate": {
+        "errors": 40,
+        "chars": 148,
+        "roles": {
+          "preserved": 2,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "seconds": 0.31
+    },
+    {
+      "id": "p12_slide_results",
+      "layout": "slide_results",
+      "baseline": {
+        "errors": 83,
+        "chars": 151,
+        "roles": {
+          "preserved": 0,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "candidate": {
+        "errors": 41,
+        "chars": 151,
+        "roles": {
+          "preserved": 0,
+          "mislinked": 0,
+          "missing": 0,
+          "indeterminate": 0
+        }
+      },
+      "seconds": 0.33
+    }
+  ]
+}

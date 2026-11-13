@@ -1,0 +1,28 @@
+{
+  "source": "한국산업인력공단 NCS 분류별 계좌 통계 2025-09-14",
+  "source_sha256": "ddd71a7974080d60a3864630d947c299cb1e25fb9c699b3fe615755de0c47772",
+  "base": "ai\\models\\ocr-trained",
+  "augmentation": true,
+  "split_seed": 42,
+  "train": 1200,
+  "validation": 100,
+  "test": 100,
+  "training_fonts": [
+    "맑은 고딕",
+    "맑은 고딕 Bold"
+  ],
+  "heldout_font": "바탕",
+  "trained_parameters": "CTC output projection only",
+  "best_epoch": 3,
+  "baseline": {
+    "count": 100,
+    "character_error_rate": 0.0188,
+    "exact_match_rate": 0.87
+  },
+  "trained": {
+    "count": 100,
+    "character_error_rate": 0.003,
+    "exact_match_rate": 0.97
+  },
+  "note": "합성 단일 줄 이미지 평가. 스캔·손글씨·페이지 검출 성능 아님."
+}

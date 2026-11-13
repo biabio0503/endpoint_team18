@@ -1,0 +1,197 @@
+{
+  "architectures": [
+    "PPOCRV6SmallRecForTextRecognition"
+  ],
+  "attention_dropout": 0.0,
+  "backbone_config": {
+    "_name_or_path": "",
+    "architectures": null,
+    "block_configs": [
+      [
+        [
+          3,
+          96,
+          96,
+          1,
+          true
+        ]
+      ],
+      [
+        [
+          3,
+          96,
+          96,
+          1,
+          false
+        ],
+        [
+          3,
+          96,
+          96,
+          1,
+          false
+        ]
+      ],
+      [
+        [
+          3,
+          96,
+          192,
+          [
+            2,
+            1
+          ],
+          false
+        ],
+        [
+          3,
+          192,
+          192,
+          1,
+          true
+        ],
+        [
+          3,
+          192,
+          192,
+          1,
+          false
+        ],
+        [
+          3,
+          192,
+          192,
+          1,
+          true
+        ],
+        [
+          3,
+          192,
+          192,
+          1,
+          false
+        ],
+        [
+          3,
+          192,
+          192,
+          1,
+          true
+        ],
+        [
+          3,
+          192,
+          192,
+          1,
+          false
+        ]
+      ],
+      [
+        [
+          3,
+          192,
+          384,
+          [
+            2,
+            1
+          ],
+          false
+        ],
+        [
+          3,
+          384,
+          384,
+          1,
+          true
+        ],
+        [
+          3,
+          384,
+          384,
+          1,
+          false
+        ]
+      ]
+    ],
+    "chunk_size_feed_forward": 0,
+    "depths": [
+      1,
+      2,
+      7,
+      3
+    ],
+    "dtype": "float32",
+    "hidden_act": "relu",
+    "id2label": {
+      "0": "LABEL_0",
+      "1": "LABEL_1"
+    },
+    "is_encoder_decoder": false,
+    "label2id": {
+      "LABEL_0": 0,
+      "LABEL_1": 1
+    },
+    "model_type": "pp_lcnet_v4",
+    "num_channels": 3,
+    "out_features": [
+      "stage1",
+      "stage2",
+      "stage3",
+      "stage4"
+    ],
+    "out_indices": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "output_attentions": false,
+    "output_hidden_states": false,
+    "problem_type": null,
+    "reduction": 4,
+    "return_dict": true,
+    "scale": 1.0,
+    "stage_names": [
+      "stem",
+      "stage1",
+      "stage2",
+      "stage3",
+      "stage4"
+    ],
+    "stage_out_channels": [
+      96,
+      96,
+      192,
+      384
+    ],
+    "stem_channels": [
+      3,
+      48,
+      96
+    ],
+    "stem_strides": [
+      2,
+      1,
+      1,
+      2,
+      1
+    ],
+    "stem_type": "large",
+    "use_learnable_affine_block": false
+  },
+  "conv_kernel_size": [
+    1,
+    7
+  ],
+  "depth": 2,
+  "dtype": "float32",
+  "head_out_channels": 30246,
+  "hidden_act": "silu",
+  "hidden_size": 120,
+  "layer_norm_eps": 1e-06,
+  "mlp_ratio": 2.0,
+  "model_type": "pp_ocrv6_small_rec",
+  "num_attention_heads": 8,
+  "qkv_bias": true,
+  "transformers_version": "5.22.2"
+}

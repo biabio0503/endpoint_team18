@@ -1,0 +1,32 @@
+{
+  "model": "ai/models/demo-trained",
+  "results": [
+    {
+      "case": "eval-design",
+      "seconds": 13.73,
+      "valid_json": false,
+      "schema": false,
+      "evidence": false,
+      "weeks": false,
+      "output_preview": "{\"summary\": \"UX 디자이너를 준비하고 싶다\", \"experiences\": [{\"project\": \"독서 앱\", \"description\": \"사용자 인터뷰를 진행하고 화면 시안을 만들었습니다.\"], \"questions\": [\"사용자 인터뷰를 더 자세히 알려주세요.\"], \"roadmap\": [{\"start_week\": 1, \"end_week\": 5, \"goal\": \"사용자 인터뷰를 더 자세히 알려주세요.\", \"actions\": [\"사용자 인터뷰를 더 자세히 알려주세요.\"], \"actions\": [\"사용자 인터뷰를 더 자세히 알려주세요.\"], \"actions\": [\"사용자 인터뷰를 더 자세히 알려주세요.\"], \"actions\": [\"사용자 인터뷰를 더 자세히 알려주세요.\"], \"actions\": [\"사"
+    },
+    {
+      "case": "eval-data",
+      "seconds": 1.65,
+      "valid_json": false,
+      "schema": false,
+      "evidence": false,
+      "weeks": false,
+      "output_preview": "{\"summary\": \"데이터 분석을 배우고 싶다\", \"experiences\": [{\"project\": \"데이터 분석\", \"description\": \"데이터 분석\", \"document_id\": \"eval-data\", \"quote\": \"도서 대출 현황을 표로 정리했습니다. 구체적인 담당 역할은 기록되지 않았습니다.\"]}"
+    },
+    {
+      "case": "eval-web",
+      "seconds": 13.61,
+      "valid_json": false,
+      "schema": false,
+      "evidence": false,
+      "weeks": false,
+      "output_preview": "{\"summary\": \"프론트엔드 개발자 준비를 위한 학습을 제안합니다.\", \"experiences\": [{\"project\": \"프론트엔드 개발자\", \"description\": \"자료구조\", \"document_id\": \"eval-web\", \"quote\": \"학교 행사 안내 웹페이지에서 HTML로 일정 목록을 만들었습니다.\"}], \"questions\": [\"제안된 학습을 더 자세히 알려주세요.\"], \"roadmap\": [{\"start_week\": 1, \"end_week\": 3, \"goal\": \"프로젝트\", \"actions\": [\"프로젝트 학습\"], \"actions\": [\"프로젝트 학습\"], \"actions\": [\"프로젝트 학습\"], \"actions\": [\"프로젝트 학습\"], \"actions\": [\"프로젝트 학"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+# Install a PyTorch-compatible torchvision separately for your platform.
+transformers==5.22.2
+huggingface-hub>=1.31,<3
+Pillow>=12,<14
+opencv-python-headless>=4.10,<6
+pypdfium2>=4,<6
+pypdf==5.9.0
+python-docx==1.2.0

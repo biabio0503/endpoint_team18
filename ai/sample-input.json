@@ -1,0 +1,19 @@
+{
+  "career_goal": "데이터 분석 분야 취업을 준비하고 싶다",
+  "target_role": "데이터 분석가",
+  "preparation_weeks": 12,
+  "plan_start_date": "2026-11-07",
+  "university_name": "가상대학교",
+  "major_name": "컴퓨터공학과",
+  "year_level": 2,
+  "earned_credits": 72,
+  "gpa": 3.8,
+  "gpa_scale": 4.5,
+  "course_history_status": "provided",
+  "completed_courses": [{ "course_name": "자료구조", "course_code": null, "credits": 3 }],
+  "documents": [{
+    "document_id": "example-document-1",
+    "extraction_status": "ready",
+    "extracted_text": "프로젝트명: 교내 식당 이용 분석. 팀 프로젝트에서 설문 데이터를 정리하고 Python으로 기초 통계를 계산했습니다. 결과를 발표 자료로 정리했습니다."
+  }]
+}
