@@ -13,7 +13,7 @@ const tabs = ['준비 상태', '직무 역량 비교', '실행 로드맵', '수�
 export default function Result() {
  const [selected, setSelected] = useState(0), [plan, setPlan] = useState(null);
  const [result, setResult] = useState(null), [history, setHistory] = useState([]);
- const [phase, setPhase] = useState('loading'), [message, setMessage] = useState(''), [errorCode, setErrorCode] = useState('');
+ const [phase, setPhase] = useState('loading'), [message, setMessage] = useState('');
  const [saving, setSaving] = useState(false), [skillResult, setSkillResult] = useState(null);
  const [activityResult, setActivityResult] = useState(null);
  const epoch = useRef(0), selectedRun = useRef(''), generating = useRef(false);
@@ -30,7 +30,7 @@ export default function Result() {
    setPlan(input); setResult(data); setHistory(runs.runs || []); setPhase('ready');
   } catch (error) {
    if (ticket !== epoch.current) return;
-   setResult(null); setPlan(null); setHistory([]); setMessage(error.message); setErrorCode(error.code); setPhase('error');
+   setResult(null); setPlan(null); setHistory([]); setMessage(error.message); setPhase('error');
   }
  }, []);
  useEffect(() => { load(); return () => { epoch.current++; }; }, [load]);
@@ -58,14 +58,14 @@ export default function Result() {
  }
  async function generate(refresh) {
   if (!plan || generating.current) return;
-  generating.current = true; ++epoch.current; setPhase('generating'); setMessage(''); setErrorCode('');
+  generating.current = true; ++epoch.current; setPhase('generating'); setMessage('');
   try {
    const data = await apiRequest(`/roadmap-inputs/${plan.request_id}/roadmap`, {
     method: 'POST', body: JSON.stringify({ expected_input_revision: plan.input_revision, refresh }),
    });
    selectedRun.current = ''; setResult(data); setSelected(2);
    await load('');
-  } catch (error) { setMessage(roadmapErrorMessage(error)); setErrorCode(error.code); await load(); }
+  } catch (error) { setMessage(roadmapErrorMessage(error)); await load(); }
   finally { generating.current = false; }
  }
  async function toggle(task) {
@@ -75,7 +75,7 @@ export default function Result() {
     method: 'PATCH', body: JSON.stringify({ is_completed: !task.is_completed, expected_progress_version: task.progress_version }),
    });
    setResult(data);
-  } catch (error) { setMessage(error.message); setErrorCode(error.code); await load(result.run_id); }
+  } catch (error) { setMessage(error.message); await load(result.run_id); }
   finally { setSaving(false); }
  }
  const usable = result?.roadmap && !result.details_restricted;
